@@ -8,7 +8,11 @@ name = "boson"
 path = "src/core/id.rs"
 
 [[bin]]
-name = "boson"
-path = "main.rs"
+name = "apitests"
+path = "tests/apitests/id_tests.rs"
+
+[[bin]]
+name = "shell"
+path = "apps/shell/main.rs"
 
 [dependencies]
