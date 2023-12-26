@@ -27,6 +27,14 @@ impl Id {
     pub fn to_hex(&self) -> String {
         hex::encode(&self.bytes)
     }
+
+    pub fn distance(&self, to: &Id) -> Self {
+        let mut buf = [0; ID_BYTES];
+        for i in 0..ID_BYTES {
+            buf[i] = self.bytes[i] ^ to.bytes[i];
+        }
+        Id { bytes: buf }
+    }
 }
 
 impl fmt::Display for Id {
