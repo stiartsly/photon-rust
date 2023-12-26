@@ -5,14 +5,15 @@ edition = "2021"
 
 [lib]
 name = "boson"
-path = "src/core/id.rs"
+path = "src/core/mod.rs"
 
 [[bin]]
 name = "apitests"
-path = "tests/apitests/id_tests.rs"
+path = "tests/apitests/mod.rs"
 
 [[bin]]
 name = "shell"
 path = "apps/shell/main.rs"
 
 [dependencies]
+hex = "0.4"
