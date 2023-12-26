@@ -12,6 +12,21 @@ impl Id {
             bytes: [0; ID_BYTES],
         }
     }
+
+    pub fn of_hex(hex_id: &str) -> Result<Self, &'static str> {
+        let decoded = hex::decode(hex_id).map_err(|_| "Decoding failed")?;
+        if decoded.len() != ID_BYTES {
+            return Err("Invalid hex ID length");
+        }
+
+        let mut bytes = [0; ID_BYTES];
+        bytes.copy_from_slice(&decoded);
+        Ok(Id { bytes })
+    }
+
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.bytes)
+    }
 }
 
 impl fmt::Display for Id {
