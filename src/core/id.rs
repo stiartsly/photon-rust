@@ -1,4 +1,6 @@
 use std::fmt;
+use libc::c_void;
+use libsodium_sys::randombytes_buf;
 
 const ID_BYTES: usize = 32;
 
@@ -12,15 +14,26 @@ impl Id {
         Id { bytes: [0; ID_BYTES] }
     }
 
+    pub fn random() -> Self {
+        let mut data = [0; ID_BYTES];
+        unsafe {
+            let ptr = data.as_mut_ptr() as *mut c_void;
+            randombytes_buf(ptr, ID_BYTES);
+        }
+        Id { bytes: data }
+    }
+
     pub fn of_hex(hex_id: &str) -> Result<Self, &'static str> {
         let decoded = hex::decode(hex_id).map_err(|_| "Decoding failed")?;
         if decoded.len() != ID_BYTES {
             return Err("Invalid hex ID length");
         }
 
-        let mut bytes = [0; ID_BYTES];
-        bytes.copy_from_slice(&decoded);
-        Ok(Id { bytes })
+        let bytes: Result<[u8; 32], _> = decoded.try_into();
+        match bytes {
+            Ok(array) => Ok(Id { bytes: array }),
+            Err(_) => Err("Conversion to [u8; 32] failed"),
+        }
     }
 
     pub fn to_hex(&self) -> String {
@@ -28,11 +41,11 @@ impl Id {
     }
 
     pub fn distance(&self, to: &Id) -> Self {
-        let mut buf = [0; ID_BYTES];
+        let mut data = [0; ID_BYTES];
         for i in 0..ID_BYTES {
-            buf[i] = self.bytes[i] ^ to.bytes[i];
+            data[i] = self.bytes[i] ^ to.bytes[i];
         }
-        Id { bytes: buf }
+        Id { bytes: data }
     }
 }
 
