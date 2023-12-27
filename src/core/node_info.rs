@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 use crate::id::Id;
 
@@ -37,6 +38,10 @@ impl NodeInfo {
         self.version
     }
 
+    pub fn set_version(&mut self, version: i32) {
+        self.version = version;
+    }
+
     pub fn is_ipv4(&self) -> bool{
         match self.sockaddr.ip() {
             IpAddr::V4(_) => true,
@@ -49,5 +54,19 @@ impl NodeInfo {
             IpAddr::V6(_) => true,
             _ => false,
         }
+    }
+
+    pub fn readable_version() -> String {
+        "Panic".to_string()
+    }
+
+}
+
+impl fmt::Display for NodeInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{},", self.node_id)?;
+        write!(f, "{},", self.addr())?;
+        write!(f, "{}", self.version)?;
+        Ok(())
     }
 }

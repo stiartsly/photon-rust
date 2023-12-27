@@ -37,4 +37,13 @@ mod apitests {
         assert_eq!(node1, node2);
     }
 
+    #[test]
+    fn test_version() {
+        let id = Id::zero();
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 12345);
+        let mut node = NodeInfo::new(&id, &addr);
+        node.set_version(5);
+        assert_eq!(node.version(), 5);
+    }
+
 }
