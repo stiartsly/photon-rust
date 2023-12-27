@@ -2,15 +2,14 @@ use std::fmt;
 
 const ID_BYTES: usize = 32;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Id {
     bytes: [u8; ID_BYTES],
 }
 
 impl Id {
     pub fn zero() -> Self {
-        Id {
-            bytes: [0; ID_BYTES],
-        }
+        Id { bytes: [0; ID_BYTES] }
     }
 
     pub fn of_hex(hex_id: &str) -> Result<Self, &'static str> {

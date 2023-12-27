@@ -1,7 +1,9 @@
 #[cfg(test)]
-pub mod tests_sample;
+pub mod sample;
 #[cfg(test)]
-pub mod tests_id;
+pub mod id;
+# [cfg(test)]
+pub mod node_info;
 
 fn main() {
     println!("testing...");
