@@ -2,7 +2,7 @@ use std::fmt;
 
 const ID_BYTES: usize = 32;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Id {
     bytes: [u8; ID_BYTES],
 }

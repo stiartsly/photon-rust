@@ -1,6 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 use crate::id::Id;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NodeInfo {
     node_id: Id,
     sockaddr: SocketAddr,
@@ -8,16 +9,6 @@ pub struct NodeInfo {
 }
 
 impl NodeInfo {
-    /*fn new(id: Id, ip: &str, port: u16) -> NodeInfo {
-        let ip_addr: IpAddr = ip.parse().unwrap();
-        let sockaddr = SocketAddr::new(ip_addr, port);
-        NodeInfo {
-            node_id: id,
-            sockaddr,
-            version: 0,
-        }
-    }*/
-
     pub fn new(id: &Id, socket_addr: &SocketAddr) -> Self {
         NodeInfo {
             node_id: *id,
@@ -44,5 +35,19 @@ impl NodeInfo {
 
     pub fn version(&self) -> i32 {
         self.version
+    }
+
+    pub fn is_ipv4(&self) -> bool{
+        match self.sockaddr.ip() {
+            IpAddr::V4(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ipv6(&self) -> bool{
+        match self.sockaddr.ip() {
+            IpAddr::V6(_) => true,
+            _ => false,
+        }
     }
 }
