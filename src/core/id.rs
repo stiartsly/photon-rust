@@ -15,7 +15,7 @@ impl Id {
     }
 
     pub fn random() -> Self {
-        let mut data = [0; ID_BYTES];
+        let mut data: [u8; 32] = [0; ID_BYTES];
         unsafe {
             let ptr = data.as_mut_ptr() as *mut c_void;
             randombytes_buf(ptr, ID_BYTES);
@@ -23,16 +23,36 @@ impl Id {
         Id { bytes: data }
     }
 
-    pub fn of_hex(hex_id: &str) -> Result<Self, &'static str> {
-        let decoded = hex::decode(hex_id).map_err(|_| "Decoding failed")?;
+    pub fn of_hex(idstr: &str) -> Result<Self, &'static str> {
+        let decoded = hex::decode(idstr).map_err(|_| "Decoding failed")?;
         if decoded.len() != ID_BYTES {
             return Err("Invalid hex ID length");
         }
 
         let bytes: Result<[u8; 32], _> = decoded.try_into();
         match bytes {
-            Ok(array) => Ok(Id { bytes: array }),
-            Err(_) => Err("Conversion to [u8; 32] failed"),
+            Ok(array) => {
+                Ok(Id { bytes: array })
+            },
+            Err(_) => {
+                Err("Conversion from Hex to Id failed")
+            }
+        }
+    }
+
+    pub fn of_base58(idstr: &str) -> Result<Self, &'static str> {
+        let mut data: [u8; 32] = [0; ID_BYTES];
+        let decoded = bs58::decode(idstr).onto(&mut data);
+        match decoded {
+            Ok(len)=> {
+                if len != ID_BYTES {
+                    return Err("Invalid base58 Id length");
+                }
+                Ok(Id { bytes: data })
+            },
+            Err(_) => {
+                Err("Conversion from base58 to Id failed")
+            }
         }
     }
 

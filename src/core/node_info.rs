@@ -60,6 +60,10 @@ impl NodeInfo {
         "Panic".to_string()
     }
 
+    pub fn matches(&self, other: &NodeInfo) -> bool {
+        self.node_id == other.node_id || self.sockaddr == other.sockaddr
+    }
+
 }
 
 impl fmt::Display for NodeInfo {
