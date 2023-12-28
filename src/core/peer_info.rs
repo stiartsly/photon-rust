@@ -16,7 +16,7 @@ pub struct PeerInfo {
 impl PeerInfo {
     pub fn new(id: &Id, port: u16) -> Self {
         PeerInfo {
-            public_key: Id::new(),
+            public_key: *id,
             private_key: None,
             node_id: *id,
             origin: *id,
@@ -28,7 +28,7 @@ impl PeerInfo {
 
     pub fn new_with_keypair(keypair: &KeyPair, id: &Id, port: u16) -> Self {
         PeerInfo {
-            public_key: Id::new(),
+            public_key: *id,
             private_key: Some(keypair.private_key()),
             node_id: *id,
             origin: *id,
