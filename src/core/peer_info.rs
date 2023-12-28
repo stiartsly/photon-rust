@@ -29,7 +29,7 @@ impl PeerInfo {
     pub fn new_with_keypair(keypair: &KeyPair, id: &Id, port: u16) -> Self {
         PeerInfo {
             public_key: *id,
-            private_key: Some(keypair.private_key()),
+            private_key: Some(*keypair.private_key()),
             node_id: *id,
             origin: *id,
             port,
