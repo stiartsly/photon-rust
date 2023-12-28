@@ -3,7 +3,8 @@ use std::cmp::Ordering;
 use libc::c_void;
 use libsodium_sys::randombytes_buf;
 
-const ID_BYTES: usize = 32;
+pub const ID_BITS: usize = 256;
+pub const ID_BYTES: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Id {
@@ -11,6 +12,10 @@ pub struct Id {
 }
 
 impl Id {
+    pub fn new() -> Self {
+        Id { bytes: [0; ID_BYTES]}
+    }
+
     pub fn zero() -> Self {
         Id { bytes: [0; ID_BYTES] }
     }
