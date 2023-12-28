@@ -1,6 +1,9 @@
 /target
 /Cargo.lock
 
+# Visual Code
+.vscode
+
 
 # Added by cargo
 #
