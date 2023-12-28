@@ -1,4 +1,5 @@
 use std::fmt;
+use std::cmp::Ordering;
 use libc::c_void;
 use libsodium_sys::randombytes_buf;
 
@@ -61,12 +62,68 @@ impl Id {
     }
 
     pub fn distance(&self, to: &Id) -> Self {
-        let mut data = [0; ID_BYTES];
+        let mut data: [u8; 32] = [0; ID_BYTES];
         for i in 0..ID_BYTES {
             data[i] = self.bytes[i] ^ to.bytes[i];
         }
         Id { bytes: data }
     }
+
+    pub fn three_way_compare(&self, id1: &Id, id2: &Id) -> Ordering {
+        let mut mmi = i32::MAX;
+        for i in 0..ID_BYTES {
+            if id1.bytes[i] != id2.bytes[i] {
+                mmi = i as i32;
+                break;
+            }
+        }
+        if mmi == i32::MAX {
+            return Ordering::Equal;
+        }
+
+        let a = id1.bytes[mmi as usize] ^ self.bytes[mmi as usize];
+        let b = id2.bytes[mmi as usize] ^ self.bytes[mmi as usize];
+        a.cmp(&b)
+    }
+
+    pub fn bits_equal(id1: &Id, id2: &Id, depth: i32) -> bool {
+        if depth < 0 {
+            return true;
+        }
+
+        let mut mmi = i32::MAX;
+        for i in 0..ID_BYTES {
+            if id1.bytes[i] != id2.bytes[i] {
+                mmi = i as i32;
+                break;
+            }
+        }
+
+        let idx = depth >> 3;
+        let diff: u8 = id1.bytes[idx as usize] ^ id2.bytes[idx as usize];
+        let mask: u8 = (1 << (depth & 0x07)) - 1;  // Create a bitmask with the lower n bits set
+        let is_diff = (diff & !mask) == 0;  // Use the bitmask to check if the lower bits are all zeros
+
+        if mmi == idx {
+            is_diff
+        } else {
+            mmi > idx
+        }
+    }
+
+    pub fn bits_copy(src: &Id, dest: &mut Id, depth: i32) {
+        if depth < 0 {
+            return;
+        }
+        let idx = depth >> 3;
+        if idx > 0 {
+            dest.bytes[..idx as usize].copy_from_slice(&src.bytes[..idx as usize]);
+        }
+        let mask: u8 = (1 << (depth & 0x07)) - 1;
+        dest.bytes[idx as usize] &= !mask;
+        dest.bytes[idx as usize] |= src.bytes[idx as usize] & mask;
+    }
+
 }
 
 impl fmt::Display for Id {
