@@ -89,7 +89,7 @@ impl PeerInfo {
     }
 
     pub fn is_delegated(&self) -> bool {
-        self.node_id == self.origin
+        self.node_id != self.origin
     }
 
     pub fn is_valid(&self) -> bool {

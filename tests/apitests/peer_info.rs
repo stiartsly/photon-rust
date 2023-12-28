@@ -17,5 +17,6 @@ mod apitests {
         assert_eq!(peer.origin(), &id);
         assert_eq!(peer.port(), port);
         assert_eq!(peer.has_alternative_url(), false);
+        assert_eq!(peer.is_delegated(), false);
     }
 }
