@@ -1,7 +1,7 @@
 use std::fmt;
 use std::cmp::Ordering;
-use libc::c_void;
 use libsodium_sys::randombytes_buf;
+use crate::signature::PublicKey;
 
 pub const ID_BITS: usize = 256;
 pub const ID_BYTES: usize = 32;
@@ -13,7 +13,7 @@ pub struct Id {
 
 impl Id {
     pub fn new() -> Self {
-        Id { bytes: [0; ID_BYTES]}
+        Id { bytes: [0; ID_BYTES] }
     }
 
     pub fn zero() -> Self {
@@ -21,12 +21,18 @@ impl Id {
     }
 
     pub fn random() -> Self {
-        let mut data: [u8; 32] = [0; ID_BYTES];
+        let mut bytes = [0u8; ID_BYTES];
         unsafe {
-            let ptr = data.as_mut_ptr() as *mut c_void;
-            randombytes_buf(ptr, ID_BYTES);
+            randombytes_buf(
+                bytes.as_mut_ptr() as *mut libc::c_void,
+                ID_BYTES
+            );
         }
-        Id { bytes: data }
+        Id { bytes }
+    }
+
+    pub fn of_public_key(publick_key: &PublicKey) -> Self {
+        Id { bytes: *publick_key.bytes() }
     }
 
     pub fn of_hex(idstr: &str) -> Result<Self, &'static str> {
@@ -64,6 +70,10 @@ impl Id {
 
     pub fn to_hex(&self) -> String {
         hex::encode(&self.bytes)
+    }
+
+    pub fn to_signature_key(&self) -> PublicKey {
+        PublicKey::from(self.bytes.as_slice()).unwrap()
     }
 
     pub fn distance(&self, to: &Id) -> Self {

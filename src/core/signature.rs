@@ -1,8 +1,11 @@
+use std::fmt;
 use static_assertions::const_assert;
 use libsodium_sys::{
     crypto_sign_detached,
     crypto_sign_verify_detached,
     crypto_sign_keypair,
+    crypto_sign_ed25519_sk_to_pk,
+    crypto_sign_seed_keypair,
     crypto_sign_SECRETKEYBYTES,
     crypto_sign_PUBLICKEYBYTES,
     crypto_sign_SEEDBYTES,
@@ -14,7 +17,7 @@ const_assert!(PublicKey::BYTES == crypto_sign_PUBLICKEYBYTES as usize);
 const_assert!(KeyPair::SEED_BYTES == crypto_sign_SEEDBYTES as usize);
 const_assert!(Signature::BYTES == crypto_sign_BYTES as usize);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PrivateKey {
     key: [u8; Self::BYTES]
 }
@@ -41,6 +44,10 @@ impl PrivateKey {
         Self::BYTES
     }
 
+    pub fn bytes(&self) -> &[u8; Self::BYTES] {
+        &self.key
+    }
+
     pub fn clear(&mut self) {
         self.key.fill(0);
     }
@@ -57,13 +64,21 @@ impl PrivateKey {
                 data.as_ptr(),
                 data.len() as u64,
                 self.key.as_ptr()
-            );
-            Ok(true)
+            ); // Always success
         }
+        Ok(true)
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+impl fmt::Display for PrivateKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let str = hex::encode(self.key);
+        write!(f, "{}", str)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PublicKey {
     key: [u8; Self::BYTES]
 }
@@ -88,6 +103,10 @@ impl PublicKey {
 
     pub fn size(&self) -> usize {
         Self::BYTES
+    }
+
+    pub fn bytes(&self) -> &[u8; Self::BYTES] {
+        &self.key
     }
 
     pub fn clear(&mut self) {
@@ -116,6 +135,14 @@ impl PublicKey {
 
 }
 
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let str = hex::encode(self.key);
+        write!(f, "{}", str)?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct KeyPair {
     sk: PrivateKey,
@@ -126,33 +153,58 @@ impl KeyPair {
     pub const SEED_BYTES: usize = 32;
 
     pub fn new() -> Self {
-        let mut skey = vec![0u8; PrivateKey::BYTES];
-        let mut pkey = vec![0u8; PublicKey::BYTES];
+        let mut sk = vec![0u8; PrivateKey::BYTES];
+        let mut pk = vec![0u8; PublicKey::BYTES];
 
         unsafe {
             crypto_sign_keypair(
-                pkey.as_mut_ptr(),
-                skey.as_mut_ptr()
-            );
+                pk.as_mut_ptr(),
+                sk.as_mut_ptr()
+            ); // Always success
         }
         KeyPair {
-            sk: PrivateKey::from(&skey).unwrap(),
-            pk: PublicKey::from(&pkey).unwrap()
+            sk: PrivateKey::from(&sk).unwrap(),
+            pk: PublicKey::from(&pk).unwrap()
         }
     }
 
-    pub fn with_private_key(sk: &PrivateKey) -> Self {
+    pub fn from_private_key(private_key: &PrivateKey) -> Self {
+        let sk = private_key.clone();
+        let mut pk = vec![0u8; PublicKey::BYTES];
+
+        unsafe {
+            crypto_sign_ed25519_sk_to_pk(
+                pk.as_mut_ptr(),
+                private_key.bytes().as_ptr()
+            ); // Always success
+        }
         KeyPair {
-            sk: *sk,
-            pk: PublicKey::new()
+            sk,
+            pk: PublicKey::from(&pk).unwrap()
         }
     }
 
-    pub fn with_seed(_: &Vec<u8>) -> Self {
-        KeyPair {
-            sk: PrivateKey::new(),
-            pk: PublicKey::new()
+    pub fn from_seed<'a>(seed: &'a [u8]) -> Result<Self, &'static str> {
+        if seed.len() != KeyPair::SEED_BYTES {
+            return Err("Incorrect seed size");
         }
+
+        let mut sk = vec![0u8; PrivateKey::BYTES];
+        let mut pk = vec![0u8; PublicKey::BYTES];
+
+        unsafe {
+            crypto_sign_seed_keypair(
+                pk.as_mut_ptr(),
+                sk.as_mut_ptr(),
+                seed.as_ptr()
+            ); // Always success
+        }
+        Ok(
+            KeyPair {
+                sk: PrivateKey::from(&sk).unwrap(),
+                pk: PublicKey::from(&pk).unwrap()
+            }
+        )
     }
 
     pub fn private_key(&self) -> &PrivateKey {

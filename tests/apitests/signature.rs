@@ -1,3 +1,4 @@
+use boson::id::Id;
 use boson::signature::{Signature, KeyPair};
 
 #[cfg(test)]
@@ -5,8 +6,15 @@ mod apitests {
     use super::*;
 
     #[test]
-    fn test_sign_verify() {
+    fn test_public_key() {
         let key_pair = KeyPair::new();
+        let id = Id::of_public_key(key_pair.public_key());
+        let pk = id.to_signature_key();
+        assert_eq!(key_pair.public_key(), &pk);
+    }
+
+    #[test]
+    fn test_sign_verify() {
         let data = vec![
             0xbe, 0x07, 0x5f, 0xc5, 0x3c, 0x81, 0xf2, 0xd5, 0xcf, 0x14, 0x13, 0x16,
             0xeb, 0xeb, 0x0c, 0x7b, 0x52, 0x28, 0xc5, 0x2a, 0x4c, 0x62, 0xcb, 0xd4,
@@ -20,11 +28,16 @@ mod apitests {
             0x60, 0x90, 0x2e, 0x52, 0xf0, 0xa0, 0x89, 0xbc, 0x76, 0x89, 0x70, 0x40,
             0xe0, 0x82, 0xf9, 0x37, 0x76, 0x38, 0x48, 0x64, 0x5e, 0x07, 0x05
         ];
-
+        let key_pair = KeyPair::new();
         let mut signature = vec![0u8; Signature::BYTES];
+
         let rc1 = key_pair.private_key().sign(&data, signature.as_mut());
         let rc2 = key_pair.public_key().verify(&data, &signature);
         assert_eq!(rc1.is_ok(), true);
         assert_eq!(rc2.is_ok(), true);
+        //println!("sk: {}", key_pair.private_key());
+        //println!("pk: {}", key_pair.public_key());
     }
+
+
 }
