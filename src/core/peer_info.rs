@@ -15,9 +15,10 @@ pub struct PeerInfo {
 
 impl PeerInfo {
     pub fn new(id: &Id, port: u16) -> Self {
+        let key_pair = KeyPair::random();
         PeerInfo {
-            public_key: *id,
-            private_key: None,
+            public_key: Id::of_public_key(key_pair.public_key()),
+            private_key: Some(key_pair.private_key().clone()),
             node_id: *id,
             origin: *id,
             port,
@@ -26,10 +27,10 @@ impl PeerInfo {
         }
     }
 
-    pub fn new_with_keypair(keypair: &KeyPair, id: &Id, port: u16) -> Self {
+    pub fn with_key_pair(key_pair: &KeyPair, id: &Id, port: u16) -> Self {
         PeerInfo {
-            public_key: *id,
-            private_key: Some(*keypair.private_key()),
+            public_key: Id::of_public_key(key_pair.public_key()),
+            private_key: Some(*key_pair.private_key()),
             node_id: *id,
             origin: *id,
             port,

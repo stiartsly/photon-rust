@@ -1,6 +1,7 @@
 use std::fmt;
 use static_assertions::const_assert;
 use libsodium_sys::{
+    randombytes_buf,
     crypto_sign_detached,
     crypto_sign_verify_detached,
     crypto_sign_keypair,
@@ -160,6 +161,31 @@ impl KeyPair {
             crypto_sign_keypair(
                 pk.as_mut_ptr(),
                 sk.as_mut_ptr()
+            ); // Always success
+        }
+        KeyPair {
+            sk: PrivateKey::from(&sk).unwrap(),
+            pk: PublicKey::from(&pk).unwrap()
+        }
+    }
+
+    pub fn random() -> Self {
+        let mut seed = [0u8; KeyPair::SEED_BYTES];
+        unsafe {
+            randombytes_buf(
+                seed.as_mut_ptr() as *mut libc::c_void,
+                KeyPair::SEED_BYTES
+            ); // Always success.
+        }
+
+        let mut sk = vec![0u8; PrivateKey::BYTES];
+        let mut pk = vec![0u8; PublicKey::BYTES];
+
+        unsafe {
+            crypto_sign_seed_keypair(
+                pk.as_mut_ptr(),
+                sk.as_mut_ptr(),
+                seed.as_ptr()
             ); // Always success
         }
         KeyPair {
