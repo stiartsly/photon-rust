@@ -22,12 +22,9 @@ mod apitests {
         ];
 
         let mut signature = vec![0u8; Signature::BYTES];
-        println!("signature length : {} >>>", signature.len());
         let rc1 = key_pair.private_key().sign(&data, signature.as_mut());
         let rc2 = key_pair.public_key().verify(&data, &signature);
         assert_eq!(rc1.is_ok(), true);
         assert_eq!(rc2.is_ok(), true);
-        //assert_eq!(rc2.is_err(), true);
-        println!("{}", rc2.err().unwrap())
     }
 }

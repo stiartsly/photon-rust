@@ -49,7 +49,7 @@ impl PrivateKey {
         if signature.len() != Signature::BYTES {
             return Err("Invalid signature length");
         }
-        println!("Sign:: signaure length: {}", signature.len());
+
         unsafe {
             crypto_sign_detached(
                 signature.as_mut_ptr(),
@@ -98,7 +98,6 @@ impl PublicKey {
         if signature.len() != Signature::BYTES {
             return Err("Invalid signature length");
         }
-        println!("verify:: signaure length: {}, data length: {}", signature.len(), data.len());
 
         unsafe {
             let rc = crypto_sign_verify_detached(
@@ -107,7 +106,6 @@ impl PublicKey {
                 data.len() as u64,
                 self.key.as_ptr(),
             );
-            println!(" rc: {}", rc);
 
             match rc {
                 0 => Ok(true),
@@ -133,8 +131,8 @@ impl KeyPair {
 
         unsafe {
             crypto_sign_keypair(
-                skey.as_mut_ptr(),
-                pkey.as_mut_ptr()
+                pkey.as_mut_ptr(),
+                skey.as_mut_ptr()
             );
         }
         KeyPair {
