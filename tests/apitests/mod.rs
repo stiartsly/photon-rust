@@ -7,4 +7,7 @@ pub mod node_info;
 # [cfg(test)]
 pub mod peer_info;
 
+# [cfg(test)]
+pub mod signature;
+
 fn main() {}

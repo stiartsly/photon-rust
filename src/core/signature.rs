@@ -1,10 +1,26 @@
+use static_assertions::const_assert;
+use libsodium_sys::{
+    crypto_sign_detached,
+    crypto_sign_verify_detached,
+    crypto_sign_keypair,
+    crypto_sign_SECRETKEYBYTES,
+    crypto_sign_PUBLICKEYBYTES,
+    crypto_sign_SEEDBYTES,
+    crypto_sign_BYTES,
+};
+
+const_assert!(PrivateKey::BYTES == crypto_sign_SECRETKEYBYTES as usize);
+const_assert!(PublicKey::BYTES == crypto_sign_PUBLICKEYBYTES as usize);
+const_assert!(KeyPair::SEED_BYTES == crypto_sign_SEEDBYTES as usize);
+const_assert!(Signature::BYTES == crypto_sign_BYTES as usize);
+
 #[derive(Debug, Clone, Copy)]
 pub struct PrivateKey {
     key: [u8; Self::BYTES]
 }
 
 impl PrivateKey {
-    const BYTES: usize = 64;
+    pub const BYTES: usize = 64;
 
     pub fn new() -> Self {
         PrivateKey {
@@ -12,17 +28,13 @@ impl PrivateKey {
         }
     }
 
-    pub fn new_with_vec(sk: &Vec<u8>) -> Result<Self, &'static str> {
-        if sk.len() != Self::BYTES {
-            return Err("Invalid raw private key size");
+    pub fn from<'a>(key: &'a [u8]) -> Result<Self, &'static str> {
+        if key.len() != Self::BYTES {
+            return Err("Incorrect raw private key size");
         }
 
-        match sk.clone().try_into() {
-            Ok(array) => Ok(PrivateKey { key: array }),
-            Err(_) => {
-                return Err("Conversion from Hex to Id failed");
-            }
-        }
+        let sk: [u8; Self::BYTES] = key.try_into().map_err(|_| "Conversion slice failed")?;
+        Ok(PrivateKey { key: sk })
     }
 
     pub fn size(&self) -> usize {
@@ -33,8 +45,21 @@ impl PrivateKey {
         self.key.fill(0);
     }
 
-    pub fn sign(_: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
-        Err("Not implemented yet")
+    pub fn sign<'a>(&self, data: &'a [u8], signature: &'a mut[u8]) -> Result<bool, &'static str> {
+        if signature.len() != Signature::BYTES {
+            return Err("Invalid signature length");
+        }
+        println!("Sign:: signaure length: {}", signature.len());
+        unsafe {
+            crypto_sign_detached(
+                signature.as_mut_ptr(),
+                std::ptr::null_mut(),
+                data.as_ptr(),
+                data.len() as u64,
+                self.key.as_ptr()
+            );
+            Ok(true)
+        }
     }
 }
 
@@ -44,12 +69,21 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    const BYTES: usize = 32;
+    pub const BYTES: usize = 32;
 
     pub fn new() -> Self {
         PublicKey {
             key: [0; Self::BYTES]
         }
+    }
+
+    pub fn from<'a>(key: &'a [u8]) -> Result<Self, &'static str> {
+        if key.len() != Self::BYTES {
+            return Err("Incorrect raw private key size");
+        }
+
+        let pk: [u8; Self::BYTES] = key.try_into().map_err(|_| "Conversion slice failed")?;
+        Ok(PublicKey { key: pk })
     }
 
     pub fn size(&self) -> usize {
@@ -60,35 +94,63 @@ impl PublicKey {
         self.key.fill(0);
     }
 
-    pub fn verify(_: &Vec<u8>, _: &Vec<u8>) -> Result<bool, &'static str> {
-        Err("Method not implemented")
+    pub fn verify<'a>(&self, data: &'a [u8], signature: &'a [u8]) -> Result<bool, &'static str> {
+        if signature.len() != Signature::BYTES {
+            return Err("Invalid signature length");
+        }
+        println!("verify:: signaure length: {}, data length: {}", signature.len(), data.len());
+
+        unsafe {
+            let rc = crypto_sign_verify_detached(
+                signature.as_ptr(),
+                data.as_ptr(),
+                data.len() as u64,
+                self.key.as_ptr(),
+            );
+            println!(" rc: {}", rc);
+
+            match rc {
+                0 => Ok(true),
+                _ => Err("Verification failed")
+            }
+        }
     }
+
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyPair {
     sk: PrivateKey,
-    pk:PublicKey
+    pk: PublicKey
 }
 
 impl KeyPair {
-    const SEED_BYTES: usize = 32;
+    pub const SEED_BYTES: usize = 32;
 
     pub fn new() -> Self {
+        let mut skey = vec![0u8; PrivateKey::BYTES];
+        let mut pkey = vec![0u8; PublicKey::BYTES];
+
+        unsafe {
+            crypto_sign_keypair(
+                skey.as_mut_ptr(),
+                pkey.as_mut_ptr()
+            );
+        }
         KeyPair {
-            sk: PrivateKey::new(),
-            pk: PublicKey::new()
+            sk: PrivateKey::from(&skey).unwrap(),
+            pk: PublicKey::from(&pkey).unwrap()
         }
     }
 
-    pub fn new_with_private_key(sk: &PrivateKey) -> Self {
+    pub fn with_private_key(sk: &PrivateKey) -> Self {
         KeyPair {
             sk: *sk,
             pk: PublicKey::new()
         }
     }
 
-    pub fn new_with_seed(_: &Vec<u8>) -> Self {
+    pub fn with_seed(_: &Vec<u8>) -> Self {
         KeyPair {
             sk: PrivateKey::new(),
             pk: PublicKey::new()
@@ -112,4 +174,8 @@ impl KeyPair {
 #[derive(Debug)]
 pub struct Signature {
     // Define the fields of Signature as needed
+}
+
+impl Signature {
+    pub const BYTES: usize = 64;
 }
