@@ -1,4 +1,4 @@
-use crate::id::{Id, ID_BITS};
+use crate::id::Id;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Prefix {
@@ -19,7 +19,7 @@ impl Prefix {
     }
 
     pub fn is_splittable(&self) -> bool {
-        self.depth < (ID_BITS - 1) as i32
+        self.depth < (Id::BITS - 1) as i32
     }
 
     pub fn first(&self) -> Id {

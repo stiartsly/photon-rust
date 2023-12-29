@@ -3,29 +3,29 @@ use std::cmp::Ordering;
 use libsodium_sys::randombytes_buf;
 use crate::signature::PublicKey;
 
-pub const ID_BITS: usize = 256;
-pub const ID_BYTES: usize = 32;
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Id {
-    bytes: [u8; ID_BYTES],
+    bytes: [u8; Self::BYTES],
 }
 
 impl Id {
+    pub const BYTES: usize = 32;
+    pub const BITS: usize = 256;
+
     pub fn new() -> Self {
-        Id { bytes: [0; ID_BYTES] }
+        Id { bytes: [0; Self::BYTES] }
     }
 
     pub fn zero() -> Self {
-        Id { bytes: [0; ID_BYTES] }
+        Id { bytes: [0; Self::BYTES] }
     }
 
     pub fn random() -> Self {
-        let mut bytes = [0u8; ID_BYTES];
+        let mut bytes = [0u8; Self::BYTES];
         unsafe {
             randombytes_buf(
                 bytes.as_mut_ptr() as *mut libc::c_void,
-                ID_BYTES
+                Self::BYTES
             );
         }
         Id { bytes }
@@ -37,7 +37,7 @@ impl Id {
 
     pub fn of_hex(idstr: &str) -> Result<Self, &'static str> {
         let decoded = hex::decode(idstr).map_err(|_| "Decoding failed")?;
-        if decoded.len() != ID_BYTES {
+        if decoded.len() != Self::BYTES {
             return Err("Invalid hex ID length");
         }
 
@@ -53,11 +53,11 @@ impl Id {
     }
 
     pub fn of_base58(idstr: &str) -> Result<Self, &'static str> {
-        let mut data: [u8; 32] = [0; ID_BYTES];
+        let mut data: [u8; 32] = [0; Self::BYTES];
         let decoded = bs58::decode(idstr).onto(&mut data);
         match decoded {
             Ok(len)=> {
-                if len != ID_BYTES {
+                if len != Self::BYTES {
                     return Err("Invalid base58 Id length");
                 }
                 Ok(Id { bytes: data })
@@ -77,8 +77,8 @@ impl Id {
     }
 
     pub fn distance(&self, to: &Id) -> Self {
-        let mut data: [u8; 32] = [0; ID_BYTES];
-        for i in 0..ID_BYTES {
+        let mut data: [u8; 32] = [0; Self::BYTES];
+        for i in 0..Self::BYTES {
             data[i] = self.bytes[i] ^ to.bytes[i];
         }
         Id { bytes: data }
@@ -86,7 +86,7 @@ impl Id {
 
     pub fn three_way_compare(&self, id1: &Id, id2: &Id) -> Ordering {
         let mut mmi = i32::MAX;
-        for i in 0..ID_BYTES {
+        for i in 0..Self::BYTES {
             if id1.bytes[i] != id2.bytes[i] {
                 mmi = i as i32;
                 break;
@@ -107,7 +107,7 @@ impl Id {
         }
 
         let mut mmi = i32::MAX;
-        for i in 0..ID_BYTES {
+        for i in 0..Self::BYTES {
             if id1.bytes[i] != id2.bytes[i] {
                 mmi = i as i32;
                 break;

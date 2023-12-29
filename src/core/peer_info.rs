@@ -1,6 +1,6 @@
 use std::option::Option;
 use crate::id::Id;
-use crate::signature::{PrivateKey, KeyPair};
+use crate::signature::{PrivateKey, KeyPair, Signature};
 
 #[derive(Debug)]
 pub struct PeerInfo {
@@ -94,7 +94,31 @@ impl PeerInfo {
     }
 
     pub fn is_valid(&self) -> bool {
-        // TODO;
-        false
+        if self.signature.len() != Signature::BYTES {
+            return false
+        }
+
+        let capacity = self.fill_sign_data_size();
+        let mut data = vec![0u8; capacity];
+        self.fill_sign_data(data.as_mut_slice());
+
+        let pk = self.public_key.to_signature_key();
+        match Signature::verify(data.as_ref(), self.signature.as_slice(), &pk) {
+            Ok(valid) => { valid },
+            Err(_) => {false}
+        }
     }
+
+    fn fill_sign_data<'a>(&self, _: &'a mut [u8]) {
+        // TODO:
+    }
+
+    fn fill_sign_data_size(&self) -> usize {
+        let mut size = Id::BYTES * 2 + std::mem::size_of::<u16>();
+        if self.has_alternative_url() {
+            size += self.alternative_url.as_deref().unwrap().len();
+        }
+        return size;
+    }
+
 }

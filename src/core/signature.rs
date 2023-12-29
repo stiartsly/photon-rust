@@ -254,4 +254,8 @@ pub struct Signature {
 
 impl Signature {
     pub const BYTES: usize = 64;
+
+    pub fn verify<'a>(_: &[u8], _: &[u8], _: &PublicKey) -> Result<bool, &'static str> {
+        Err("TODO")
+    }
 }
