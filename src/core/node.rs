@@ -26,22 +26,15 @@ impl Node {
     }
 
     fn load_key(&mut self, key_path: &str) -> Result<(), &'static str> {
-        let file = File::open(key_path);
-        if file.is_err() {
-            return Err("Opening key file failed");
-        }
+        let mut file = File::open(key_path)
+            .map_err(|_| "Opening key file failed")?;
 
         let mut buf = Vec::new();
-        let result = file.unwrap().read_to_end(&mut buf);
-        match result {
-            Ok(_) => {
-                if buf.len() != PrivateKey::BYTES {
-                    return Err("Incorrect key data");
-                }
-            },
-            Err(_) => {
-                return Err("Read key file failed.");
-            }
+        file.read_to_end(&mut buf)
+            .map_err(|_| "Reading key file failed")?;
+
+        if buf.len() != PrivateKey::BYTES {
+            return Err("Incorrect key data");
         }
 
         self.key_pair = KeyPair::from_private_key_data(buf.as_slice())?;
@@ -49,20 +42,24 @@ impl Node {
     }
 
     fn init_key(&mut self, key_path: &str) -> Result<(), &'static str> {
+        let mut file = File::create(key_path)
+            .map_err(|_| "Creating key file failed")?;
+
         self.key_pair = KeyPair::random();
+        file.write_all(self.key_pair.private_key().as_bytes())
+            .map_err(|_| "Write key file failed")?;
 
-        let mut file = File::create(key_path);
-        if file.is_err() {
-            return Err("Creating a key file failed");
-        }
+        Ok(())
+    }
 
-        let result = file.unwrap().write_all(self.key_pair.private_key().bytes());
-        match result {
-            Ok(()) => { Ok(())},
-            Err(_) => {
-                Err("Writing key file failed")
-            }
-        }
+    fn write_id_file(&self, key_path: &str) -> Result<(), &'static str> {
+        let mut file = File::create(key_path)
+            .map_err(|_| "Creating id file failed")?;
+
+        file.write_all(self.id.to_string().as_bytes())
+            .map_err(|_| "Writing ID file failed")?;
+
+        Ok(())
     }
 
 }

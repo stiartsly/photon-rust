@@ -45,7 +45,7 @@ impl PrivateKey {
         Self::BYTES
     }
 
-    pub fn bytes(&self) -> &[u8; Self::BYTES] {
+    pub fn as_bytes(&self) -> &[u8; Self::BYTES] {
         &self.key
     }
 
@@ -106,7 +106,7 @@ impl PublicKey {
         Self::BYTES
     }
 
-    pub fn bytes(&self) -> &[u8; Self::BYTES] {
+    pub fn as_bytes(&self) -> &[u8; Self::BYTES] {
         &self.key
     }
 
@@ -201,7 +201,7 @@ impl KeyPair {
         unsafe {
             crypto_sign_ed25519_sk_to_pk(
                 pk.as_mut_ptr(),
-                private_key.bytes().as_ptr()
+                private_key.as_bytes().as_ptr()
             ); // Always success
         }
         KeyPair {

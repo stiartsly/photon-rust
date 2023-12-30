@@ -32,7 +32,7 @@ impl Id {
     }
 
     pub fn of_public_key(publick_key: &PublicKey) -> Self {
-        Id { bytes: *publick_key.bytes() }
+        Id { bytes: *publick_key.as_bytes() }
     }
 
     pub fn of_hex(idstr: &str) -> Result<Self, &'static str> {
@@ -137,6 +137,10 @@ impl Id {
         let mask: u8 = (1 << (depth & 0x07)) - 1;
         dest.bytes[idx as usize] &= !mask;
         dest.bytes[idx as usize] |= src.bytes[idx as usize] & mask;
+    }
+
+    pub fn to_string(&self) -> String {
+        self.to_hex()
     }
 
 }
