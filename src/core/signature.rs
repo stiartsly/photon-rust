@@ -165,7 +165,7 @@ impl KeyPair {
         }
         KeyPair {
             sk: PrivateKey::from(&sk).unwrap(),
-            pk: PublicKey::from(&pk).unwrap()
+            pk: PublicKey::from(&pk).unwrap(),
         }
     }
 
@@ -210,6 +210,25 @@ impl KeyPair {
         }
     }
 
+    pub fn from_private_key_data(key: &[u8]) -> Result<Self, &'static str> {
+        if key.len() != PrivateKey::BYTES {
+            return Err("Incorrect private key size");
+        }
+
+        let mut pk = vec![0u8; PublicKey::BYTES];
+        unsafe {
+            crypto_sign_ed25519_sk_to_pk(
+                pk.as_mut_ptr(),
+                key.as_ptr()
+            ); // Always success
+        }
+
+        Ok(KeyPair {
+            sk: PrivateKey::from(key)?,
+            pk: PublicKey::from(&pk)?
+        })
+    }
+
     pub fn from_seed<'a>(seed: &'a [u8]) -> Result<Self, &'static str> {
         if seed.len() != KeyPair::SEED_BYTES {
             return Err("Incorrect seed size");
@@ -227,8 +246,8 @@ impl KeyPair {
         }
         Ok(
             KeyPair {
-                sk: PrivateKey::from(&sk).unwrap(),
-                pk: PublicKey::from(&pk).unwrap()
+                sk: PrivateKey::from(&sk)?,
+                pk: PublicKey::from(&pk)?
             }
         )
     }
