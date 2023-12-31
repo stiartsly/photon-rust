@@ -17,7 +17,7 @@ impl Id {
     }
 
     pub fn zero() -> Self {
-        Id { bytes: [0; Self::BYTES] }
+        Id::new()
     }
 
     pub fn random() -> Self {
@@ -31,45 +31,46 @@ impl Id {
         Id { bytes }
     }
 
-    pub fn of_public_key(publick_key: &PublicKey) -> Self {
-        Id { bytes: *publick_key.as_bytes() }
+    pub fn from_key(publick_key: &PublicKey) -> Self {
+        let mut bytes = [0u8; Self::BYTES];
+
+        bytes.copy_from_slice(publick_key.as_bytes());
+        Id { bytes }
     }
 
-    pub fn of_hex(idstr: &str) -> Result<Self, &'static str> {
-        let decoded = hex::decode(idstr).map_err(|_| "Decoding failed")?;
+    pub fn from_hex(idstr: &str) -> Result<Self, &'static str> {
+        let decoded = hex::decode(idstr)
+            .map_err(|_| "Decoding failed")?;
+
         if decoded.len() != Self::BYTES {
             return Err("Invalid hex ID length");
         }
 
-        let bytes: Result<[u8; 32], _> = decoded.try_into();
-        match bytes {
-            Ok(array) => {
-                Ok(Id { bytes: array })
-            },
-            Err(_) => {
-                Err("Conversion from Hex to Id failed")
-            }
-        }
+        let bytes: [u8; 32] = decoded.try_into()
+            .map_err(|_| "Conversion from Hex to Id failed")?;
+        Ok(Id{ bytes })
     }
 
-    pub fn of_base58(idstr: &str) -> Result<Self, &'static str> {
-        let mut data: [u8; 32] = [0; Self::BYTES];
-        let decoded = bs58::decode(idstr).onto(&mut data);
-        match decoded {
-            Ok(len)=> {
-                if len != Self::BYTES {
-                    return Err("Invalid base58 Id length");
-                }
-                Ok(Id { bytes: data })
-            },
-            Err(_) => {
-                Err("Conversion from base58 to Id failed")
-            }
+    pub fn from_base58(idstr: &str) -> Result<Self, &'static str> {
+        let mut bytes: [u8; 32] = [0; Self::BYTES];
+        let decoded = bs58::decode(idstr)
+            .onto(&mut bytes)
+            .map_err(|_| "Conversion from base58 to Id failed")?;
+
+        if decoded != Self::BYTES {
+            return Err("Invalid base58 Id length");
         }
+        Ok(Id { bytes })
     }
 
     pub fn to_hex(&self) -> String {
         hex::encode(&self.bytes)
+    }
+
+    pub fn to_base58(&self) -> String {
+        bs58::encode(self.bytes)
+            .with_alphabet(bs58::Alphabet::FLICKR)
+            .into_string()
     }
 
     pub fn to_signature_key(&self) -> PublicKey {

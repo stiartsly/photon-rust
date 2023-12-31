@@ -14,11 +14,15 @@ pub struct PeerInfo {
 }
 
 impl PeerInfo {
-    pub fn new(id: &Id, port: u16) -> Self {
+    pub fn new(id: &Id, port: u16) -> Result<PeerInfo, &'static str> {
         let key_pair = KeyPair::random();
+        PeerInfo::with_all(&key_pair, id, id, port, &"".to_string())
+    }
+
+    pub fn with_key_pair(key_pair: &KeyPair, id: &Id, port: u16) -> Self {
         PeerInfo {
-            public_key: Id::of_public_key(key_pair.public_key()),
-            private_key: Some(key_pair.private_key().clone()),
+            public_key: Id::from_key(key_pair.public_key()),
+            private_key: Some(*key_pair.private_key()),
             node_id: *id,
             origin: *id,
             port,
@@ -27,16 +31,30 @@ impl PeerInfo {
         }
     }
 
-    pub fn with_key_pair(key_pair: &KeyPair, id: &Id, port: u16) -> Self {
-        PeerInfo {
-            public_key: Id::of_public_key(key_pair.public_key()),
-            private_key: Some(*key_pair.private_key()),
-            node_id: *id,
-            origin: *id,
-            port,
-            alternative_url: None,
-            signature: Vec::new()
+    fn with_all(key_pair: &KeyPair, node_id: &Id, origin: &Id, port: u16, alternative_url: &String)
+        -> Result<PeerInfo, &'static str> {
+        if port == 0 {
+            return Err("Invalid port value");
         }
+
+        let public_key = Id::from_key(key_pair.public_key());
+        let private_key = Some(key_pair.private_key().clone());
+        let node_id = node_id.clone();
+        let origin = origin.clone();
+        let alternative_url = match alternative_url.is_empty() {
+            true => None,
+            false => Some(alternative_url.clone())
+        };
+
+        Ok(PeerInfo {
+            public_key,
+            private_key,
+            node_id,
+            origin,
+            port,
+            alternative_url,
+            signature: Vec::new(),
+        })
     }
 
     pub fn id(&self) -> &Id {
@@ -49,9 +67,7 @@ impl PeerInfo {
 
     pub fn private_key(&self) -> Result<&PrivateKey, &'static str> {
         match self.private_key.as_ref() {
-            Some(pk) => {
-                Ok(pk)
-            },
+            Some(pk) => { Ok(pk) }
             None => {
                 Err("No binding private key")
             }
@@ -76,9 +92,7 @@ impl PeerInfo {
 
     pub fn alternative_url(&self) -> Result<&String, &'static str> {
         match self.alternative_url.as_ref() {
-            Some(url) => {
-                Ok(url)
-            },
+            Some(url) => { Ok(url) },
             None => {
                 Err("No binding alternative url")
             }
@@ -100,7 +114,7 @@ impl PeerInfo {
 
         let capacity = self.fill_sign_data_size();
         let mut data = vec![0u8; capacity];
-        self.fill_sign_data(data.as_mut_slice());
+        self.fill_sign_data(&mut data);
 
         let pk = self.public_key.to_signature_key();
         match Signature::verify(data.as_ref(), self.signature.as_slice(), &pk) {

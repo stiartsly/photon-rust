@@ -5,4 +5,6 @@ pub mod peer_info;
 pub mod lookup_option;
 pub mod prefix;
 pub mod node;
-pub mod dht;
+
+mod message;
+mod dht;

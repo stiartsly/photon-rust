@@ -8,7 +8,7 @@ mod apitests {
     #[test]
     fn test_public_key() {
         let key_pair = KeyPair::new();
-        let id = Id::of_public_key(key_pair.public_key());
+        let id = Id::from_key(key_pair.public_key());
         let pk = id.to_signature_key();
         assert_eq!(key_pair.public_key(), &pk);
     }
