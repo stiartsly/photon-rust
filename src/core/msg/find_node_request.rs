@@ -1,15 +1,24 @@
 use std::net::SocketAddr;
 
 use crate::id::Id;
-use crate::msg::common::Get;
+use crate::msg::common;
+use super::lookup;
 
-use super::common;
-
-pub(crate) struct ErrorMsg {
-    common: common::Fields
+pub(crate) struct FindNodeRequestMsg {
+    common: common::Fields,
+    lookup: lookup::RequestField
 }
 
-impl common::Get for ErrorMsg {
+impl FindNodeRequestMsg {
+    pub(crate) fn new() -> Self {
+        FindNodeRequestMsg {
+            common: common::Fields::new(),
+            lookup: lookup::RequestField::new()
+        }
+    }
+}
+
+impl common::Get for FindNodeRequestMsg {
     fn orign(&self) -> &SocketAddr {
         &self.common.origin
     }
@@ -35,7 +44,7 @@ impl common::Get for ErrorMsg {
     }
 }
 
-impl common::Set for ErrorMsg {
+impl common::Set for FindNodeRequestMsg {
     fn set_orign(&mut self, addr: &SocketAddr) {
         self.common.origin = *addr;
     }
@@ -60,7 +69,7 @@ impl common::Set for ErrorMsg {
     }
 }
 
-impl ToString for ErrorMsg {
+impl ToString for FindNodeRequestMsg {
     fn to_string(&self) -> String {
         // TODO:
         String::new()

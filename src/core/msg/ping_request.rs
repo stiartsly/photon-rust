@@ -1,15 +1,21 @@
 use std::net::SocketAddr;
 
 use crate::id::Id;
-use crate::msg::common::Get;
+use crate::msg::common;
 
-use super::common;
-
-pub(crate) struct ErrorMsg {
+pub(crate) struct PingRequestMsg {
     common: common::Fields
 }
 
-impl common::Get for ErrorMsg {
+impl PingRequestMsg {
+    pub(crate) fn new() -> Self {
+        PingRequestMsg {
+            common: common::Fields::new(),
+        }
+    }
+}
+
+impl common::Get for PingRequestMsg {
     fn orign(&self) -> &SocketAddr {
         &self.common.origin
     }
@@ -35,7 +41,7 @@ impl common::Get for ErrorMsg {
     }
 }
 
-impl common::Set for ErrorMsg {
+impl common::Set for PingRequestMsg {
     fn set_orign(&mut self, addr: &SocketAddr) {
         self.common.origin = *addr;
     }
@@ -60,7 +66,7 @@ impl common::Set for ErrorMsg {
     }
 }
 
-impl ToString for ErrorMsg {
+impl ToString for PingRequestMsg {
     fn to_string(&self) -> String {
         // TODO:
         String::new()
