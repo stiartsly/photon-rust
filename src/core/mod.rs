@@ -6,5 +6,5 @@ pub mod lookup_option;
 pub mod prefix;
 pub mod node;
 
-mod message;
+mod msg;
 mod dht;
