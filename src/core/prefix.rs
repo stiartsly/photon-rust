@@ -1,4 +1,7 @@
-use crate::id::Id;
+
+use std::fmt;
+use crate::{id, id::Id};
+
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Prefix {
@@ -14,12 +17,12 @@ impl Prefix {
         }
     }
 
-    pub fn depth(&self) -> i32 {
+    pub const fn depth(&self) -> i32 {
         self.depth
     }
 
-    pub fn is_splittable(&self) -> bool {
-        self.depth < (Id::BITS - 1) as i32
+    pub const fn is_splittable(&self) -> bool {
+        self.depth < (id::ID_BITS - 1) as i32
     }
 
     pub fn first(&self) -> Id {
@@ -27,22 +30,30 @@ impl Prefix {
     }
 
     pub fn last(&self) -> Id {
-        Id::new()
+        unimplemented!();
     }
 
     pub fn parent(&self) -> Prefix {
-        Prefix::new()
+        unimplemented!();
     }
 
     pub fn split_branch(&self, _: bool) -> Prefix {
-        Prefix::new()
+        unimplemented!();
     }
 
     pub fn is_sibling_of(&self, _: &Prefix) -> bool {
-        false
+        unimplemented!();
     }
 
     pub fn create_random_id(&self) -> Id {
-        Id::random()
+        let mut id = Id::random();
+        id::bits_copy(&self.id, &mut id, self.depth);
+        return id;
+    }
+}
+
+impl fmt::Display for Prefix {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!();
     }
 }

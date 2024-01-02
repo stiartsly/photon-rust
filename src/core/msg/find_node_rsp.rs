@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use crate::id::Id;
-use crate::node_info::NodeInfo;
+use crate::nodeinfo::NodeInfo;
 use super::parts::{MsgParts, PartsProxy};
 use crate::msg::lookup::{Results, ResultProxy};
 

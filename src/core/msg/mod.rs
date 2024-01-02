@@ -10,3 +10,7 @@ mod find_peer_req;
 mod find_peer_rsp;
 mod find_value_req;
 mod find_value_rsp;
+mod announce_peer_rsp;
+mod announce_peer_req;
+mod store_value_rsp;
+mod store_value_req;

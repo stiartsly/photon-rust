@@ -1,6 +1,6 @@
 
 use crate::id::Id;
-use crate::node_info::NodeInfo;
+use crate::nodeinfo::NodeInfo;
 
 #[allow(dead_code)]
 pub(super) struct Filters {
