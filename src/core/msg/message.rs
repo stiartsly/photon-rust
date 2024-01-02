@@ -1,12 +1,9 @@
-use crate::msg::error::ErrorMsg;
+use crate::msg::error_msg::ErrorMsg;
 
-use super::ping_request::PingRequestMsg;
-use super::ping_response::PingResponseMsg;
+use super::ping_req::PingRequestMsg;
+use super::ping_rsp::PingResponseMsg;
 
-enum Method {
-
-}
-
+#[allow(dead_code)]
 pub(crate) enum Message {
     Error(ErrorMsg),
     PingRequest(PingRequestMsg),

@@ -2,23 +2,18 @@
 use crate::id::Id;
 use crate::node_info::NodeInfo;
 
-pub(crate) struct RequestField {
-    target: Id,
-    want4: bool,
-    want6: bool,
-    want_token: bool
+#[allow(dead_code)]
+pub(super) struct Filters {
+    pub(super) target: Id,
+    pub(super) want4: bool,
+    pub(super) want6: bool,
+    pub(super) want_token: bool
 }
 
-pub(crate) struct ResponseFields {
-    node4: Vec<NodeInfo>,
-    node6: Vec<NodeInfo>,
-    token: i32
-}
-
-impl RequestField {
-    pub(crate) fn new() -> Self {
-        RequestField {
-            target: Id::random(),
+impl Filters {
+    pub(super) fn new() -> Self {
+        Filters {
+            target: Id::new(),
             want4: false,
             want6: false,
             want_token: false
@@ -26,13 +21,37 @@ impl RequestField {
     }
 }
 
-impl ResponseFields {
-    pub(crate) fn new() -> Self {
-        ResponseFields {
-            node4: Vec::new(),
-            node6: Vec::new(),
+pub(super) struct Results {
+    pub(super) nodes4: Vec<NodeInfo>,
+    pub(super) nodes6: Vec<NodeInfo>,
+    pub(super) token: i32
+}
+
+impl Results {
+    pub(super) fn new() -> Self {
+        Results {
+            nodes4: Vec::new(),
+            nodes6: Vec::new(),
             token: 0
         }
     }
-
 }
+
+pub(super) trait FilterProxy  { // for Filters
+    fn target(&self) -> &Id;
+    fn does_want4(&self) -> bool;
+    fn does_want6(&self) -> bool;
+
+    fn set_want4(&mut self);
+    fn set_want6(&mut self);
+ }
+
+ pub(super) trait ResultProxy { // for Results
+    fn nodes4(&self) -> &[NodeInfo];
+    fn nodes6(&self) -> &[NodeInfo];
+    fn token(&self) -> i32;
+
+    fn set_nodes4(&self, nodes: &[NodeInfo]);
+    fn set_nodes6(&self, nodes: &[NodeInfo]);
+    fn set_token(&self, token: i32);
+ }

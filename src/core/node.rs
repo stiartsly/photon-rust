@@ -5,6 +5,7 @@ use crate::{
     id::Id
 };
 
+#[allow(dead_code)]
 pub struct Node {
     key_pair: KeyPair,
     id: Id,
@@ -12,6 +13,7 @@ pub struct Node {
     persistent:bool
 }
 
+#[allow(dead_code)]
 impl Node {
     pub fn new() -> Self {
         Node {
