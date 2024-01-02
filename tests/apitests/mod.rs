@@ -2,10 +2,10 @@
 pub mod id;
 
 # [cfg(test)]
-pub mod node_info;
+pub mod nodeinfo;
 
 # [cfg(test)]
-pub mod peer_info;
+pub mod peerinfo;
 
 # [cfg(test)]
 pub mod signature;

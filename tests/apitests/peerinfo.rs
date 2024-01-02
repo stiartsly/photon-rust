@@ -1,6 +1,6 @@
 
 use boson::id::Id;
-use boson::peer_info::PeerInfo;
+use boson::peerinfo::PeerInfo;
 
 #[cfg(test)]
 mod apitests {

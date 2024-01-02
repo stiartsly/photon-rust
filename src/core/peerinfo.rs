@@ -1,5 +1,5 @@
 use std::option::Option;
-use crate::id::Id;
+use crate::id::{Id, ID_BYTES};
 use crate::signature::{PrivateKey, KeyPair, Signature};
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ impl PeerInfo {
 
     pub fn with_key_pair(key_pair: &KeyPair, id: &Id, port: u16) -> Self {
         PeerInfo {
-            public_key: Id::from_key(key_pair.public_key()),
+            public_key: Id::from_signature_key(key_pair.public_key()),
             private_key: Some(*key_pair.private_key()),
             node_id: *id,
             origin: *id,
@@ -37,7 +37,7 @@ impl PeerInfo {
             return Err("Invalid port value");
         }
 
-        let public_key = Id::from_key(key_pair.public_key());
+        let public_key = Id::from_signature_key(key_pair.public_key());
         let private_key = Some(key_pair.private_key().clone());
         let node_id = node_id.clone();
         let origin = origin.clone();
@@ -128,7 +128,7 @@ impl PeerInfo {
     }
 
     fn fill_sign_data_size(&self) -> usize {
-        let mut size = Id::BYTES * 2 + std::mem::size_of::<u16>();
+        let mut size = ID_BYTES * 2 + std::mem::size_of::<u16>();
         if self.has_alternative_url() {
             size += self.alternative_url.as_deref().unwrap().len();
         }

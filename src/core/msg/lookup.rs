@@ -1,38 +1,32 @@
 
 use crate::id::Id;
-use crate::node_info::NodeInfo;
+use crate::nodeinfo::NodeInfo;
 
-pub(crate) struct RequestField {
-    target: Id,
-    want4: bool,
-    want6: bool,
-    want_token: bool
-}
+ pub(crate) trait Lookup {
+    fn target(&self) -> &Id;
+    fn want4(&self) -> bool;
+    fn want6(&self) -> bool;
+    fn want_token(&self) -> bool;
+ }
 
-pub(crate) struct ResponseFields {
-    node4: Vec<NodeInfo>,
-    node6: Vec<NodeInfo>,
-    token: i32
-}
+ pub(crate) trait LookupBuilder<'a> {
+    fn with_target(&mut self, _: &'a Id) -> &mut Self;
+    fn with_want4(&mut self) -> &mut Self;
+    fn with_want6(&mut self) -> &mut Self;
+    fn with_token(&mut self) -> &mut Self;
+ }
 
-impl RequestField {
-    pub(crate) fn new() -> Self {
-        RequestField {
-            target: Id::random(),
-            want4: false,
-            want6: false,
-            want_token: false
-        }
-    }
-}
+ pub(crate) trait LookupResult {
+    fn nodes4(&self) -> &[NodeInfo];
+    fn nodes6(&self) -> &[NodeInfo];
+    fn token(&self) -> i32;
+ }
 
-impl ResponseFields {
-    pub(crate) fn new() -> Self {
-        ResponseFields {
-            node4: Vec::new(),
-            node6: Vec::new(),
-            token: 0
-        }
-    }
-
-}
+ pub(crate) trait LookupResultBuilder {
+    fn populate_closest_nodes4<F>(&mut self, _:bool, f: F) -> &mut Self
+    where F: Fn() -> Vec<NodeInfo>;
+    fn populate_closest_nodes6<F>(&mut self, _:bool, f: F) -> &mut Self
+    where F: Fn() -> Vec<NodeInfo>;
+    fn populate_token<F>(&mut self, _: bool, f: F) -> &mut Self
+    where F: Fn() -> i32;
+ }
