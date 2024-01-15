@@ -5,8 +5,8 @@ use crate::id::Id;
 use super::message::{
     Message,
     MessageBuidler,
-    MsgKind,
-    MsgMethod
+    Kind,
+    Method
 };
 
 #[allow(dead_code)]
@@ -36,12 +36,12 @@ pub(crate) struct ErrorMsgBuilder<'a,'b> {
 }
 
 impl Message for ErrorMsg {
-    fn kind(&self) -> MsgKind {
-        return MsgKind::Request;
+    fn kind(&self) -> Kind {
+        return Kind::Request;
     }
 
-    fn method(&self) -> MsgMethod {
-        return MsgMethod::Ping;
+    fn method(&self) -> Method {
+        return Method::Ping;
     }
 
     fn id(&self) -> &Id {

@@ -9,17 +9,17 @@ use super::message::{
     Message,
     MessageBuidler,
     MessageParser,
-    MsgKind,
-    MsgMethod
+    Kind,
+    Method
 };
 
 impl Message for Request {
-    fn kind(&self) -> MsgKind {
-        MsgKind::Request
+    fn kind(&self) -> Kind {
+        Kind::Request
     }
 
-    fn method(&self) -> MsgMethod {
-        MsgMethod::Ping
+    fn method(&self) -> Method {
+        Method::Ping
     }
 
     fn id(&self) -> &Id {
@@ -74,12 +74,12 @@ impl<'a> MessageParser<'a> for ResponseParser<'a> {
 }
 
 impl Message for Response {
-    fn kind(&self) -> MsgKind {
-        MsgKind::Request
+    fn kind(&self) -> Kind {
+        Kind::Request
     }
 
-    fn method(&self) -> MsgMethod {
-        MsgMethod::Ping
+    fn method(&self) -> Method {
+        Method::Ping
     }
 
     fn id(&self) -> &Id {

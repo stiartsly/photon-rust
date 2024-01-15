@@ -9,28 +9,28 @@ use crate::id::Id;
 use super::ping::{self};
 
 #[allow(dead_code)]
-pub(crate) enum MsgKind {
+pub(crate) enum Kind {
     Error = 0x00,
     Request = 0x20,
     Response = 0x40,
 }
 
 #[allow(dead_code)]
-impl MsgKind {
+impl Kind {
     const MASK: i32 = 0xE0;
-    fn from(mtype: i32) -> MsgKind {
+    fn from(mtype: i32) -> Kind {
         let kind: i32 = mtype & Self::MASK;
         match kind {
-            0x00 => MsgKind::Error,
-            0x20 => MsgKind::Request,
-            0x40 => MsgKind::Response,
+            0x00 => Kind::Error,
+            0x20 => Kind::Request,
+            0x40 => Kind::Response,
             _ => {panic!("invalid msg kind: {}", kind)}
         }
     }
 }
 
 #[allow(dead_code)]
-pub(crate) enum MsgMethod {
+pub(crate) enum Method {
     Unknown = 0x00,
     Ping = 0x01,
     FindNode = 0x02,
@@ -41,26 +41,26 @@ pub(crate) enum MsgMethod {
 }
 
 #[allow(dead_code)]
-impl MsgMethod {
+impl Method {
     const MASK: i32 = 0x1F;
     fn from(_type: i32) -> Self {
         let method: i32 = _type & Self::MASK;
         match method {
-            0x00 => MsgMethod::Unknown,
-            0x01 => MsgMethod::Ping,
-            0x02 => MsgMethod::FindNode,
-            0x03 => MsgMethod::AnnouncePeer,
-            0x04 => MsgMethod::FindPeer,
-            0x05 => MsgMethod::StoreValue,
-            0x06 => MsgMethod::FindValue,
+            0x00 => Method::Unknown,
+            0x01 => Method::Ping,
+            0x02 => Method::FindNode,
+            0x03 => Method::AnnouncePeer,
+            0x04 => Method::FindPeer,
+            0x05 => Method::StoreValue,
+            0x06 => Method::FindValue,
             _ => {panic!("invalid msg method: {}", method)}
         }
     }
 }
 
 pub(crate) trait Message {
-    fn kind(&self) -> MsgKind;
-    fn method(&self) -> MsgMethod;
+    fn kind(&self) -> Kind;
+    fn method(&self) -> Method;
 
     fn id(&self) -> &Id;
     fn addr(&self) -> &SocketAddr;
@@ -87,28 +87,28 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, cbor: &[u8]) -> Box<dyn Message> {
     let reader = Reader::new(cbor);
     let value: Value = from_reader(reader).unwrap();
 
-    match MsgKind::from(mtype) {
-        MsgKind::Error => { panic!("TODO") },
-        MsgKind::Request => {
-            match MsgMethod::from(mtype) {
-                MsgMethod::Unknown => { panic!("TODO") },
-                MsgMethod::Ping => Box::new(ping::RequestBuidler::from(&value).build()),
-                MsgMethod::FindNode => { panic!("TODO") },
-                MsgMethod::AnnouncePeer => { panic!("TODO") },
-                MsgMethod::FindPeer => { panic!("TODO") },
-                MsgMethod::StoreValue => { panic!("TODO") },
-                MsgMethod::FindValue => { panic!("TODO") }
+    match Kind::from(mtype) {
+        Kind::Error => { panic!("TODO") },
+        Kind::Request => {
+            match Method::from(mtype) {
+                Method::Unknown => { panic!("TODO") },
+                Method::Ping => Box::new(ping::RequestBuidler::from(&value).build()),
+                Method::FindNode => { panic!("TODO") },
+                Method::AnnouncePeer => { panic!("TODO") },
+                Method::FindPeer => { panic!("TODO") },
+                Method::StoreValue => { panic!("TODO") },
+                Method::FindValue => { panic!("TODO") }
             }
         },
-        MsgKind::Response => {
-            match MsgMethod::from(mtype) {
-                MsgMethod::Unknown => { panic!("TODO") },
-                MsgMethod::Ping => Box::new(ping::ResponseBuilder::from(&value).build()),
-                MsgMethod::FindNode => { panic!("TODO") },
-                MsgMethod::AnnouncePeer => { panic!("TODO") },
-                MsgMethod::FindPeer => { panic!("TODO") },
-                MsgMethod::StoreValue => { panic!("TODO") },
-                MsgMethod::FindValue => { panic!("TODO") }
+        Kind::Response => {
+            match Method::from(mtype) {
+                Method::Unknown => { panic!("TODO") },
+                Method::Ping => Box::new(ping::ResponseBuilder::from(&value).build()),
+                Method::FindNode => { panic!("TODO") },
+                Method::AnnouncePeer => { panic!("TODO") },
+                Method::FindPeer => { panic!("TODO") },
+                Method::StoreValue => { panic!("TODO") },
+                Method::FindValue => { panic!("TODO") }
             }
         }
     }

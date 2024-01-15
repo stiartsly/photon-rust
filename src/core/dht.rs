@@ -10,7 +10,7 @@ use crate::peerinfo::PeerInfo;
 use crate::value::Value;
 use crate::rpccall::RPCCall;
 use crate::rpcserver::RpcServer;
-use crate::msg::message::{Message, MessageBuidler, MsgKind, MsgMethod};
+use crate::msg::message::{self, Message, MessageBuidler};
 use crate::msg::lookup::{Lookup, LookupResultBuilder};
 use crate::msg::ping::{self};
 use crate::msg::find_node::{self};
@@ -79,21 +79,21 @@ impl DHT {
 
     fn on_message(&self, msg: impl Message + Lookup) {
         match msg.kind() {
-            MsgKind::Error => self.on_request(msg),
-            MsgKind::Request => self.on_request(msg),
-            MsgKind::Response => self.on_response(msg),
+            message::Kind::Error => self.on_request(msg),
+            message::Kind::Request => self.on_request(msg),
+            message::Kind::Response => self.on_response(msg),
         }
     }
 
     fn on_request(&self, msg: impl Message + Lookup) {
         match msg.method() {
-            MsgMethod::Ping => self.on_ping(msg),
-            MsgMethod::FindNode => self.on_find_node(msg),
-            MsgMethod::FindValue => self.on_find_value(msg),
-            MsgMethod::StoreValue => self.on_store_value(msg),
-            MsgMethod::FindPeer => self.on_find_peers(msg),
-            MsgMethod::AnnouncePeer => self.on_announce_peer(msg),
-            MsgMethod::Unknown => {}
+            message::Method::Ping => self.on_ping(msg),
+            message::Method::FindNode => self.on_find_node(msg),
+            message::Method::FindValue => self.on_find_value(msg),
+            message::Method::StoreValue => self.on_store_value(msg),
+            message::Method::FindPeer => self.on_find_peers(msg),
+            message::Method::AnnouncePeer => self.on_announce_peer(msg),
+            message::Method::Unknown => {}
         }
     }
 
