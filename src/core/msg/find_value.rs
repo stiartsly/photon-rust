@@ -6,7 +6,7 @@ use crate::nodeinfo::NodeInfo;
 use super::message::{
     Message,
     MessageBuidler,
-    MsgType,
+    MsgKind,
     MsgMethod
 };
 use super::lookup::{
@@ -17,8 +17,8 @@ use super::lookup::{
 };
 
 impl Message for Request {
-    fn mtype(&self) -> MsgType {
-        return MsgType::Request;
+    fn kind(&self) -> MsgKind {
+        return MsgKind::Request;
     }
 
     fn method(&self) -> MsgMethod {
@@ -77,10 +77,6 @@ impl<'a,'b> MessageBuidler<'b> for RequestBuidler<'a,'b> {
     fn with_verion(&mut self, _: i32) -> &mut Self {
         unimplemented!()
     }
-
-    fn is_valid(&self) -> bool {
-        false
-    }
 }
 
 impl<'a,'b> LookupBuilder<'b> for RequestBuidler<'a,'b> {
@@ -106,8 +102,8 @@ impl<'a,'b> LookupBuilder<'b> for RequestBuidler<'a,'b> {
 }
 
 impl Message for Response {
-    fn mtype(&self) -> MsgType {
-        return MsgType::Request;
+    fn kind(&self) -> MsgKind {
+        return MsgKind::Request;
     }
 
     fn method(&self) -> MsgMethod {
@@ -160,10 +156,6 @@ impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
 
     fn with_verion(&mut self, _: i32) -> &mut Self {
         unimplemented!()
-    }
-
-    fn is_valid(&self) -> bool {
-        false
     }
 }
 
@@ -268,6 +260,11 @@ impl<'a,'b> RequestBuidler<'a,'b> {
         }
     }
 
+    #[inline]
+    fn is_valid(&self) -> bool {
+        false
+    }
+
     pub(crate) fn build(&self) -> Request {
         assert!(self.is_valid(), "Imcomplete request buidler");
         Request::new(self)
@@ -311,6 +308,11 @@ impl<'a,'b> ResponseBuilder<'a,'b> {
             token: 0,
             marker: PhantomData
         }
+    }
+
+    #[inline]
+    fn is_valid(&self) -> bool {
+        false
     }
 
     pub(crate) fn build(&self) -> Response {

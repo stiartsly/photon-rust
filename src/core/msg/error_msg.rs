@@ -5,7 +5,7 @@ use crate::id::Id;
 use super::message::{
     Message,
     MessageBuidler,
-    MsgType,
+    MsgKind,
     MsgMethod
 };
 
@@ -36,8 +36,8 @@ pub(crate) struct ErrorMsgBuilder<'a,'b> {
 }
 
 impl Message for ErrorMsg {
-    fn mtype(&self) -> MsgType {
-        return MsgType::Request;
+    fn kind(&self) -> MsgKind {
+        return MsgKind::Request;
     }
 
     fn method(&self) -> MsgMethod {
@@ -78,10 +78,6 @@ impl<'a,'b> MessageBuidler<'b> for ErrorMsgBuilder<'a,'b> {
 
     fn with_verion(&mut self, _: i32) -> &mut Self {
         unimplemented!()
-    }
-
-    fn is_valid(&self) -> bool {
-        false
     }
 }
 

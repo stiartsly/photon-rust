@@ -23,3 +23,5 @@ libc = "0.2.151"
 libsodium-sys-stable = "1.20.4"
 static_assertions = "1.1.0"
 tokio = { version = "1.35.1", features = ["full"] }
+ciborium = "0.2.1"
+ciborium-io = "0.2.1"

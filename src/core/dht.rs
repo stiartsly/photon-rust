@@ -10,7 +10,7 @@ use crate::peerinfo::PeerInfo;
 use crate::value::Value;
 use crate::rpccall::RPCCall;
 use crate::rpcserver::RpcServer;
-use crate::msg::message::{Message, MessageBuidler, MsgType, MsgMethod};
+use crate::msg::message::{Message, MessageBuidler, MsgKind, MsgMethod};
 use crate::msg::lookup::{Lookup, LookupResultBuilder};
 use crate::msg::ping::{self};
 use crate::msg::find_node::{self};
@@ -78,10 +78,10 @@ impl DHT {
     }
 
     fn on_message(&self, msg: impl Message + Lookup) {
-        match msg.mtype() {
-            MsgType::Error => self.on_request(msg),
-            MsgType::Request => self.on_request(msg),
-            MsgType::Response => self.on_response(msg),
+        match msg.kind() {
+            MsgKind::Error => self.on_request(msg),
+            MsgKind::Request => self.on_request(msg),
+            MsgKind::Response => self.on_response(msg),
         }
     }
 

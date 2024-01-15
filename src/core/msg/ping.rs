@@ -1,21 +1,25 @@
 use std::net::SocketAddr;
 use std::marker::PhantomData;
 
+//use ciborium::value::Integer;
+//use ciborium_io::Read;
+
 use crate::id::Id;
 use super::message::{
     Message,
     MessageBuidler,
-    MsgType,
+    MessageParser,
+    MsgKind,
     MsgMethod
 };
 
 impl Message for Request {
-    fn mtype(&self) -> MsgType {
-        return MsgType::Request;
+    fn kind(&self) -> MsgKind {
+        MsgKind::Request
     }
 
     fn method(&self) -> MsgMethod {
-        return MsgMethod::Ping;
+        MsgMethod::Ping
     }
 
     fn id(&self) -> &Id {
@@ -53,19 +57,29 @@ impl<'a,'b> MessageBuidler<'b> for RequestBuidler<'a,'b> {
     fn with_verion(&mut self, _: i32) -> &mut Self {
         unimplemented!()
     }
+}
 
-    fn is_valid(&self) -> bool {
-        false
+impl<'a> MessageParser<'a> for RequestParser<'a> {
+    fn with_cbor(&mut self, cbor: &'a [u8]) -> &mut Self {
+        self.cbor = Some(cbor);
+        self
+    }
+}
+
+impl<'a> MessageParser<'a> for ResponseParser<'a> {
+    fn with_cbor(&mut self, cbor: &'a [u8]) -> &mut Self {
+        self.cbor = Some(cbor);
+        self
     }
 }
 
 impl Message for Response {
-    fn mtype(&self) -> MsgType {
-        return MsgType::Request;
+    fn kind(&self) -> MsgKind {
+        MsgKind::Request
     }
 
     fn method(&self) -> MsgMethod {
-        return MsgMethod::Ping;
+        MsgMethod::Ping
     }
 
     fn id(&self) -> &Id {
@@ -100,10 +114,6 @@ impl<'a, 'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
 
     fn with_verion(&mut self, _: i32) -> &mut Self {
         unimplemented!()
-    }
-
-    fn is_valid(&self) -> bool {
-        false
     }
 }
 
@@ -144,6 +154,14 @@ pub(crate) struct ResponseBuilder<'a,'b> {
     marker: PhantomData<&'a ()>,
 }
 
+pub(crate) struct RequestParser<'a> {
+    cbor: Option<&'a [u8]>
+}
+
+pub(crate) struct ResponseParser<'a> {
+    cbor: Option<&'a [u8]>
+}
+
 #[allow(dead_code)]
 impl Request {
     pub(crate) fn new<'a>(b: &'a RequestBuidler) -> Self {
@@ -168,9 +186,31 @@ impl<'a,'b> RequestBuidler<'a,'b> {
         }
     }
 
+    pub(crate) fn from(_: &ciborium::Value) -> Self {
+        unimplemented!()
+    }
+
+    #[inline]
+    fn is_valid(&self) -> bool {
+        self.id.is_some() && self.addr.is_some()
+    }
+
     pub(crate) fn build(&self) -> Request {
         assert!(self.is_valid(), "Imcomplete request buidler");
         Request::new(self)
+    }
+}
+
+#[allow(dead_code)]
+impl <'a> RequestParser<'a> {
+    pub(crate) fn new() -> Self {
+        RequestParser {
+            cbor: None
+        }
+    }
+
+    pub(crate) fn deser(&self) -> RequestBuidler {
+        unimplemented!()
     }
 }
 
@@ -197,6 +237,7 @@ impl ToString for Response {
     }
 }
 
+#[allow(dead_code)]
 impl<'a,'b> ResponseBuilder<'a,'b> {
     pub(crate) fn new() -> Self {
         ResponseBuilder {
@@ -206,6 +247,15 @@ impl<'a,'b> ResponseBuilder<'a,'b> {
             ver: 0,
             marker: PhantomData,
         }
+    }
+
+    pub(crate) fn from(_: &ciborium::Value) -> Self {
+        unimplemented!()
+    }
+
+    #[inline]
+    fn is_valid(&self) -> bool {
+        self.id.is_some() && self.addr.is_some()
     }
 
     pub(crate) fn build(&self) -> Response {
