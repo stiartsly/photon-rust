@@ -8,14 +8,12 @@ use std::io::{Error};
 use crate::id::Id;
 use super::ping::{self};
 
-#[allow(dead_code)]
 pub(crate) enum Kind {
     Error = 0x00,
     Request = 0x20,
     Response = 0x40,
 }
 
-#[allow(dead_code)]
 impl Kind {
     const MASK: i32 = 0xE0;
     fn from(mtype: i32) -> Kind {
@@ -29,7 +27,6 @@ impl Kind {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) enum Method {
     Unknown = 0x00,
     Ping = 0x01,
@@ -40,7 +37,6 @@ pub(crate) enum Method {
     FindValue = 0x6
 }
 
-#[allow(dead_code)]
 impl Method {
     const MASK: i32 = 0x1F;
     fn from(_type: i32) -> Self {
@@ -142,7 +138,6 @@ impl<'a> Read for Reader<'a> {
             self.position += buf.len();
             Ok(())
         } else {
-            // If not enough data is remaining, return an error
             Err(Error::from(std::io::ErrorKind::UnexpectedEof))
         }
     }

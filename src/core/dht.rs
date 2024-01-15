@@ -1,6 +1,5 @@
-
-use std::net::{SocketAddr};
 use std::rc::Rc;
+use std::net::SocketAddr;
 
 use crate::constants;
 use crate::id::Id;
@@ -11,7 +10,7 @@ use crate::value::Value;
 use crate::rpccall::RPCCall;
 use crate::rpcserver::RpcServer;
 use crate::msg::message::{self, Message, MessageBuidler};
-use crate::msg::lookup::{Lookup, LookupResultBuilder};
+use crate::msg::lookup::{self, ResultBuilder};
 use crate::msg::ping::{self};
 use crate::msg::find_node::{self};
 use crate::kclosest_nodes::KClosestNodes;
@@ -77,7 +76,7 @@ impl DHT {
         unimplemented!()
     }
 
-    fn on_message(&self, msg: impl Message + Lookup) {
+    fn on_message(&self, msg: impl Message + lookup::Option) {
         match msg.kind() {
             message::Kind::Error => self.on_request(msg),
             message::Kind::Request => self.on_request(msg),
@@ -85,7 +84,7 @@ impl DHT {
         }
     }
 
-    fn on_request(&self, msg: impl Message + Lookup) {
+    fn on_request(&self, msg: impl Message + lookup::Option) {
         match msg.method() {
             message::Method::Ping => self.on_ping(msg),
             message::Method::FindNode => self.on_find_node(msg),
@@ -116,7 +115,7 @@ impl DHT {
         );
     }
 
-    fn on_find_node(&self, msg: impl Message + Lookup) {
+    fn on_find_node(&self, msg: impl Message + lookup::Option) {
         let mut builder = find_node::ResponseBuilder::new();
         builder.with_txid(msg.txid())
             .with_id(msg.id())

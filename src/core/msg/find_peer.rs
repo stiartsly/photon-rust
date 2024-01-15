@@ -9,12 +9,7 @@ use super::message::{
     Kind,
     Method
 };
-use super::lookup::{
-    Lookup,
-    LookupBuilder,
-    LookupResult,
-    LookupResultBuilder
-};
+use super::lookup;
 
 impl Message for Request {
     fn kind(&self) -> Kind {
@@ -42,7 +37,7 @@ impl Message for Request {
     }
 }
 
-impl Lookup for Request {
+impl lookup::Option for Request {
     fn target(&self) -> &Id {
         unimplemented!()
     }
@@ -79,7 +74,7 @@ impl<'a,'b> MessageBuidler<'b> for RequestBuidler<'a,'b> {
     }
 }
 
-impl<'a,'b> LookupBuilder<'b> for RequestBuidler<'a,'b> {
+impl<'a,'b> lookup::OptionBuilder<'b> for RequestBuidler<'a,'b> {
     fn with_target(&mut self, target: &'b Id) -> &mut Self {
         self.target = Some(target);
         self
@@ -127,7 +122,7 @@ impl Message for Response {
     }
 }
 
-impl LookupResult for Response {
+impl lookup::Result for Response {
     fn nodes4(&self) -> &[NodeInfo] {
         unimplemented!()
     }
@@ -159,7 +154,7 @@ impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
     }
 }
 
-impl<'a,'b> LookupResultBuilder for ResponseBuilder<'a,'b> {
+impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F) -> &mut Self
     where F: Fn() -> Vec<NodeInfo> {
         match want4 {
