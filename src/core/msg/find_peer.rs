@@ -1,8 +1,11 @@
+use std::fmt;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 
 use crate::id::Id;
+use crate::version;
 use crate::nodeinfo::NodeInfo;
+use crate::peerinfo::PeerInfo;
 use super::message::{
     Message,
     MessageBuidler,
@@ -11,47 +14,57 @@ use super::message::{
 };
 use super::lookup;
 
+pub(crate) trait PeerResult {
+    fn has_peers(&self) -> bool;
+    fn peers(&self) -> &[PeerInfo];
+}
+
+pub(crate) trait PeerResultBuilder {
+    fn populate_peers<F>(&mut self, f: F) -> &mut Self
+    where F: Fn() -> Vec<PeerInfo>;
+}
+
 impl Message for Request {
     fn kind(&self) -> Kind {
-        return Kind::Request;
+        Kind::Request
     }
 
     fn method(&self) -> Method {
-        return Method::Ping;
+        Method::FindPeer
     }
 
     fn id(&self) -> &Id {
-        unimplemented!()
+        &self.id
     }
 
     fn addr(&self) -> &SocketAddr {
-        unimplemented!()
+        &self.addr
     }
 
     fn txid(&self) -> i32 {
-        unimplemented!()
+        self.txid
     }
 
     fn version(&self) -> i32 {
-        unimplemented!()
+        self.ver
     }
 }
 
 impl lookup::Option for Request {
     fn target(&self) -> &Id {
-        unimplemented!()
+        &self.target
     }
 
     fn want4(&self) -> bool {
-        unimplemented!()
+        self.want4
     }
 
     fn want6(&self) -> bool {
-        unimplemented!()
+        self.want6
     }
 
     fn want_token(&self) -> bool {
-        unimplemented!()
+        self.want_token
     }
 }
 
@@ -61,16 +74,19 @@ impl<'a,'b> MessageBuidler<'b> for RequestBuidler<'a,'b> {
         self
     }
 
-    fn with_addr(&mut self, _: &SocketAddr) -> &mut Self {
-        unimplemented!()
+    fn with_addr(&mut self, addr: &'b SocketAddr) -> &mut Self {
+        self.addr = Some(addr);
+        self
     }
 
-    fn with_txid(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_txid(&mut self, txid: i32) -> &mut Self {
+        self.txid = txid;
+        self
     }
 
-    fn with_verion(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_verion(&mut self, ver: i32) -> &mut Self {
+        self.ver = ver;
+        self
     }
 }
 
@@ -124,33 +140,47 @@ impl Message for Response {
 
 impl lookup::Result for Response {
     fn nodes4(&self) -> &[NodeInfo] {
-        unimplemented!()
+        &self.nodes4
     }
 
     fn nodes6(&self) -> &[NodeInfo] {
-        unimplemented!()
+        &self.nodes6
     }
 
     fn token(&self) -> i32 {
-        unimplemented!()
+        self.token
+    }
+}
+
+impl PeerResult for Response {
+    fn has_peers(&self) -> bool {
+        !self.peers.is_empty()
+    }
+
+    fn peers(&self) -> &[PeerInfo] {
+        &self.peers
     }
 }
 
 impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
-    fn with_id(&mut self, _: &'b Id) -> &mut Self {
-        unimplemented!()
+    fn with_id(&mut self, id: &'b Id) -> &mut Self {
+        self.id = Some(id);
+        self
     }
 
-    fn with_addr(&mut self, _: &SocketAddr) -> &mut Self {
-        unimplemented!()
+    fn with_addr(&mut self, addr: &'b SocketAddr) -> &mut Self {
+        self.addr = Some(addr);
+        self
     }
 
-    fn with_txid(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_txid(&mut self, txid: i32) -> &mut Self {
+        self.txid = txid;
+        self
     }
 
-    fn with_verion(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_verion(&mut self, ver: i32) -> &mut Self {
+        self.ver = ver;
+        self
     }
 }
 
@@ -180,13 +210,25 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 }
 
+impl<'a,'b> PeerResultBuilder for ResponseBuilder<'a,'b> {
+    fn populate_peers<F>(&mut self, f: F) -> &mut Self
+    where F: Fn() -> Vec<PeerInfo> {
+        self.peers = Some(f()); self
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) struct Request {
     id: Id,
     addr: SocketAddr,
 
     txid: i32,
-    ver: i32
+    ver: i32,
+
+    target: Id,
+    want4: bool,
+    want6: bool,
+    want_token: bool
 }
 
 #[allow(dead_code)]
@@ -212,7 +254,13 @@ pub(crate) struct Response {
     addr: SocketAddr,
 
     txid: i32,
-    ver: i32
+    ver: i32,
+
+    nodes4: Vec<NodeInfo>,
+    nodes6: Vec<NodeInfo>,
+    token: i32,
+
+    peers: Vec<PeerInfo>
 }
 
 #[allow(dead_code)]
@@ -227,6 +275,8 @@ pub(crate) struct ResponseBuilder<'a,'b> {
     nodes6: Option<Vec<NodeInfo>>,
     token: i32,
 
+    peers: Option<Vec<PeerInfo>>,
+
     marker: PhantomData<&'a ()>,
 }
 
@@ -237,8 +287,22 @@ impl Request {
             id: b.id.unwrap().clone(),
             addr: b.addr.unwrap().clone(),
             txid: b.txid,
-            ver: b.ver
+            ver: b.ver,
+            target: b.target.unwrap().clone(),
+            want4: b.want4,
+            want6: b.want6,
+            want_token: b.want_token
         }
+    }
+
+    fn want(&self) -> i32 {
+        let mut want = 0;
+
+        if self.want4 { want |= 0x01 }
+        if self.want6 { want |= 0x02 }
+        if self.want_token { want |= 0x04 }
+
+        want
     }
 }
 
@@ -260,36 +324,96 @@ impl<'a,'b> RequestBuidler<'a,'b> {
 
     #[inline]
     fn is_valid(&self) -> bool {
-        false
+        self.id.is_some() && self.addr.is_some() &&
+            self.target.is_some()
     }
 
     pub(crate) fn build(&self) -> Request {
-        assert!(self.is_valid(), "Imcomplete request buidler");
+        assert!(self.is_valid(), "Imcomplete find_peer request");
         Request::new(self)
     }
 }
 
-impl ToString for Request {
-    fn to_string(&self) -> String {
-        unimplemented!()
+#[allow(dead_code)]
+impl fmt::Display for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "y:{},m:{},t:{},q:{{t:{},w:{}}},v:{}",
+            self.kind(),
+            self.method(),
+            self.txid,
+            self.target,
+            self.want(),
+            version::readable_version(self.ver)
+        )?;
+        Ok(())
     }
 }
 
 #[allow(dead_code)]
 impl Response {
-    pub(crate) fn new(b: &ResponseBuilder) -> Self {
+    pub(crate) fn new(b: &mut ResponseBuilder) -> Self {
         Response {
             id: b.id.unwrap().clone(),
             addr: b.addr.unwrap().clone(),
             txid: b.txid,
             ver: b.ver,
+            nodes4: b.nodes4.take().unwrap(),
+            nodes6: b.nodes6.take().unwrap(),
+            token: b.token,
+            peers: b.peers.take().unwrap(),
         }
     }
 }
 
-impl ToString for Response {
-    fn to_string(&self) -> String {
-        unimplemented!()
+impl fmt::Display for Response {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "y:{},m:{},t:{},r: {{",
+            self.kind(),
+            self.method(),
+            self.txid
+        )?;
+
+        let mut first = true;
+        if !self.nodes4.is_empty() {
+            write!(f, "n4:")?;
+            for item in self.nodes4.iter() {
+                if !first {
+                    first = false;
+                    write!(f, ",")?;
+                }
+                write!(f, "[{}]", item)?;
+            }
+        }
+        first = true;
+        if !self.nodes6.is_empty() {
+            write!(f, "n6:")?;
+            for item in self.nodes6.iter() {
+                if !first {
+                    first = true;
+                    write!(f, ",")?;
+                }
+                write!(f, "[{}]", item)?;
+            }
+        }
+
+        if self.token != 0 {
+            write!(f, ",tok:{}", self.token)?;
+        }
+
+        first = true;
+        if !self.peers.is_empty() {
+            write!(f, ",p:")?;
+            for item in self.peers.iter() {
+                if !first {
+                    first = true;
+                    write!(f, ",")?;
+                }
+                write!(f, "[{}]", item)?;
+            }
+        }
+
+        write!(f, "}},v:{}", version::readable_version(self.ver))?;
+        Ok(())
     }
 }
 
@@ -304,17 +428,19 @@ impl<'a,'b> ResponseBuilder<'a,'b> {
             nodes4: None,
             nodes6: None,
             token: 0,
+            peers: None,
             marker: PhantomData
         }
     }
 
     #[inline]
     fn is_valid(&self) -> bool {
-        false
+        self.id.is_some() && self.addr.is_some() &&
+            self.nodes4.is_some() && self.nodes6.is_some()
     }
 
-    pub(crate) fn build(&self) -> Response {
-        assert!(self.is_valid(), "Imcomplete response buidler");
+    pub(crate) fn build(&mut self) -> Response {
+        assert!(self.is_valid(), "Imcomplete find_peer response");
         Response::new(self)
     }
 }

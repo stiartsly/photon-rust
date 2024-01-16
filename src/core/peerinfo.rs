@@ -1,4 +1,5 @@
 use std::option::Option;
+use std::fmt;
 use crate::id::{Id, ID_BYTES};
 use crate::signature::{PrivateKey, KeyPair, Signature};
 
@@ -134,5 +135,10 @@ impl PeerInfo {
         }
         return size;
     }
+}
 
+impl fmt::Display for PeerInfo {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
+    }
 }
