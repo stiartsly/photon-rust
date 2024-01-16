@@ -1,108 +1,135 @@
-use std::marker::PhantomData;
+use std::fmt;
 use std::net::SocketAddr;
+use std::marker::PhantomData;
 
 use crate::id::Id;
 use crate::nodeinfo::NodeInfo;
+use crate::value::Value;
+use crate::version;
+use super::lookup;
 use super::message::{
     Message,
     MessageBuidler,
     Kind,
     Method
 };
-use super::lookup;
+
+pub(crate) trait ValueOption {
+    fn seq(&self) -> i32;
+}
+
+pub(crate) trait ValueOptionBuilder {
+    fn with_seq(&mut self, _: i32) -> &mut Self;
+}
+
+pub(crate) trait ValueResult {
+    fn value(&self) -> &Value;
+}
+
+pub(crate) trait ValueResultBuilder {
+    fn populate_value<F>(&mut self, f: F) -> &mut Self
+    where F: Fn() -> Value;
+}
 
 impl Message for Request {
     fn kind(&self) -> Kind {
-        return Kind::Request;
+        Kind::Request
     }
 
     fn method(&self) -> Method {
-        return Method::Ping;
+        Method::FindValue
     }
 
     fn id(&self) -> &Id {
-        unimplemented!()
+        &self.id
     }
 
     fn addr(&self) -> &SocketAddr {
-        unimplemented!()
+        &self.addr
     }
 
     fn txid(&self) -> i32 {
-        unimplemented!()
+        self.txid
     }
 
     fn version(&self) -> i32 {
-        unimplemented!()
+        self.ver
     }
 }
 
 impl lookup::Option for Request {
     fn target(&self) -> &Id {
-        unimplemented!()
+        &self.target
     }
 
     fn want4(&self) -> bool {
-        unimplemented!()
+        self.want4
     }
 
     fn want6(&self) -> bool {
-        unimplemented!()
+        self.want6
     }
 
     fn want_token(&self) -> bool {
-        unimplemented!()
+        self.want_token
+    }
+}
+
+impl ValueOption for Request {
+    fn seq(&self) -> i32 {
+        self.seq
     }
 }
 
 impl<'a,'b> MessageBuidler<'b> for RequestBuidler<'a,'b> {
     fn with_id(&mut self, id: &'b Id) -> &mut Self {
-        self.id = Some(id);
-        self
+        self.id = Some(id); self
     }
 
-    fn with_addr(&mut self, _: &SocketAddr) -> &mut Self {
-        unimplemented!()
+    fn with_addr(&mut self, addr: &'b SocketAddr) -> &mut Self {
+        self.addr = Some(addr); self
     }
 
-    fn with_txid(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_txid(&mut self, txid: i32) -> &mut Self {
+        self.txid = txid; self
     }
 
-    fn with_verion(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_verion(&mut self, ver: i32) -> &mut Self {
+        self.ver = ver; self
     }
 }
 
 impl<'a,'b> lookup::OptionBuilder<'b> for RequestBuidler<'a,'b> {
     fn with_target(&mut self, target: &'b Id) -> &mut Self {
-        self.target = Some(target);
-        self
+        self.target = Some(target); self
     }
 
     fn with_want4(&mut self) -> &mut Self {
-        self.want4 = true;
-        self
+        self.want4 = true; self
     }
 
     fn with_want6(&mut self) -> &mut Self {
-        self.want6 = true;
-        self
+        self.want6 = true; self
     }
 
     fn with_token(&mut self) -> &mut Self {
-        self.want_token = true;
-        self
+        self.want_token = true; self
+    }
+}
+
+impl<'a, 'b> ValueOptionBuilder for RequestBuidler<'a,'b> {
+    fn with_seq(&mut self, seq: i32) -> &mut Self {
+        self.seq = seq; self
     }
 }
 
 impl Message for Response {
     fn kind(&self) -> Kind {
-        return Kind::Request;
+        Kind::Response
     }
 
     fn method(&self) -> Method {
-        return Method::Ping;
+        Method::FindValue
     }
 
     fn id(&self) -> &Id {
@@ -124,33 +151,39 @@ impl Message for Response {
 
 impl lookup::Result for Response {
     fn nodes4(&self) -> &[NodeInfo] {
-        unimplemented!()
+        &self.nodes4
     }
 
     fn nodes6(&self) -> &[NodeInfo] {
-        unimplemented!()
+        &self.nodes6
     }
 
     fn token(&self) -> i32 {
-        unimplemented!()
+        self.token
+    }
+}
+
+impl ValueResult for Response {
+    fn value(&self) -> &Value {
+        &self.value
     }
 }
 
 impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
-    fn with_id(&mut self, _: &'b Id) -> &mut Self {
-        unimplemented!()
+    fn with_id(&mut self, id: &'b Id) -> &mut Self {
+        self.id = Some(id); self
     }
 
-    fn with_addr(&mut self, _: &SocketAddr) -> &mut Self {
-        unimplemented!()
+    fn with_addr(&mut self, addr: &'b SocketAddr) -> &mut Self {
+        self.addr = Some(addr); self
     }
 
-    fn with_txid(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_txid(&mut self, txid: i32) -> &mut Self {
+        self.txid = txid; self
     }
 
-    fn with_verion(&mut self, _: i32) -> &mut Self {
-        unimplemented!()
+    fn with_verion(&mut self, ver: i32) -> &mut Self {
+        self.ver = ver; self
     }
 }
 
@@ -180,13 +213,27 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 }
 
+impl<'a,'b> ValueResultBuilder for ResponseBuilder<'a,'b> {
+    fn populate_value<F>(&mut self, f: F) -> &mut Self
+    where F: Fn() -> Value {
+        self.value = Some(f()); self
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) struct Request {
     id: Id,
     addr: SocketAddr,
 
     txid: i32,
-    ver: i32
+    ver: i32,
+
+    target: Id,
+    want4: bool,
+    want6: bool,
+    want_token: bool,
+
+    seq: i32
 }
 
 pub(crate) struct RequestBuidler<'a,'b> {
@@ -202,6 +249,8 @@ pub(crate) struct RequestBuidler<'a,'b> {
     want6: bool,
     want_token: bool,
 
+    seq: i32,
+
     marker: PhantomData<&'a ()>,
 }
 
@@ -210,7 +259,13 @@ pub(crate) struct Response {
     addr: SocketAddr,
 
     txid: i32,
-    ver: i32
+    ver: i32,
+
+    nodes4: Vec<NodeInfo>,
+    nodes6: Vec<NodeInfo>,
+    token: i32,
+
+    value: Value,
 }
 
 pub(crate) struct ResponseBuilder<'a,'b> {
@@ -224,6 +279,8 @@ pub(crate) struct ResponseBuilder<'a,'b> {
     nodes6: Option<Vec<NodeInfo>>,
     token: i32,
 
+    value: Option<Value>,
+
     marker: PhantomData<&'a ()>,
 }
 
@@ -234,8 +291,23 @@ impl Request {
             id: b.id.unwrap().clone(),
             addr: b.addr.unwrap().clone(),
             txid: b.txid,
-            ver: b.ver
+            ver: b.ver,
+            target: b.target.unwrap().clone(),
+            want4: b.want4,
+            want6: b.want6,
+            want_token: b.want_token,
+            seq: b.seq
         }
+    }
+
+    fn want(&self) -> i32 {
+        let mut want = 0;
+
+        if self.want4 { want |= 0x01 }
+        if self.want6 { want |= 0x02 }
+        if self.want_token { want |= 0x04 }
+
+        want
     }
 }
 
@@ -251,41 +323,59 @@ impl<'a,'b> RequestBuidler<'a,'b> {
             want4: false,
             want6: false,
             want_token: false,
+            seq: -1,
             marker: PhantomData
         }
     }
 
     #[inline]
     fn is_valid(&self) -> bool {
-        false
+        self.id.is_some() && self.addr.is_some() &&
+            self.target.is_some()
     }
 
     pub(crate) fn build(&self) -> Request {
-        assert!(self.is_valid(), "Imcomplete request buidler");
+        assert!(self.is_valid(), "Imcomplete find value msg builder");
         Request::new(self)
     }
 }
 
-impl ToString for Request {
-    fn to_string(&self) -> String {
-        unimplemented!()
+impl fmt::Display for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "y:{},m:{},t:{},q:{{t:{},w:{}}}",
+            self.kind(),
+            self.method(),
+            self.txid,
+            self.target,
+            self.want()
+        )?;
+        if self.seq >=0 {
+            write!(f, ",seq:{}", self.seq)?;
+        }
+
+        write!(f, ",v:{}", version::readable_version(self.ver))?;
+        Ok(())
     }
 }
 
 #[allow(dead_code)]
 impl Response {
-    pub(crate) fn new(b: &ResponseBuilder) -> Self {
+    pub(crate) fn new(b: &mut ResponseBuilder) -> Self {
         Response {
             id: b.id.unwrap().clone(),
             addr: b.addr.unwrap().clone(),
             txid: b.txid,
             ver: b.ver,
+            nodes4: b.nodes4.take().unwrap(),
+            nodes6: b.nodes6.take().unwrap(),
+            token: b.token,
+            value: b.value.unwrap()
         }
     }
 }
 
-impl ToString for Response {
-    fn to_string(&self) -> String {
+impl fmt::Display for Response {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
         unimplemented!()
     }
 }
@@ -301,6 +391,7 @@ impl<'a,'b> ResponseBuilder<'a,'b> {
             nodes4: None,
             nodes6: None,
             token: 0,
+            value: None,
             marker: PhantomData
         }
     }
@@ -310,7 +401,7 @@ impl<'a,'b> ResponseBuilder<'a,'b> {
         false
     }
 
-    pub(crate) fn build(&self) -> Response {
+    pub(crate) fn build(&mut self) -> Response {
         assert!(self.is_valid(), "Imcomplete response buidler");
         Response::new(self)
     }

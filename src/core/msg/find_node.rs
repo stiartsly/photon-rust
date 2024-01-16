@@ -5,13 +5,13 @@ use std::net::SocketAddr;
 use crate::id::Id;
 use crate::version;
 use crate::nodeinfo::NodeInfo;
+use super::lookup;
 use super::message::{
     Message,
     MessageBuidler,
     Kind,
     Method
 };
-use super::lookup;
 
 impl Message for Request {
     fn kind(&self) -> Kind {
@@ -103,7 +103,7 @@ impl<'a,'b> lookup::OptionBuilder<'b> for RequestBuidler<'a,'b> {
 
 impl Message for Response {
     fn kind(&self) -> Kind {
-        Kind::Request
+        Kind::Response
     }
 
     fn method(&self) -> Method {

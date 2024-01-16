@@ -6,13 +6,13 @@ use crate::id::Id;
 use crate::version;
 use crate::nodeinfo::NodeInfo;
 use crate::peerinfo::PeerInfo;
+use super::lookup;
 use super::message::{
     Message,
     MessageBuidler,
     Kind,
     Method
 };
-use super::lookup;
 
 pub(crate) trait PeerResult {
     fn has_peers(&self) -> bool;
@@ -114,7 +114,7 @@ impl<'a,'b> lookup::OptionBuilder<'b> for RequestBuidler<'a,'b> {
 
 impl Message for Response {
     fn kind(&self) -> Kind {
-        return Kind::Request;
+        return Kind::Response;
     }
 
     fn method(&self) -> Method {

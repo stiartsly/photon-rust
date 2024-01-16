@@ -65,7 +65,7 @@ impl<'a,'b> MessageBuidler<'b> for RequestBuidler<'a,'b> {
 
 impl Message for Response {
     fn kind(&self) -> Kind {
-        Kind::Request
+        Kind::Response
     }
 
     fn method(&self) -> Method {
