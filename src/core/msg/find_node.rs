@@ -103,11 +103,11 @@ impl<'a,'b> lookup::OptionBuilder<'b> for RequestBuidler<'a,'b> {
 
 impl Message for Response {
     fn kind(&self) -> Kind {
-        return Kind::Request;
+        Kind::Request
     }
 
     fn method(&self) -> Method {
-        return Method::Ping;
+        Method::Ping
     }
 
     fn id(&self) -> &Id {
@@ -260,7 +260,13 @@ impl Request {
     }
 
     fn want(&self) -> i32 {
-        unimplemented!()
+        let mut want = 0;
+
+        if self.want4 { want |= 0x01 }
+        if self.want6 { want |= 0x02 }
+        if self.want_token { want |= 0x04 }
+
+        want
     }
 }
 
@@ -321,9 +327,42 @@ impl Response {
     }
 }
 
-impl ToString for Response {
-    fn to_string(&self) -> String {
-        unimplemented!()
+impl fmt::Display for Response {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "y:{},m:{},t:{},r: {{",
+            self.kind(),
+            self.method(),
+            self.txid
+        )?;
+
+        let mut first = true;
+        if !self.nodes4.is_empty() {
+            write!(f, "n4:")?;
+            for item in self.nodes4.iter() {
+                if !first {
+                    first = false;
+                    write!(f, ",")?;
+                }
+                write!(f, "[{}]", item)?;
+            };
+        }
+        first = true;
+        if !self.nodes6.is_empty() {
+            write!(f, "n6:")?;
+            for item in self.nodes6.iter() {
+                if !first {
+                    first = true;
+                    write!(f, ",")?;
+                }
+                write!(f, "[{}]", item)?;
+            };
+        }
+
+        if self.token != 0 {
+            write!(f, ",tok:{}", self.token)?;
+        }
+        write!(f, ",v:{}", version::readable_version(self.ver))?;
+        Ok(())
     }
 }
 
@@ -343,7 +382,8 @@ impl<'a,'b> ResponseBuilder<'a,'b> {
 
     #[inline]
     fn is_valid(&self) -> bool {
-        false
+        self.id.is_some() && self.addr.is_some() &&
+            self.nodes4.is_some() && self.nodes6.is_some()
     }
 
     pub(crate) fn build(&mut self) -> Response {
