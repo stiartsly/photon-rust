@@ -1,3 +1,4 @@
+mod version;
 mod kclosest_nodes;
 mod task;
 mod rpccall;

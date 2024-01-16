@@ -1,4 +1,6 @@
+use std::fmt;
 use std::net::SocketAddr;
+
 
 use ciborium::{de::from_reader, Value};
 use ciborium_io::Read;
@@ -24,6 +26,18 @@ impl Kind {
             0x40 => Kind::Response,
             _ => {panic!("invalid msg kind: {}", kind)}
         }
+    }
+}
+
+impl fmt::Display for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let str = match self {
+            Kind::Error => "e",
+            Kind::Request => "q",
+            Kind::Response => "r"
+        };
+        write!(f, "{}", str)?;
+        Ok(())
     }
 }
 
@@ -53,6 +67,23 @@ impl Method {
         }
     }
 }
+
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let str = match self {
+            Method::Unknown => "unknown",
+            Method::Ping => "ping",
+            Method::FindNode => "find_node",
+            Method::AnnouncePeer => "announce_peer",
+            Method::FindPeer => "find_peer",
+            Method::StoreValue => "store_value",
+            Method::FindValue => "find_value"
+        };
+        write!(f, "{}", str)?;
+        Ok(())
+    }
+}
+
 
 pub(crate) trait Message {
     fn kind(&self) -> Kind;
