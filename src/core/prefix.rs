@@ -13,7 +13,7 @@ impl Prefix {
     pub fn new() -> Self {
         Prefix {
             depth: -1,
-            id: Id::zero(),
+            id: Id::default(),
         }
     }
 

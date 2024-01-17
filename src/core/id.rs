@@ -1,8 +1,9 @@
 use std::fmt;
 use std::cmp::Ordering;
-use libsodium_sys::randombytes_buf;
+
 use crate::signature;
 use crate::cryptobox;
+use crate::error::ErrorKind;
 
 pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
@@ -13,18 +14,14 @@ pub struct Id {
 }
 
 impl Id {
-    pub fn new() -> Self {
-        Id { bytes: [0; ID_BYTES] }
-    }
-
-    pub fn zero() -> Self {
+    pub fn default() -> Self {
         Id { bytes: [0; ID_BYTES] }
     }
 
     pub fn random() -> Self {
         let mut bytes = [0u8; ID_BYTES];
         unsafe {
-            randombytes_buf(
+            libsodium_sys::randombytes_buf(
                 bytes.as_mut_ptr() as *mut libc::c_void,
                 ID_BYTES
             );
@@ -39,38 +36,56 @@ impl Id {
         Id { bytes }
     }
 
-    pub fn try_from_hex(idstr: &str) -> Result<Self, &'static str> {
-        let decoded = hex::decode(idstr)
-            .map_err(|_| "Decoding failed")?;
-
-        if decoded.len() != ID_BYTES {
-            return Err("Invalid hex ID length");
-        }
-
-        let bytes: [u8; 32] = decoded.try_into()
-            .map_err(|_| "Conversion from Hex to Id failed")?;
+    pub fn try_from_hex(idstr: &str) -> Result<Self, ErrorKind> {
+        let mut bytes = [0u8; ID_BYTES];
+        let _ = hex::decode_to_slice(idstr, &mut bytes[..]).map_err(|err| match err {
+            hex::FromHexError::InvalidHexCharacter { c, index } => {
+                ErrorKind::Argument(format!("Invalid hex character '{}' at index {}", c, index))
+            }
+            hex::FromHexError::OddLength => {
+                ErrorKind::Argument(format!("Odd length hex string"))
+            },
+            hex::FromHexError::InvalidStringLength => {
+                ErrorKind::Argument(format!("Invalid hex string length {}", idstr.len()))
+            }
+        });
         Ok(Id{ bytes })
     }
 
-    pub fn try_from_base58(idstr: &str) -> Result<Self, &'static str> {
-        let mut bytes: [u8; 32] = [0; ID_BYTES];
-        let decoded = bs58::decode(idstr)
+    pub fn try_from_base58(idstr: &str) -> Result<Self, ErrorKind> {
+        let mut bytes = [0u8; ID_BYTES];
+        let _ = bs58::decode(idstr)
+            .with_alphabet(bs58::Alphabet::DEFAULT)
             .onto(&mut bytes)
-            .map_err(|_| "Conversion from base58 to Id failed")?;
-
-        if decoded != ID_BYTES {
-            return Err("Invalid base58 Id length");
-        }
+            .map_err(|err| match err {
+                bs58::decode::Error::BufferTooSmall => {
+                    ErrorKind::Argument(format!("Invalid base58 string length {}", idstr.len()))
+                }
+                bs58::decode::Error::InvalidCharacter {character, index} => {
+                    ErrorKind::Argument(format!("Invalid base58 character '{}' at index {}", character, index))
+                }
+                _ => {
+                    ErrorKind::Argument(format!("Invalid base58 string with unknown reason"))
+                }
+        });
         Ok(Id { bytes })
     }
 
-    pub fn into_hex(&self) -> String {
+    pub fn min() -> Self {
+        Id { bytes: [0x0; ID_BYTES]}
+    }
+
+    pub fn max() -> Self {
+        Id { bytes: [0xFF; ID_BYTES] }
+    }
+
+    pub fn to_hex(&self) -> String {
         hex::encode(&self.bytes)
     }
 
-    pub fn into_base58(&self) -> String {
+    pub fn to_base58(&self) -> String {
         bs58::encode(self.bytes)
-            .with_alphabet(bs58::Alphabet::FLICKR)
+            .with_alphabet(bs58::Alphabet::DEFAULT)
             .into_string()
     }
 
@@ -152,7 +167,7 @@ pub(crate) fn bits_copy(src: &Id, dest: &mut Id, depth: i32) {
 
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", self.into_hex())?;
+        write!(f, "0x{}", self.to_hex())?;
         Ok(())
     }
 }
