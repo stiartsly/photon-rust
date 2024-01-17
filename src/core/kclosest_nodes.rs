@@ -2,7 +2,7 @@ use std::vec::Vec;
 use std::collections::LinkedList;
 
 use crate::id::Id;
-use crate::nodeinfo::NodeInfo;
+use crate::node::Node;
 use crate::dht::DHT;
 use crate::kbucket_entry::KBucketEntry;
 
@@ -57,7 +57,7 @@ impl<'a> KClosestNodes<'a> {
         self.entries.len() >= self.max_entries
     }
 
-    pub(crate) fn as_nodes(&self) -> Vec<NodeInfo> {
+    pub(crate) fn as_nodes(&self) -> Vec<Node> {
         self.entries.iter()
             .map(|x| x.node_info().clone())
             .collect()

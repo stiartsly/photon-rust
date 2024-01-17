@@ -2,13 +2,12 @@ use std::fmt;
 use std::net::{SocketAddr};
 use std::time::{SystemTime};
 use crate::id::Id;
-use crate::nodeinfo::{NodeInfo, NodeInfoTrait};
-use crate::nodeinfo::{Accessibility};
+use crate::node::{Node, NodeInfo, Visit};
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct KBucketEntry {
-    nodei: NodeInfo,
+    node: Node,
 
     created: SystemTime,
     last_seen: SystemTime,
@@ -24,7 +23,7 @@ impl KBucketEntry {
         let unix_epoch = SystemTime::UNIX_EPOCH;
 
         KBucketEntry {
-            nodei: NodeInfo::new(id, addr),
+            node: Node::new(id, addr),
             created: unix_epoch,
             last_seen: unix_epoch,
             last_sent: unix_epoch,
@@ -34,15 +33,15 @@ impl KBucketEntry {
     }
 
     pub(crate) fn node_id(&self) -> &Id {
-        &self.nodei.id()
+        &self.node.id()
     }
 
-    pub(crate) fn node_info(&self) -> &NodeInfo {
-        &self.nodei
+    pub(crate) fn node_info(&self) -> &Node {
+        &self.node
     }
 
     pub(crate) fn set_version(&mut self, ver: i32) {
-        self.nodei.set_version(ver);
+        self.node.with_version(ver);
     }
 
     pub(crate) const fn ceated(&self) -> SystemTime {
@@ -99,7 +98,7 @@ impl KBucketEntry {
         self.last_sent = self.last_sent.max(other.last_sent);
 
         if other.reachable() {
-            self.set_reachable(true);
+            self.with_reachable(true);
         }
         if other.failed_requests() > 0 {
             self.failed_requests = self.failed_requests.min(other.failed_requests);
@@ -111,30 +110,30 @@ impl KBucketEntry {
     }
 }
 
-impl Accessibility for KBucketEntry {
+impl Visit for KBucketEntry {
     fn reachable(&self) -> bool {
         self.reachable
-    }
-
-    fn set_reachable(&mut self, reachable: bool) {
-        self.reachable = reachable;
     }
 
     fn unreachable(&self) -> bool {
         self.last_sent == SystemTime::UNIX_EPOCH
     }
+
+    fn with_reachable(&mut self, reachable: bool) -> &mut Self {
+        self.reachable = reachable; self
+    }
 }
 
 impl PartialEq for KBucketEntry {
     fn eq(&self, other: &Self) -> bool {
-        self.nodei == other.nodei
+        self.node == other.node
     }
 }
 
 impl fmt::Display for KBucketEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@", self.nodei.id())?;
-        write!(f, "{};seen:", self.nodei.socket_addr().ip())?;
+        write!(f, "{}@", self.node.id())?;
+        write!(f, "{};seen:", self.node.socket_addr().ip())?;
         // write!(f, "{};age:", self.last_seen.into()?);
         //write!(f, "{}", (self.created - 0).to_string())?;
 

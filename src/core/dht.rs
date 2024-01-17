@@ -4,8 +4,8 @@ use std::net::SocketAddr;
 use crate::constants;
 use crate::id::Id;
 use crate::lookup_option::LookupOption;
-use crate::nodeinfo::NodeInfo;
-use crate::peerinfo::PeerInfo;
+use crate::node::Node;
+use crate::peer::Peer;
 use crate::value::Value;
 use crate::rpccall::RPCCall;
 use crate::rpcserver::RpcServer;
@@ -43,7 +43,7 @@ impl DHT {
     }
 
     pub(crate) fn find_node<F>(&self, _: &Id, _: &LookupOption, _: F) -> Box<Task>
-    where F: Fn(&NodeInfo) {
+    where F: Fn(&Node) {
 
         unimplemented!()
     }
@@ -54,17 +54,17 @@ impl DHT {
     }
 
     pub(crate) fn store_value<F>(&self, _: &Value, _: F) -> Box<Task>
-    where F: Fn(&[&NodeInfo]) {
+    where F: Fn(&[&Node]) {
         unimplemented!()
     }
 
     pub(crate) fn find_peer<F>(&self, _: &Id, _: i32, _: &LookupOption, _: F) -> Box<Task>
-    where F: Fn(&[&PeerInfo]) {
+    where F: Fn(&[&Peer]) {
         unimplemented!()
     }
 
-    pub(crate) fn announce_peer<F>(&self, _: &PeerInfo, _: F) -> Box<Task>
-    where F: Fn(&[&NodeInfo]) {
+    pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F) -> Box<Task>
+    where F: Fn(&[&Node]) {
         unimplemented!()
     }
 

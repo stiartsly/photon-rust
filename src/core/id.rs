@@ -1,9 +1,11 @@
 use std::fmt;
 use std::cmp::Ordering;
+use hex::FromHexError;
+use bs58::decode;
 
 use crate::signature;
 use crate::cryptobox;
-use crate::error::ErrorKind;
+use crate::error::Error;
 
 pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
@@ -36,36 +38,36 @@ impl Id {
         Id { bytes }
     }
 
-    pub fn try_from_hex(idstr: &str) -> Result<Self, ErrorKind> {
+    pub fn try_from_hex(idstr: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
         let _ = hex::decode_to_slice(idstr, &mut bytes[..]).map_err(|err| match err {
-            hex::FromHexError::InvalidHexCharacter { c, index } => {
-                ErrorKind::Argument(format!("Invalid hex character '{}' at index {}", c, index))
+            FromHexError::InvalidHexCharacter { c, index } => {
+                Error::Argument(format!("Invalid hex character '{}' at index {}", c, index))
             }
-            hex::FromHexError::OddLength => {
-                ErrorKind::Argument(format!("Odd length hex string"))
+            FromHexError::OddLength => {
+                Error::Argument(format!("Odd length hex string"))
             },
-            hex::FromHexError::InvalidStringLength => {
-                ErrorKind::Argument(format!("Invalid hex string length {}", idstr.len()))
+            FromHexError::InvalidStringLength => {
+                Error::Argument(format!("Invalid hex string length {}", idstr.len()))
             }
         });
         Ok(Id{ bytes })
     }
 
-    pub fn try_from_base58(idstr: &str) -> Result<Self, ErrorKind> {
+    pub fn try_from_base58(idstr: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
         let _ = bs58::decode(idstr)
             .with_alphabet(bs58::Alphabet::DEFAULT)
             .onto(&mut bytes)
             .map_err(|err| match err {
-                bs58::decode::Error::BufferTooSmall => {
-                    ErrorKind::Argument(format!("Invalid base58 string length {}", idstr.len()))
+                decode::Error::BufferTooSmall => {
+                    Error::Argument(format!("Invalid base58 string length {}", idstr.len()))
                 }
-                bs58::decode::Error::InvalidCharacter {character, index} => {
-                    ErrorKind::Argument(format!("Invalid base58 character '{}' at index {}", character, index))
+                decode::Error::InvalidCharacter {character, index} => {
+                    Error::Argument(format!("Invalid base58 character '{}' at index {}", character, index))
                 }
                 _ => {
-                    ErrorKind::Argument(format!("Invalid base58 string with unknown reason"))
+                    Error::Argument(format!("Invalid base58 string with unknown error"))
                 }
         });
         Ok(Id { bytes })

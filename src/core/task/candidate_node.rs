@@ -1,8 +1,8 @@
-use crate::nodeinfo::{NodeInfo, Accessibility};
+use crate::node::{Node, Visit};
 
 #[allow(dead_code)]
 pub(crate) struct CandidateNode {
-    nodeinfo: NodeInfo,
+    nodeinfo: Node,
 
     last_sent: u64,
     last_reply: u64,
@@ -16,7 +16,7 @@ pub(crate) struct CandidateNode {
 
 #[allow(dead_code)]
 impl CandidateNode {
-    pub(crate) fn new(ni: &NodeInfo) -> Self {
+    pub(crate) fn new(ni: &Node) -> Self {
         CandidateNode {
             nodeinfo: ni.clone(),
             last_sent: 0,
@@ -62,7 +62,7 @@ impl CandidateNode {
     }
 }
 
-impl Accessibility for CandidateNode {
+impl Visit for CandidateNode {
     fn reachable(&self) -> bool {
         self.reachable
     }
@@ -71,7 +71,7 @@ impl Accessibility for CandidateNode {
         self.pinged >= 3
     }
 
-    fn set_reachable(&mut self, reachable: bool) {
-        self.reachable = reachable;
+    fn with_reachable(&mut self, reachable: bool) -> &mut Self {
+        self.reachable = reachable; self
     }
 }

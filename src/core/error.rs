@@ -3,11 +3,11 @@ use std::{fmt, io, net, result};
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct BosonError {
-    kind: ErrorKind,
+    kind: Error,
 }
 
 #[derive(Debug)]
-pub enum ErrorKind {
+pub enum Error {
     Generic(String),
     Io(io::Error, String),
     Network(net::AddrParseError, String),
@@ -23,16 +23,16 @@ impl fmt::Display for BosonError {
     }
 }
 
-impl fmt::Display for ErrorKind {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::Generic(msg) => write!(f, "Generic error: {}", msg),
-            ErrorKind::Io(err, msg) => write!(f, "IO error: {}:{}", err, msg),
-            ErrorKind::Network(err, msg) => write!(f, "Network error: {}:{}", err, msg),
-            ErrorKind::Argument(msg) => write!(f, "Invalid argument: {}", msg),
-            ErrorKind::State(msg) => write!(f, "State error {}", msg),
-            ErrorKind::Protocol(msg) => write!(f, "DHT error {}", msg),
-            ErrorKind::Crypto(msg) => write!(f, "Crypto error {}", msg),
+            Error::Generic(msg) => write!(f, "Generic error: {}", msg),
+            Error::Io(err, msg) => write!(f, "IO error: {}:{}", err, msg),
+            Error::Network(err, msg) => write!(f, "Network error: {}:{}", err, msg),
+            Error::Argument(msg) => write!(f, "Invalid argument: {}", msg),
+            Error::State(msg) => write!(f, "State error {}", msg),
+            Error::Protocol(msg) => write!(f, "DHT error {}", msg),
+            Error::Crypto(msg) => write!(f, "Crypto error {}", msg),
         }
     }
 }
@@ -40,13 +40,13 @@ impl fmt::Display for ErrorKind {
 impl std::error::Error for BosonError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self.kind {
-            ErrorKind::Generic(_) => None,
-            ErrorKind::Io(err,_) => Some(err),
-            ErrorKind::Network(err, _) => Some(err),
-            ErrorKind::Argument(_) => None,
-            ErrorKind::State(_) => None,
-            ErrorKind::Protocol(_) => None,
-            ErrorKind::Crypto(_) => None
+            Error::Generic(_) => None,
+            Error::Io(err,_) => Some(err),
+            Error::Network(err, _) => Some(err),
+            Error::Argument(_) => None,
+            Error::State(_) => None,
+            Error::Protocol(_) => None,
+            Error::Crypto(_) => None
         }
     }
 }

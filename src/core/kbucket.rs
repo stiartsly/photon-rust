@@ -7,7 +7,7 @@ use log::{info};
 
 use crate::id::Id;
 use crate::prefix::Prefix;
-use crate::nodeinfo::Accessibility;
+use crate::node::Visit;
 use crate::kbucket_entry::{KBucketEntry};
 use crate::constants;
 

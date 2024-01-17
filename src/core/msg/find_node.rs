@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 
 use crate::id::Id;
 use crate::version;
-use crate::nodeinfo::NodeInfo;
+use crate::node::Node;
 use super::lookup;
 use super::message::{
     Message,
@@ -128,11 +128,11 @@ impl Message for Response {
 }
 
 impl lookup::Result for Response {
-    fn nodes4(&self) -> &[NodeInfo] {
+    fn nodes4(&self) -> &[Node] {
         &self.nodes4
     }
 
-    fn nodes6(&self) -> &[NodeInfo] {
+    fn nodes6(&self) -> &[Node] {
         &self.nodes6
     }
 
@@ -165,7 +165,7 @@ impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
 
 impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<NodeInfo> {
+    where F: Fn() -> Vec<Node> {
         match want4 {
             true => {self.nodes4 = Some(f()); self },
             false => self
@@ -173,7 +173,7 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 
     fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<NodeInfo> {
+    where F: Fn() -> Vec<Node> {
         match want6 {
             true => {self.nodes6 = Some(f()); self },
             false => self
@@ -225,8 +225,8 @@ pub(crate) struct Response {
     txid: i32,
     ver: i32,
 
-    nodes4: Vec<NodeInfo>,
-    nodes6: Vec<NodeInfo>,
+    nodes4: Vec<Node>,
+    nodes6: Vec<Node>,
     token: i32
 }
 
@@ -237,8 +237,8 @@ pub(crate) struct ResponseBuilder<'a,'b> {
     txid: i32,
     ver: i32,
 
-    nodes4: Option<Vec<NodeInfo>>,
-    nodes6: Option<Vec<NodeInfo>>,
+    nodes4: Option<Vec<Node>>,
+    nodes6: Option<Vec<Node>>,
     token: i32,
 
     marker: PhantomData<&'a ()>,

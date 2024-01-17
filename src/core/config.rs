@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use crate::nodeinfo::NodeInfo;
+use crate::node::Node;
 
 #[allow(dead_code)]
 pub trait Config {
@@ -7,5 +7,5 @@ pub trait Config {
     fn ipv6(&self) -> &Option<SocketAddr>;
 
     fn storage_path(&self) -> &str;
-    fn bootstrap_nodes(&self) -> &[NodeInfo];
+    fn bootstrap_nodes(&self) -> &[Node];
 }

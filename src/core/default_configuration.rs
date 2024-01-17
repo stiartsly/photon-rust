@@ -1,6 +1,6 @@
 use std::option::{Option};
 use std::net::SocketAddr;
-use crate::nodeinfo::NodeInfo;
+use crate::node::Node;
 use crate::config::Config;
 
 #[allow(dead_code)]
@@ -9,7 +9,7 @@ pub(crate) struct DefaultConfiguration {
     addr6: Option<SocketAddr>,
 
     storage_path: String,
-    bootstrap_nodes: Vec<NodeInfo>
+    bootstrap_nodes: Vec<Node>
 }
 
 #[allow(dead_code)]
@@ -37,7 +37,7 @@ impl Config for DefaultConfiguration {
         &self.storage_path
     }
 
-    fn bootstrap_nodes(&self) -> &[NodeInfo] {
+    fn bootstrap_nodes(&self) -> &[Node] {
         &self.bootstrap_nodes
 
     }

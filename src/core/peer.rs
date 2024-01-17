@@ -4,7 +4,7 @@ use crate::id::{Id, ID_BYTES};
 use crate::signature::{PrivateKey, KeyPair, Signature};
 
 #[derive(Debug)]
-pub struct PeerInfo {
+pub struct Peer {
     public_key: Id,
     private_key: Option<PrivateKey>,
     node_id: Id,
@@ -14,14 +14,14 @@ pub struct PeerInfo {
     signature: Vec<u8>,
 }
 
-impl PeerInfo {
-    pub fn new(id: &Id, port: u16) -> Result<PeerInfo, &'static str> {
+impl Peer {
+    pub fn new(id: &Id, port: u16) -> Result<Peer, &'static str> {
         let key_pair = KeyPair::random();
-        PeerInfo::with_all(&key_pair, id, id, port, &"".to_string())
+        Peer::with_all(&key_pair, id, id, port, &"".to_string())
     }
 
     pub fn with_key_pair(key_pair: &KeyPair, id: &Id, port: u16) -> Self {
-        PeerInfo {
+        Peer {
             public_key: Id::from_signature_key(key_pair.public_key()),
             private_key: Some(*key_pair.private_key()),
             node_id: *id,
@@ -33,7 +33,7 @@ impl PeerInfo {
     }
 
     fn with_all(key_pair: &KeyPair, node_id: &Id, origin: &Id, port: u16, alternative_url: &String)
-        -> Result<PeerInfo, &'static str> {
+        -> Result<Peer, &'static str> {
         if port == 0 {
             return Err("Invalid port value");
         }
@@ -47,7 +47,7 @@ impl PeerInfo {
             false => Some(alternative_url.clone())
         };
 
-        Ok(PeerInfo {
+        Ok(Peer {
             public_key,
             private_key,
             node_id,
@@ -137,7 +137,7 @@ impl PeerInfo {
     }
 }
 
-impl fmt::Display for PeerInfo {
+impl fmt::Display for Peer {
     fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
         unimplemented!()
     }

@@ -4,7 +4,7 @@ use crate::id::Id;
 use crate::dht::DHT;
 use crate::kbucket::KBucket;
 use crate::kbucket_entry::KBucketEntry;
-use crate::nodeinfo::NodeInfo;
+use crate::node::Node;
 
 #[allow(dead_code)]
 pub(crate) struct RoutingTable {
@@ -33,11 +33,11 @@ impl RoutingTable {
         }
     }
 
-    pub(crate) fn random_entry(&self) -> NodeInfo {
+    pub(crate) fn random_entry(&self) -> Node {
         unimplemented!()
     }
 
-    pub(crate) fn random_entries(&self, _: i32) -> Vec<NodeInfo> {
+    pub(crate) fn random_entries(&self, _: i32) -> Vec<Node> {
         unimplemented!();
     }
 
