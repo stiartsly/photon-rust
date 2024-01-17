@@ -1,4 +1,3 @@
-use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 
 use crate::id::Id;
@@ -30,12 +29,8 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(id: &Id, socket_addr: &SocketAddr) -> Self {
-        Node {
-            id: *id,
-            addr: *socket_addr,
-            ver: 0
-        }
+    pub fn new(id: &Id, addr: &SocketAddr) -> Self {
+        Node { id: *id, addr: *addr, ver: 0}
     }
 
     pub const fn ip(&self) -> IpAddr {
@@ -101,8 +96,8 @@ impl Visit for Node {
     }
 }
 
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{},{},{}",
             self.id,
             self.addr,

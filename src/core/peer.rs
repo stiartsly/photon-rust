@@ -1,86 +1,132 @@
-use std::option::Option;
-use std::fmt;
+use unicode_normalization::UnicodeNormalization;
+
 use crate::id::{Id, ID_BYTES};
 use crate::signature::{PrivateKey, KeyPair, Signature};
+use crate::error::Error;
 
 #[derive(Debug)]
 pub struct Peer {
-    public_key: Id,
-    private_key: Option<PrivateKey>,
-    node_id: Id,
-    origin: Id,
+    pk: Id,
+    sk: Option<PrivateKey>,
+    id: Id,
+    origin: Option<Id>,
     port: u16,
-    alternative_url: Option<String>,
+    url: Option<String>,
     signature: Vec<u8>,
 }
 
+#[allow(dead_code)]
+pub struct Builder<'a> {
+    keypair: Option<KeyPair>,
+    id: &'a Id,
+    origin: Option<&'a Id>,
+    port: u16,
+    url: Option<&'a str>,
+    signature: Option<&'a [u8]>
+}
+
+impl<'a> Builder<'a> {
+    pub fn default(node_id: &'a Id) -> Self {
+        Builder {
+            keypair: None,
+            id: node_id,
+            origin: None,
+            port: 0,
+            url: None,
+            signature: None
+        }
+    }
+    pub fn with_keypair(&mut self, keypair: &'a KeyPair) -> &mut Self {
+        self.keypair = Some(keypair.clone()); self
+    }
+
+    pub fn with_origin(&mut self, origin: &'a Id) -> &mut Self {
+        self.origin = Some(origin); self
+    }
+
+    pub fn with_port(&mut self, port: u16) -> &mut Self {
+        self.port = port; self
+    }
+
+    pub fn with_alternative_url(&mut self, alternative_url: &'a str) -> &mut Self {
+        //self.url = Some(alternative_url.nfc().collect::<String>()); self
+        self.url = Some(alternative_url); self
+    }
+
+    pub fn build(&mut self) -> Peer {
+        Peer::new(self)
+    }
+}
+
 impl Peer {
-    pub fn new(id: &Id, port: u16) -> Result<Peer, &'static str> {
-        let key_pair = KeyPair::random();
-        Peer::with_all(&key_pair, id, id, port, &"".to_string())
-    }
-
-    pub fn with_key_pair(key_pair: &KeyPair, id: &Id, port: u16) -> Self {
-        Peer {
-            public_key: Id::from_signature_key(key_pair.public_key()),
-            private_key: Some(*key_pair.private_key()),
-            node_id: *id,
-            origin: *id,
-            port,
-            alternative_url: None,
-            signature: Vec::new()
-        }
-    }
-
-    fn with_all(key_pair: &KeyPair, node_id: &Id, origin: &Id, port: u16, alternative_url: &String)
-        -> Result<Peer, &'static str> {
-        if port == 0 {
-            return Err("Invalid port value");
-        }
-
-        let public_key = Id::from_signature_key(key_pair.public_key());
-        let private_key = Some(key_pair.private_key().clone());
-        let node_id = node_id.clone();
-        let origin = origin.clone();
-        let alternative_url = match alternative_url.is_empty() {
-            true => None,
-            false => Some(alternative_url.clone())
-        };
-
-        Ok(Peer {
-            public_key,
-            private_key,
-            node_id,
-            origin,
-            port,
-            alternative_url,
-            signature: Vec::new(),
-        })
-    }
-
-    pub fn id(&self) -> &Id {
-        &self.public_key
-    }
-
-    pub fn has_private_key(&self) -> bool {
-        self.private_key.is_some()
-    }
-
-    pub fn private_key(&self) -> Result<&PrivateKey, &'static str> {
-        match self.private_key.as_ref() {
-            Some(pk) => { Ok(pk) }
+    fn new(b: &Builder) -> Self {
+        match b.keypair {
+            Some(keypair) => {
+                Peer {
+                    pk: Id::from_signature_key(keypair.public_key()),
+                    sk: Some(*keypair.private_key()),
+                    id: b.id.clone(),
+                    origin: match b.origin {
+                        Some(origin) => Some (origin.clone()),
+                        None => None
+                    },
+                    port: b.port,
+                    url: match b.url {
+                        Some(url) => {Some(url.nfc().collect::<String>())},
+                        None => None,
+                    },
+                    signature: Vec::new()
+                }
+            }
             None => {
-                Err("No binding private key")
+                let keypair = KeyPair::random();
+                Peer {
+                    pk: Id::from_signature_key(keypair.public_key()),
+                    sk: Some(*keypair.private_key()),
+                    id: b.id.clone(),
+                    origin: match b.origin {
+                        Some(origin) => Some (origin.clone()),
+                        None => None
+                    },
+                    port: b.port,
+                    url: match b.url {
+                        Some(url) => {Some(url.nfc().collect::<String>())},
+                        None => None,
+                    },
+                    signature: Vec::new()
+                }
             }
         }
     }
 
-    pub fn node_id(&self) -> &Id {
-        &self.node_id
+    pub fn id(&self) -> &Id {
+        &self.pk
     }
 
-    pub fn origin(&self) -> &Id {
-        &self.origin
+    pub fn has_private_key(&self) -> bool {
+        self.sk.is_some()
+    }
+
+    pub fn private_key(&self) -> Option<&PrivateKey> {
+        match self.sk.as_ref() {
+            Some(sk) => Some(&sk),
+            None => None
+        }
+    }
+
+    pub fn node_id(&self) -> &Id {
+        &self.id
+    }
+
+    pub fn has_origin(&self) -> bool {
+        self.origin.is_some()
+    }
+
+    pub fn origin(&self) -> Option<&Id> {
+        match self.origin.as_ref() {
+            Some(id) => Some(id),
+            None => None
+        }
     }
 
     pub fn port(&self) -> u16 {
@@ -88,15 +134,13 @@ impl Peer {
     }
 
     pub fn has_alternative_url(&self) -> bool {
-        self.alternative_url.is_some()
+        self.url.is_some()
     }
 
-    pub fn alternative_url(&self) -> Result<&String, &'static str> {
-        match self.alternative_url.as_ref() {
-            Some(url) => { Ok(url) },
-            None => {
-                Err("No binding alternative url")
-            }
+    pub fn alternative_url(&self) -> Option<&String> {
+        match self.url.as_ref() {
+            Some(url) => Some(&url),
+            None => None
         }
     }
 
@@ -105,40 +149,50 @@ impl Peer {
     }
 
     pub fn is_delegated(&self) -> bool {
-        self.node_id != self.origin
+        self.origin.is_some() && self.origin.unwrap() != self.id
     }
 
-    pub fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> Result<(), Error> {
         if self.signature.len() != Signature::BYTES {
-            return false
+            return Err(Error::State(format!("Invalid signature data length")));
         }
 
         let capacity = self.fill_sign_data_size();
         let mut data = vec![0u8; capacity];
         self.fill_sign_data(&mut data);
 
-        let pk = self.public_key.to_signature_key();
+        let pk = self.pk.to_signature_key();
         match Signature::verify(data.as_ref(), self.signature.as_slice(), &pk) {
-            Ok(valid) => { valid },
-            Err(_) => {false}
+            Ok(_) => {Ok(())},
+            Err(_) => {
+                Err(Error::Crypto(format!("Bad signature value")))
+            }
         }
     }
 
     fn fill_sign_data<'a>(&self, _: &'a mut [u8]) {
-        // TODO:
+        unimplemented!()
     }
 
     fn fill_sign_data_size(&self) -> usize {
         let mut size = ID_BYTES * 2 + std::mem::size_of::<u16>();
-        if self.has_alternative_url() {
-            size += self.alternative_url.as_deref().unwrap().len();
+        if self.url.is_some() {
+            size += self.url.as_deref().unwrap().len();
         }
         return size;
     }
 }
 
-impl fmt::Display for Peer {
-    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!()
+impl std::fmt::Display for Peer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{},{},", self.pk, self.id)?;
+        if self.is_delegated() {
+            write!(f, "{},", self.origin.unwrap())?;
+        }
+        write!(f, "{}", self.port)?;
+        if self.url.is_some() {
+            write!(f, ",{}", self.url.as_ref().unwrap())?;
+        }
+        Ok(())
     }
 }
