@@ -218,7 +218,7 @@ impl Value {
         self.pk.is_some()
     }
 
-    pub fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> Result<bool, Error> {
         unimplemented!()
     }
 }

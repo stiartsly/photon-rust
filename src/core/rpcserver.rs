@@ -11,6 +11,8 @@ use crate::msg::message::Message;
 pub(crate) struct RpcServer {
     dht4: Option<Box<DHT>>,
     dht6: Option<Box<DHT>>,
+
+    reachable: bool,
 }
 
 #[allow(dead_code)]
@@ -18,7 +20,8 @@ impl RpcServer {
     pub(crate) fn new() -> Self {
         RpcServer {
             dht4: None,
-            dht6: None
+            dht6: None,
+            reachable: false,
         }
     }
 
@@ -28,6 +31,10 @@ impl RpcServer {
 
     pub(crate) fn enable_dht6(&mut self, dht6: Box<DHT>) -> &mut Self {
         self.dht6 = Some(dht6); self
+    }
+
+    pub(crate) fn is_reachable(&self) -> bool {
+        self.reachable
     }
 
     fn run_loop(&self) -> io::Result<()> {
@@ -72,6 +79,10 @@ impl RpcServer {
     }
 
     pub(crate) fn send_call(&self, _: Box<RPCCall>) {
+        unimplemented!()
+    }
+
+    pub(crate) fn send_err<'a>(&self, _: Box<dyn Message>, _: i32, _: &'a str) {
         unimplemented!()
     }
 }

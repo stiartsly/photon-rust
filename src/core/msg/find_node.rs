@@ -165,7 +165,7 @@ impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
 
 impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node> {
+    where F: FnOnce() -> Vec<Node> {
         match want4 {
             true => {self.nodes4 = Some(f()); self },
             false => self
@@ -173,7 +173,7 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 
     fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node> {
+    where F: FnOnce() -> Vec<Node> {
         match want6 {
             true => {self.nodes6 = Some(f()); self },
             false => self
@@ -181,7 +181,7 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 
     fn populate_token<F>(&mut self, want_token: bool, f: F) -> &mut Self
-    where F: Fn() -> i32 {
+    where F: FnOnce() -> i32 {
         match want_token {
             true => {self.token = f(); self },
             false => self

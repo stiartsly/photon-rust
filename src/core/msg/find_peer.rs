@@ -16,12 +16,12 @@ use super::message::{
 
 pub(crate) trait PeerResult {
     fn has_peers(&self) -> bool;
-    fn peers(&self) -> &[Peer];
+    fn peers(&self) -> &[Box<Peer>];
 }
 
 pub(crate) trait PeerResultBuilder {
     fn populate_peers<F>(&mut self, f: F) -> &mut Self
-    where F: Fn() -> Vec<Peer>;
+    where F: FnMut() -> Vec<Box<Peer>>;
 }
 
 impl Message for Request {
@@ -157,8 +157,8 @@ impl PeerResult for Response {
         !self.peers.is_empty()
     }
 
-    fn peers(&self) -> &[Peer] {
-        &self.peers
+    fn peers(&self) -> &[Box<Peer>] {
+        self.peers.as_slice()
     }
 }
 
@@ -186,7 +186,7 @@ impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
 
 impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node> {
+    where F: FnOnce() -> Vec<Node> {
         match want4 {
             true => {self.nodes4 = Some(f()); self },
             false => self
@@ -194,7 +194,7 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 
     fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node> {
+    where F: FnOnce() -> Vec<Node> {
         match want6 {
             true => {self.nodes6 = Some(f()); self },
             false => self
@@ -202,7 +202,7 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 
     fn populate_token<F>(&mut self, want_token: bool, f: F) -> &mut Self
-    where F: Fn() -> i32 {
+    where F: FnOnce() -> i32 {
         match want_token {
             true => {self.token = f(); self },
             false => self
@@ -211,8 +211,8 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
 }
 
 impl<'a,'b> PeerResultBuilder for ResponseBuilder<'a,'b> {
-    fn populate_peers<F>(&mut self, f: F) -> &mut Self
-    where F: Fn() -> Vec<Peer> {
+    fn populate_peers<F>(&mut self, mut f: F) -> &mut Self
+    where F: FnMut() -> Vec<Box<Peer>> {
         self.peers = Some(f()); self
     }
 }
@@ -260,7 +260,7 @@ pub(crate) struct Response {
     nodes6: Vec<Node>,
     token: i32,
 
-    peers: Vec<Peer>
+    peers: Vec<Box<Peer>>
 }
 
 #[allow(dead_code)]
@@ -275,7 +275,7 @@ pub(crate) struct ResponseBuilder<'a,'b> {
     nodes6: Option<Vec<Node>>,
     token: i32,
 
-    peers: Option<Vec<Peer>>,
+    peers: Option<Vec<Box<Peer>>>,
 
     marker: PhantomData<&'a ()>,
 }
@@ -360,7 +360,7 @@ impl Response {
             nodes4: b.nodes4.take().unwrap(),
             nodes6: b.nodes6.take().unwrap(),
             token: b.token,
-            peers: b.peers.take().unwrap(),
+            peers: b.peers.take().unwrap()
         }
     }
 }

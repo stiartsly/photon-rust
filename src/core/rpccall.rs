@@ -1,5 +1,6 @@
 use std::boxed::Box;
 use crate::msg::message::Message;
+use crate::id::Id;
 
 #[allow(dead_code)]
 enum State {
@@ -42,5 +43,9 @@ impl RPCCall {
 
     pub(crate) fn response(&self) -> &Box<dyn Message> {
         &self.response
+    }
+
+    pub(crate) fn id(&self) -> &Id {
+        unimplemented!()
     }
 }

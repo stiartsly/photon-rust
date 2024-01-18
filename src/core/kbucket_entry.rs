@@ -1,8 +1,10 @@
 use std::fmt;
 use std::net::{SocketAddr};
-use std::time::{SystemTime};
+use std::time::{SystemTime, Duration};
 use crate::id::Id;
 use crate::node::{Node, NodeInfo, Visit};
+use crate::constants;
+use crate::version;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -20,28 +22,28 @@ pub(crate) struct KBucketEntry {
 #[allow(dead_code)]
 impl KBucketEntry {
     pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
-        let unix_epoch = SystemTime::UNIX_EPOCH;
+        let epoch = SystemTime::UNIX_EPOCH;
 
         KBucketEntry {
             node: Node::new(id, addr),
-            created: unix_epoch,
-            last_seen: unix_epoch,
-            last_sent: unix_epoch,
+            created: epoch,
+            last_seen: epoch,
+            last_sent: epoch,
             reachable: false,
             failed_requests: 0
         }
     }
 
-    pub(crate) fn node_id(&self) -> &Id {
+    pub(crate) fn id(&self) -> &Id {
         &self.node.id()
     }
 
-    pub(crate) fn node_info(&self) -> &Node {
+    pub(crate) fn node(&self) -> &Node {
         &self.node
     }
 
-    pub(crate) fn set_version(&mut self, ver: i32) {
-        self.node.with_version(ver);
+    pub(crate) fn with_version(&mut self, ver: i32) -> &Self {
+        self.node.with_version(ver); self
     }
 
     pub(crate) const fn ceated(&self) -> SystemTime {
@@ -70,6 +72,12 @@ impl KBucketEntry {
         self.last_sent = SystemTime::now();
     }
 
+    pub(crate) fn is_eligible_for_nodes_list(&self) -> bool {
+        // 1 timeout can occasionally happen. should be fine to hand it out as long as
+        // we've verified it at least once
+        self.reachable && self.failed_requests < 3
+    }
+
     /**
      * Should be called to signal that a request to this node has timed out;
      */
@@ -81,16 +89,28 @@ impl KBucketEntry {
     }
 
     pub(crate) fn needs_replancement(&self) -> bool {
-        unimplemented!()
+        (self.failed_requests > 1 && !self.reachable()) ||
+            (self.failed_requests > constants::KBUCKET_MAX_TIMEOUTS && self.old_and_stale())
     }
 
     pub(crate) fn needs_ping(&self) -> bool {
-        unimplemented!()
+
+        // don't ping if recently seen to allow NAT entries to time out
+        // see https://arxiv.org/pdf/1605.05606v1.pdf for numbers
+        // and do exponential backoff after failures to reduce traffic
+        if self.last_seen.elapsed().unwrap() < Duration::from_millis(30 * 1000)
+            || self.within_backoff_window(&self.last_seen) {
+            return false;
+        }
+
+        self.failed_requests != 0 ||
+            self.last_seen.elapsed().unwrap().as_millis()
+                > constants::KBUCKET_OLD_AND_STALE_TIME
     }
 
-    pub(crate) fn merge_with(&mut self, other: &Self) {
-        if self != other {
-            return;
+    pub(crate) fn merge(&mut self, other: &Box<Self>) {
+        if !self.equals(other) {
+            return
         }
 
         self.created = self.created.max(other.created);
@@ -105,8 +125,28 @@ impl KBucketEntry {
         }
     }
 
-    pub(crate) fn matches(&self, _: &Self) -> bool {
-        unimplemented!()
+    fn within_backoff_window(&self, _: &SystemTime) -> bool {
+        let backoff = constants::KBUCKET_PING_BACKOFF_BASE_INTERVAL <<
+            std::cmp::max(
+                constants::KBUCKET_MAX_TIMEOUTS,
+                std::cmp::min(0, self.failed_requests -1)
+            );
+        self.failed_requests != 0 &&
+            self.last_sent.elapsed().unwrap().as_millis() < backoff
+    }
+
+    fn old_and_stale(&self) -> bool {
+        self.failed_requests > constants::KBUCKET_OLD_AND_STALE_TIMEOUT &&
+            self.last_seen.elapsed().unwrap().as_millis() >
+                constants::KBUCKET_OLD_AND_STALE_TIME
+    }
+
+    pub(crate) fn equals(&self, other: &Self) -> bool {
+        self.node == other.node
+    }
+
+    pub(crate) fn matches(&self, other: &Self) -> bool {
+        self.node.matches(&other.node)
     }
 }
 
@@ -132,22 +172,25 @@ impl PartialEq for KBucketEntry {
 
 impl fmt::Display for KBucketEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@", self.node.id())?;
-        write!(f, "{};seen:", self.node.socket_addr().ip())?;
-        // write!(f, "{};age:", self.last_seen.into()?);
-        //write!(f, "{}", (self.created - 0).to_string())?;
+        write!(f, "{}@{};seen:{}; age:{}",
+            self.node.id(),
+            self.node.socket_addr().ip(),
+            self.last_seen.elapsed().unwrap().as_millis(),
+            self.created.elapsed().unwrap().as_millis()
+        )?;
 
-        //if self.lastsent > 0 {
-        //    write!(f, "; sent: {}", (self.lastseen - 0).to_string())?;
-        //}
+        if self.last_sent.elapsed().is_ok() {
+            write!(f, "; sent:{}", self.last_sent.elapsed().unwrap().as_millis())?;
+        }
         if self.failed_requests > 0 {
             write!(f, "; fail: {}", (self.failed_requests - 0).to_string())?;
         }
         if self.reachable {
             write!(f, "; reachable")?;
         }
-
-        //version.
+        if self.node.version() != 0 {
+            write!(f, "; ver: {}", version::readable_version(self.node.version()))?;
+        }
         Ok(())
     }
 }

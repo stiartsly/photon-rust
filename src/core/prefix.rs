@@ -17,6 +17,10 @@ impl Prefix {
         }
     }
 
+    pub const fn id(&self) -> &Id {
+        &self.id
+    }
+
     pub const fn depth(&self) -> i32 {
         self.depth
     }

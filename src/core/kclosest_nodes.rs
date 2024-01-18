@@ -5,10 +5,10 @@ use crate::id::Id;
 use crate::node::Node;
 use crate::dht::DHT;
 use crate::kbucket_entry::KBucketEntry;
+use crate::kbucket::KBucket;
 
 #[allow(dead_code)]
 pub(crate) struct KClosestNodes<'a> {
-    //dht: &'a Box<DHT>,
     dht: &'a DHT,
     target: &'a Id,
 
@@ -49,17 +49,29 @@ impl<'a> KClosestNodes<'a> {
         self.entries.len()
     }
 
-    pub(crate) fn fill(&mut self, _: bool) {
-        unimplemented!()
-    }
-
     pub(crate) fn is_full(&self) -> bool {
         self.entries.len() >= self.max_entries
     }
 
+    fn insert_entries(&mut self, bucket: &Box<KBucket>) {
+        bucket.entries().iter().for_each(|item|  {
+            if (self.filter)(item) {
+                self.entries.push_back(item.clone())
+            }
+        })
+    }
+
+    pub(crate) fn fill(&mut self, _: bool) -> &Self {
+        unimplemented!()
+    }
+
+    fn shave(&self) {
+        unimplemented!()
+    }
+
     pub(crate) fn as_nodes(&self) -> Vec<Node> {
         self.entries.iter()
-            .map(|x| x.node_info().clone())
+            .map(|x| x.node().clone())
             .collect()
     }
 }

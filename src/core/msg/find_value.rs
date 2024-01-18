@@ -23,12 +23,12 @@ pub(crate) trait ValueOptionBuilder {
 }
 
 pub(crate) trait ValueResult {
-    fn value(&self) -> &Value;
+    fn value(&self) -> &Option<Box<Value>>;
 }
 
 pub(crate) trait ValueResultBuilder {
     fn populate_value<F>(&mut self, f: F) -> &mut Self
-    where F: Fn() -> Value;
+    where F: FnMut() -> Option<Box<Value>>;
 }
 
 impl Message for Request {
@@ -164,7 +164,7 @@ impl lookup::Result for Response {
 }
 
 impl ValueResult for Response {
-    fn value(&self) -> &Value {
+    fn value(&self) -> &Option<Box<Value>> {
         &self.value
     }
 }
@@ -189,7 +189,7 @@ impl<'a,'b> MessageBuidler<'b> for ResponseBuilder<'a,'b> {
 
 impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node> {
+    where F: FnOnce() -> Vec<Node> {
         match want4 {
             true => {self.nodes4 = Some(f()); self },
             false => self
@@ -197,7 +197,7 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 
     fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node> {
+    where F: FnOnce() -> Vec<Node> {
         match want6 {
             true => {self.nodes6 = Some(f()); self },
             false => self
@@ -205,7 +205,7 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
     }
 
     fn populate_token<F>(&mut self, want_token: bool, f: F) -> &mut Self
-    where F: Fn() -> i32 {
+    where F: FnOnce() -> i32 {
         match want_token {
             true => {self.token = f(); self },
             false => self
@@ -214,9 +214,9 @@ impl<'a,'b> lookup::ResultBuilder for ResponseBuilder<'a,'b> {
 }
 
 impl<'a,'b> ValueResultBuilder for ResponseBuilder<'a,'b> {
-    fn populate_value<F>(&mut self, f: F) -> &mut Self
-    where F: Fn() -> Value {
-        self.value = Some(f()); self
+    fn populate_value<F>(&mut self, mut f: F) -> &mut Self
+    where F: FnMut() -> Option<Box<Value>> {
+        self.value = f(); self
     }
 }
 
@@ -265,7 +265,7 @@ pub(crate) struct Response {
     nodes6: Vec<Node>,
     token: i32,
 
-    value: Value,
+    value: Option<Box<Value>>
 }
 
 pub(crate) struct ResponseBuilder<'a,'b> {
@@ -279,7 +279,7 @@ pub(crate) struct ResponseBuilder<'a,'b> {
     nodes6: Option<Vec<Node>>,
     token: i32,
 
-    value: Option<Value>,
+    value: Option<Box<Value>>,
 
     marker: PhantomData<&'a ()>,
 }
@@ -369,7 +369,7 @@ impl Response {
             nodes4: b.nodes4.take().unwrap(),
             nodes6: b.nodes6.take().unwrap(),
             token: b.token,
-            value: b.value.take().unwrap()
+            value: b.value.take()
         }
     }
 }

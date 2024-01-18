@@ -11,6 +11,16 @@ use super::message::{
     Method
 };
 
+pub(crate) trait ErrorResult {
+    fn msg(&self) -> &str;
+    fn code(&self) -> i32;
+}
+
+pub(crate) trait ErrorResultBuilder<'a> {
+    fn with_msg(&mut self, _: &'a str) -> &mut Self;
+    fn with_code(&mut self, _: i32) -> &mut Self;
+}
+
 #[allow(dead_code)]
 pub(crate) struct ErrorMsg {
     id: Id,
@@ -63,6 +73,16 @@ impl Message for ErrorMsg {
     }
 }
 
+impl ErrorResult for ErrorMsg {
+    fn msg(&self) -> &str {
+        &self.msg
+    }
+
+    fn code(&self) -> i32 {
+        self.code
+    }
+}
+
 impl<'a,'b> MessageBuidler<'b> for ErrorMsgBuilder<'a,'b> {
     fn with_id(&mut self, nodeid: &'b Id) -> &mut Self {
         self.id = Some(nodeid);
@@ -82,6 +102,15 @@ impl<'a,'b> MessageBuidler<'b> for ErrorMsgBuilder<'a,'b> {
     fn with_verion(&mut self, ver: i32) -> &mut Self {
         self.ver = ver;
         self
+    }
+}
+
+impl<'a,'b> ErrorResultBuilder<'b> for ErrorMsgBuilder<'a, 'b> {
+    fn with_msg(&mut self, msg: &'b str) -> &mut Self {
+        self.msg = Some(msg); self
+    }
+    fn with_code(&mut self, code: i32) -> &mut Self {
+        self.code = code; self
     }
 }
 

@@ -24,9 +24,9 @@ use crate::node::Node;
 
  pub(crate) trait ResultBuilder {
     fn populate_closest_nodes4<F>(&mut self, _:bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node>;
+    where F: FnOnce() -> Vec<Node>;
     fn populate_closest_nodes6<F>(&mut self, _:bool, f: F) -> &mut Self
-    where F: Fn() -> Vec<Node>;
+    where F: FnOnce() -> Vec<Node>;
     fn populate_token<F>(&mut self, _: bool, f: F) -> &mut Self
-    where F: Fn() -> i32;
+    where F: FnOnce() -> i32;
  }

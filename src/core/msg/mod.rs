@@ -6,4 +6,4 @@ pub(crate) mod find_peer;
 pub(crate) mod announce_peer;
 pub(crate) mod find_value;
 pub(crate) mod store_value;
-mod error_msg;
+pub(crate) mod error_msg;
