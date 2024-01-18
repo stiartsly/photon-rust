@@ -49,53 +49,33 @@ impl<'a> Builder<'a> {
     }
 
     pub fn with_alternative_url(&mut self, alternative_url: &'a str) -> &mut Self {
-        //self.url = Some(alternative_url.nfc().collect::<String>()); self
         self.url = Some(alternative_url); self
     }
 
     pub fn build(&mut self) -> Peer {
+        if self.keypair.is_none() {
+            self.keypair = Some(KeyPair::random())
+        }
         Peer::new(self)
     }
 }
 
 impl Peer {
     fn new(b: &Builder) -> Self {
-        match b.keypair {
-            Some(keypair) => {
-                Peer {
-                    pk: Id::from_signature_key(keypair.public_key()),
-                    sk: Some(*keypair.private_key()),
-                    id: b.id.clone(),
-                    origin: match b.origin {
-                        Some(origin) => Some (origin.clone()),
-                        None => None
-                    },
-                    port: b.port,
-                    url: match b.url {
-                        Some(url) => {Some(url.nfc().collect::<String>())},
-                        None => None,
-                    },
-                    signature: Vec::new()
-                }
-            }
-            None => {
-                let keypair = KeyPair::random();
-                Peer {
-                    pk: Id::from_signature_key(keypair.public_key()),
-                    sk: Some(*keypair.private_key()),
-                    id: b.id.clone(),
-                    origin: match b.origin {
-                        Some(origin) => Some (origin.clone()),
-                        None => None
-                    },
-                    port: b.port,
-                    url: match b.url {
-                        Some(url) => {Some(url.nfc().collect::<String>())},
-                        None => None,
-                    },
-                    signature: Vec::new()
-                }
-            }
+        Peer {
+            pk: Id::from_signature_key(b.keypair.unwrap().public_key()),
+            sk: Some(*b.keypair.unwrap().private_key()),
+            id: b.id.clone(),
+            origin: match b.origin {
+                Some(origin) => Some (origin.clone()),
+                None => None
+            },
+            port: b.port,
+            url: match b.url {
+                Some(url) => {Some(url.nfc().collect::<String>())},
+                None => None,
+            },
+            signature: Vec::new()
         }
     }
 
@@ -108,10 +88,7 @@ impl Peer {
     }
 
     pub fn private_key(&self) -> Option<&PrivateKey> {
-        match self.sk.as_ref() {
-            Some(sk) => Some(&sk),
-            None => None
-        }
+        self.sk.as_ref()
     }
 
     pub fn node_id(&self) -> &Id {
@@ -123,10 +100,7 @@ impl Peer {
     }
 
     pub fn origin(&self) -> Option<&Id> {
-        match self.origin.as_ref() {
-            Some(id) => Some(id),
-            None => None
-        }
+        self.origin.as_ref()
     }
 
     pub fn port(&self) -> u16 {
@@ -138,10 +112,7 @@ impl Peer {
     }
 
     pub fn alternative_url(&self) -> Option<&String> {
-        match self.url.as_ref() {
-            Some(url) => Some(&url),
-            None => None
-        }
+        self.url.as_ref()
     }
 
     pub fn signature(&self) -> &Vec<u8> {

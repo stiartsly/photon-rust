@@ -369,7 +369,7 @@ impl Response {
             nodes4: b.nodes4.take().unwrap(),
             nodes6: b.nodes6.take().unwrap(),
             token: b.token,
-            value: b.value.unwrap()
+            value: b.value.take().unwrap()
         }
     }
 }
