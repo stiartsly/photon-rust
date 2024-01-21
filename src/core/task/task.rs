@@ -1,9 +1,11 @@
+use std::fmt;
 use std::time::SystemTime;
 
 use crate::rpccall::RpcCall;
-use crate::msg::message::Message;
+use crate::msg::msg::Msg;
 
 #[allow(dead_code)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum State {
     INITIAL,
     QUEUED,
@@ -12,10 +14,24 @@ pub(crate) enum State {
     CANCELED
 }
 
+impl fmt::Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let str = match self {
+            State::INITIAL => "INITIAL",
+            State::QUEUED => "QUEUED",
+            State::RUNNING => "RUNNING",
+            State::FINISHED => "FINISHED",
+            State::CANCELED => "CANCELED"
+        };
+        write!(f, "{}", str)?;
+        Ok(())
+    }
+}
+
 pub(crate) trait Task {
     fn taskid(&self) -> i32;
     fn name(&self) -> &str;
-    fn state(&self) -> &State;
+    fn state(&self) -> State;
 
     fn nested(&self) -> &Box<dyn Task>;
 
@@ -25,19 +41,16 @@ pub(crate) trait Task {
     fn started_time(&self) -> &SystemTime;
     fn finished_time(&self) -> &SystemTime;
 
-    fn age(&self) -> u64;
+    fn age(&self) -> u128;
 
     fn with_name(&mut self, _: &str);
     fn set_nested(&mut self, _: Box<dyn Task>);
 
-    //fn add_listener<F>(&mut self, f: F) where F: FnMut(&Box<dyn Task>);
-    //fn remove_listener<F>(&mut self, f: F) where F: FnMut(&Box<dyn Task>);
-
-    fn start(&self);
-    fn cancel(&self);
+    fn start(&mut self);
+    fn cancel(&mut self);
 
     fn call_sent(&mut self, _: &Box<RpcCall>);
-    fn call_response(&mut self, _: &Box<RpcCall>, _: &dyn Message);
+    fn call_response(&mut self, _: &Box<RpcCall>, _: &dyn Msg);
     fn call_error(&mut self, _: &Box<RpcCall>);
     fn call_timeout(&mut self, _: &Box<RpcCall>);
 

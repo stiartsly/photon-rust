@@ -1,14 +1,12 @@
 use std::fmt;
 use std::net::SocketAddr;
 
-
-use ciborium::{de::from_reader, Value};
+//use ciborium::{de::from_reader, Value};
 use ciborium_io::Read;
 use core::result::Result;
 use std::io::{Error};
 
 use crate::id::Id;
-use super::ping::{self};
 
 pub(crate) enum Kind {
     Error = 0x00,
@@ -85,7 +83,7 @@ impl fmt::Display for Method {
 }
 
 
-pub(crate) trait Message {
+pub(crate) trait Msg {
     fn kind(&self) -> Kind;
     fn method(&self) -> Method;
 
@@ -94,32 +92,28 @@ pub(crate) trait Message {
 
     fn txid(&self) -> i32;
     fn version(&self) -> i32;
-}
 
-pub(crate) trait MessageBuidler<'a> {
-    fn with_id(&mut self, _: &'a Id) -> &mut Self;
-    fn with_addr(&mut self, _: &'a SocketAddr) -> &mut Self;
+    fn with_id(&mut self, _: &Id);
+    fn with_addr(&mut self, _: &SocketAddr);
 
-    fn with_txid(&mut self, _: i32) -> &mut Self;
-    fn with_verion(&mut self, _: i32) -> &mut Self;
-}
+    fn with_txid(&mut self, _: i32);
+    fn with_verion(&mut self, _: i32);
 
-pub(crate) trait MessageParser<'a> {
-    fn with_cbor(&mut self, _: &'a [u8]) -> &mut Self;
+    //fn with_cbor(&mut self, _: &[u8]);
 }
 
 #[allow(dead_code)]
-pub(crate) fn deser(_: &Id, _: &SocketAddr, cbor: &[u8]) -> Box<dyn Message> {
+pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Box<dyn Msg> {
     let mtype: i32 = 0;
-    let reader = Reader::new(cbor);
-    let value: Value = from_reader(reader).unwrap();
+    //let reader = Reader::new(cbor);
+    //let value: Value = from_reader(reader).unwrap();
 
     match Kind::from(mtype) {
         Kind::Error => { panic!("TODO") },
         Kind::Request => {
             match Method::from(mtype) {
                 Method::Unknown => { panic!("TODO") },
-                Method::Ping => Box::new(ping::RequestBuidler::from(&value).build()),
+                Method::Ping => { panic!("TODO") },
                 Method::FindNode => { panic!("TODO") },
                 Method::AnnouncePeer => { panic!("TODO") },
                 Method::FindPeer => { panic!("TODO") },
@@ -130,7 +124,7 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, cbor: &[u8]) -> Box<dyn Message> {
         Kind::Response => {
             match Method::from(mtype) {
                 Method::Unknown => { panic!("TODO") },
-                Method::Ping => Box::new(ping::ResponseBuilder::from(&value).build()),
+                Method::Ping => { panic!("TODO") },
                 Method::FindNode => { panic!("TODO") },
                 Method::AnnouncePeer => { panic!("TODO") },
                 Method::FindPeer => { panic!("TODO") },
@@ -142,7 +136,7 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, cbor: &[u8]) -> Box<dyn Message> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn serilize(_: Box<dyn Message>) -> Vec<u8> {
+pub(crate) fn serilize(_: Box<dyn Msg>) -> Vec<u8> {
     unimplemented!()
 }
 
@@ -151,6 +145,7 @@ struct Reader<'a> {
     position: usize,
 }
 
+#[allow(dead_code)]
 impl<'a> Reader<'a> {
     fn new(data: &'a [u8]) -> Self {
         Reader { data, position: 0 }

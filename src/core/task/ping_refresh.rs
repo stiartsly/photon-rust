@@ -7,7 +7,7 @@ use super::task::{Task, State};
 use crate::kbucket::KBucket;
 use crate::kbucket_entry::KBucketEntry;
 use crate::rpccall::RpcCall;
-use crate::msg::message::Message;
+use crate::msg::msg::Msg;
 
 #[allow(dead_code)]
 pub(crate) struct PingRefreshTask<'a> {
@@ -84,7 +84,7 @@ impl<'a> PingRefreshTask<'a> {
         unimplemented!()
     }
 
-    fn call_response(&mut self, _: &Box<RpcCall>, _: impl Message){
+    fn call_response(&mut self, _: &Box<RpcCall>, _: impl Msg){
         unimplemented!()
     }
 

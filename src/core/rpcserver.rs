@@ -4,7 +4,7 @@ use tokio::runtime::{self};
 
 use crate::dht::DHT;
 use crate::rpccall::RpcCall;
-use crate::msg::message::Message;
+use crate::msg::msg::Msg;
 
 #[allow(dead_code)]
 pub(crate) struct RpcServer {
@@ -73,7 +73,7 @@ impl RpcServer {
         })
     }
 
-    pub(crate) fn send_msg(&self, _: Box<dyn Message>) {
+    pub(crate) fn send_msg(&self, _: Box<dyn Msg>) {
         unimplemented!()
     }
 
@@ -81,7 +81,7 @@ impl RpcServer {
         unimplemented!()
     }
 
-    pub(crate) fn send_err<'a>(&self, _: Box<dyn Message>, _: i32, _: &'a str) {
+    pub(crate) fn send_err<'a>(&self, _: Box<dyn Msg>, _: i32, _: &'a str) {
         unimplemented!()
     }
 }
