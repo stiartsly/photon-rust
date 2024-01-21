@@ -10,7 +10,7 @@ use crate::error::Error;
 pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Id {
     bytes: [u8; ID_BYTES],
 }

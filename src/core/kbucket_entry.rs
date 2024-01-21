@@ -2,7 +2,7 @@ use std::fmt;
 use std::net::{SocketAddr};
 use std::time::{SystemTime, Duration};
 use crate::id::Id;
-use crate::node::{Node, NodeInfo, Visit};
+use crate::node::{Node, Connectivity};
 use crate::constants;
 use crate::version;
 
@@ -22,13 +22,11 @@ pub(crate) struct KBucketEntry {
 #[allow(dead_code)]
 impl KBucketEntry {
     pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
-        let epoch = SystemTime::UNIX_EPOCH;
-
         KBucketEntry {
             node: Node::new(id, addr),
-            created: epoch,
-            last_seen: epoch,
-            last_sent: epoch,
+            created: SystemTime::UNIX_EPOCH,
+            last_seen: SystemTime::UNIX_EPOCH,
+            last_sent: SystemTime::UNIX_EPOCH,
             reachable: false,
             failed_requests: 0
         }
@@ -42,8 +40,8 @@ impl KBucketEntry {
         &self.node
     }
 
-    pub(crate) fn with_version(&mut self, ver: i32) -> &Self {
-        self.node.with_version(ver); self
+    pub(crate) fn set_version(&mut self, ver: i32) -> &Self {
+        self.node.set_version(ver); self
     }
 
     pub(crate) const fn ceated(&self) -> SystemTime {
@@ -150,7 +148,7 @@ impl KBucketEntry {
     }
 }
 
-impl Visit for KBucketEntry {
+impl Connectivity for KBucketEntry {
     fn reachable(&self) -> bool {
         self.reachable
     }

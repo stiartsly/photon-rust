@@ -1,6 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use boson::id::Id;
-use boson::node::{Node, NodeInfo};
+use boson::node::{Node};
 
 #[cfg(test)]
 mod apitests {
@@ -49,7 +49,7 @@ mod apitests {
         let id = Id::random();
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 12345);
         let mut node = Node::new(&id, &addr);
-        node.with_version(5);
+        node.set_version(5);
         assert_eq!(node.id(), &id);
         assert_eq!(node.socket_addr(), &addr);
         assert_eq!(node.version(), 5);

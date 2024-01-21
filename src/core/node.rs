@@ -3,21 +3,9 @@ use std::net::{IpAddr, SocketAddr};
 use crate::id::Id;
 use crate::version;
 
-pub trait NodeInfo {
-    fn id(&self) -> &Id;
-    fn socket_addr(&self) -> &SocketAddr;
-    fn version(&self) -> i32;
-
-    fn is_ipv4(&self) -> bool;
-    fn is_ipv6(&self) -> bool;
-
-    fn with_version(&mut self, version: i32) -> &mut Self;
-}
-
-pub(crate) trait Visit {
+pub(crate) trait Connectivity {
     fn reachable(&self) -> bool;
     fn unreachable(&self) -> bool;
-
     fn with_reachable(&mut self, _: bool) -> &mut Self;
 }
 
@@ -41,6 +29,36 @@ impl Node {
         self.addr.port()
     }
 
+    pub fn id(&self) -> &Id {
+        &self.id
+    }
+
+    pub fn socket_addr(&self) -> &SocketAddr {
+        &self.addr
+    }
+
+    pub fn version(&self) -> i32 {
+        self.ver
+    }
+
+    pub fn set_version(&mut self, version: i32) -> &mut Self {
+        self.ver = version; self
+    }
+
+    pub fn is_ipv4(&self) -> bool{
+        match self.addr.ip() {
+            IpAddr::V4(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ipv6(&self) -> bool{
+        match self.addr.ip() {
+            IpAddr::V6(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn readable_version(&self) -> String {
         version::readable_version(self.ver)
     }
@@ -50,50 +68,10 @@ impl Node {
     }
 }
 
-impl NodeInfo for Node {
-    fn id(&self) -> &Id {
-        &self.id
-    }
-
-    fn socket_addr(&self) -> &SocketAddr {
-        &self.addr
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn with_version(&mut self, version: i32) -> &mut Self {
-        self.ver = version; self
-    }
-
-    fn is_ipv4(&self) -> bool{
-        match self.addr.ip() {
-            IpAddr::V4(_) => true,
-            _ => false,
-        }
-    }
-
-    fn is_ipv6(&self) -> bool{
-        match self.addr.ip() {
-            IpAddr::V6(_) => true,
-            _ => false,
-        }
-    }
-}
-
-impl Visit for Node {
-    fn reachable(&self) -> bool {
-        false
-    }
-
-    fn unreachable(&self) -> bool {
-        false
-    }
-
-    fn with_reachable(&mut self, _: bool) -> &mut Self {
-        self
-    }
+impl Connectivity for Node {
+    fn reachable(&self) -> bool { false }
+    fn unreachable(&self) -> bool { false }
+    fn with_reachable(&mut self, _: bool) -> &mut Self { self }
 }
 
 impl std::fmt::Display for Node {

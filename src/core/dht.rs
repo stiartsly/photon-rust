@@ -7,25 +7,30 @@ use crate::lookup_option::LookupOption;
 use crate::node::Node;
 use crate::peer::Peer;
 use crate::value::{Value};
-use crate::rpccall::RPCCall;
+use crate::rpccall::RpcCall;
 use crate::rpcserver::RpcServer;
-use crate::msg::message::{self, Message, MessageBuidler};
-use crate::msg::lookup::{self, ResultBuilder};
-use crate::msg::ping::{self};
-use crate::msg::find_node::{self};
-use crate::msg::find_value::{self, ValueResultBuilder};
-use crate::msg::find_peer::{self, PeerResultBuilder};
-use crate::msg::store_value::{self};
-use crate::msg::announce_peer::{self};
-use crate::msg::error_msg::{self, ErrorResult, ErrorResultBuilder};
 use crate::kclosest_nodes::KClosestNodes;
 use crate::token_manager::TokenManager;
 use crate::routing_table::RoutingTable;
 use crate::version;
+use crate::msg::{
+    message::{self, Message, MessageBuidler},
+    lookup::{self, ResultBuilder},
+    ping::{self},
+    find_node::{self},
+    find_value::{self, ValueResultBuilder},
+    find_peer::{self, PeerResultBuilder},
+    store_value::{self},
+    announce_peer::{self},
+    error_msg::{self, ErrorResult, ErrorResultBuilder}
+};
+use crate::task::{
+    task::Task,
+    task_manager::TaskManager,
+    node_lookup::NodeLookupTask,
+};
 
 use log::{info, warn, debug};
-
-pub(crate) struct Task {}
 
 #[allow(dead_code)]
 pub(crate) struct DHT {
@@ -35,6 +40,7 @@ pub(crate) struct DHT {
     routing_table: Box<RoutingTable>,
     rpcserver: Rc<RpcServer>,
     token_manager: TokenManager,
+    task_manager: TaskManager,
 
     running: bool,
 }
@@ -53,6 +59,7 @@ impl DHT {
             rpcserver: server,
             routing_table: Box::new(RoutingTable::new()),
             token_manager: TokenManager::new(),
+            task_manager: TaskManager::new(),
             running: false,
         }
     }
@@ -61,33 +68,56 @@ impl DHT {
         self.persist_root = path.to_string()
     }
 
-    pub(crate) fn find_node<F>(&self, _: &Id, _: &LookupOption, _: F) -> Box<Task>
-    where F: Fn(&Node) {
+    pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, _: F)
+    where F: Fn(Option<Box<Node>>) {
+        let mut node: Option<Box<Node>> = match self.routing_table.bucket_entry(id) {
+            Some(entry) => {
+                Some(Box::new(entry.node().clone()))
+            },
+            None => {
+                None
+            }
+        };
+        let mut t = Box::new(NodeLookupTask::new(id));
+        t.set_result_fn(move |found_node, task| {
+            match found_node {
+                Some(_node) => { node = Some(_node)},
+                None => {}
+            }
 
-        unimplemented!()
+            match option {
+                LookupOption::CONSERVATIVE => task.cancel(),
+                _ => {}
+            }
+        });
+        //t.add_listener(|| {
+        //    complete_handler(node);
+        //});
+        t.with_name("user-level node lookup");
+        self.task_manager.add(t as Box<dyn Task>);
     }
 
-    pub(crate) fn find_value<F>(&self, _: &Id, _: LookupOption, _: F) -> Box<Task>
+    pub(crate) fn find_value<F>(&self, _: &Id, _: LookupOption, _: F)
     where F: Fn(&Value) {
         unimplemented!()
     }
 
-    pub(crate) fn store_value<F>(&self, _: &Value, _: F) -> Box<Task>
+    pub(crate) fn store_value<F>(&self, _: &Value, _: F)
     where F: Fn(&[&Node]) {
         unimplemented!()
     }
 
-    pub(crate) fn find_peer<F>(&self, _: &Id, _: i32, _: &LookupOption, _: F) -> Box<Task>
+    pub(crate) fn find_peer<F>(&self, _: &Id, _: i32, _: &LookupOption, _: F)
     where F: Fn(&[&Peer]) {
         unimplemented!()
     }
 
-    pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F) -> Box<Task>
+    pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
     where F: Fn(&[&Node]) {
         unimplemented!()
     }
 
-    pub(crate) fn on_timeout(&self, call: &RPCCall) {
+    pub(crate) fn on_timeout(&self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
         if !self.running || !self.rpcserver.is_reachable() {
             return;
@@ -104,35 +134,35 @@ impl DHT {
         self.routing_table.on_send(id)
     }
 
-    fn on_message<T>(&self, msg: T )
+    fn on_message<T>(&self, msg: &Box<T> )
     where T: Message + lookup::Option + find_value::ValueOption + store_value::StoreOption +
         announce_peer::AnnounceOption + error_msg::ErrorResult{
         match msg.kind() {
             message::Kind::Error => self.on_error(msg),
             message::Kind::Request => self.on_request(msg),
-            message::Kind::Response => self.on_response(msg),
+            message::Kind::Response => self.on_response(msg.as_ref()),
         }
     }
 
-    fn on_request<T>(&self, msg: T)
+    fn on_request<T>(&self, msg: &Box<T>)
     where T: Message + lookup::Option + find_value::ValueOption + store_value::StoreOption +
         announce_peer::AnnounceOption {
         match msg.method() {
-            message::Method::Ping => self.on_ping(msg),
+            message::Method::Ping => self.on_ping(msg.as_ref()),
             message::Method::FindNode => self.on_find_node(msg),
             message::Method::FindValue => self.on_find_value(msg),
             message::Method::StoreValue => self.on_store_value(msg),
             message::Method::FindPeer => self.on_find_peers(msg),
             message::Method::AnnouncePeer => self.on_announce_peer(msg),
             message::Method::Unknown => {
-                self.send_err(msg, 203, "Invalid request method");
+                self.send_err(msg.as_ref(), 203, "Invalid request method");
             }
         }
     }
 
-    fn on_response(&self, _: impl Message) {}
+    fn on_response(&self, _: &dyn Message) {}
 
-    fn on_error(&self, msg: impl Message + ErrorResult) {
+    fn on_error<T>(&self, msg: &Box<T>) where T: Message + ErrorResult{
         warn!("Error from {}/{} - {}:{}, txid {}",
             msg.addr(),
             version::readable_version(msg.version()),
@@ -142,7 +172,7 @@ impl DHT {
         );
     }
 
-    fn send_err<'a>(&self, msg: impl Message, code: i32, str: &'a str) {
+    fn send_err<'a>(&self, msg: &dyn Message, code: i32, str: &'a str) {
         let mut b = error_msg::ErrorMsgBuilder::new();
         b.with_txid(msg.txid())
             .with_id(msg.id())
@@ -153,7 +183,7 @@ impl DHT {
     }
 
 
-    fn on_ping(&self, msg: impl Message) {
+    fn on_ping(&self, msg: &dyn Message) {
         let mut builder = ping::ResponseBuilder::new();
         builder.with_txid(msg.txid())
             .with_id(msg.id())
@@ -164,7 +194,7 @@ impl DHT {
         );
     }
 
-    fn on_find_node<T>(&self, msg: T) where T: Message + lookup::Option {
+    fn on_find_node<T>(&self, msg: &Box<T>) where T: Message + lookup::Option {
         let mut b = find_node::ResponseBuilder::new();
         b.with_txid(msg.txid())
             .with_id(msg.id())
@@ -191,7 +221,7 @@ impl DHT {
         self.rpcserver.send_msg(Box::new(b.build()))
     }
 
-    fn on_find_value<T>(&self, msg: T)
+    fn on_find_value<T>(&self, msg: &Box<T>)
     where T: Message + lookup::Option + find_value::ValueOption {
         let mut b = find_value::ResponseBuilder::new();
         let mut has_value = false;
@@ -229,19 +259,19 @@ impl DHT {
         self.rpcserver.send_msg(Box::new(b.build()));
     }
 
-    fn on_store_value<T>(&self, msg: T)
+    fn on_store_value<T>(&self, msg: &Box<T>)
     where T: Message + lookup::Option + store_value::StoreOption {
         let value = msg.value();
         let value_id = value.id();
 
         if !self.token_manager.verify_token(msg.token(), msg.id(), msg.addr(), &value_id) {
             warn!("Received a store value request with invalid token from {}", msg.addr());
-            self.send_err(msg, 203, "Invalid token for STORE VALUE request");
+            self.send_err(msg.as_ref(), 203, "Invalid token for STORE VALUE request");
             return;
         }
 
         if value.is_valid().is_err() {
-            self.send_err(msg, 203, "Invalid value");
+            self.send_err(msg.as_ref(), 203, "Invalid value");
             return;
         }
         // TODO: store value.
@@ -253,7 +283,7 @@ impl DHT {
         self.rpcserver.send_msg(Box::new(b.build()));
     }
 
-    fn on_find_peers<T>(&self, msg: T)
+    fn on_find_peers<T>(&self, msg: &Box<T>)
     where T: Message + lookup::Option + find_value::ValueOption  {
         let mut b = find_peer::ResponseBuilder::new();
         let mut has_peers = false;
@@ -288,7 +318,7 @@ impl DHT {
         self.rpcserver.send_msg(Box::new(b.build()));
     }
 
-    fn on_announce_peer<T>(&self, msg: T)
+    fn on_announce_peer<T>(&self, msg: &Box<T>)
     where T: Message + lookup::Option + announce_peer::AnnounceOption {
         let bogon = false;
 
@@ -298,14 +328,14 @@ impl DHT {
 
         if !self.token_manager.verify_token(msg.token(), msg.id(), msg.addr(), msg.target()) {
             warn!("Received an announce peer request with invalid token from {}", msg.addr());
-            self.send_err(msg, 203, "Invalid token for ANNOUNCE PEER request");
+            self.send_err(msg.as_ref(), 203, "Invalid token for ANNOUNCE PEER request");
             return;
         }
 
         let peers = msg.peers();
         for peer in peers.iter() {
             if peer.is_valid().is_err() {
-                self.send_err(msg, 203, "One peer is invalid peer");
+                self.send_err(msg.as_ref(), 203, "One peer is invalid peer");
                 return;
             }
         };

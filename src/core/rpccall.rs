@@ -14,7 +14,7 @@ enum State {
 }
 
 #[allow(dead_code)]
-pub(crate) struct RPCCall {
+pub(crate) struct RpcCall {
     request: Box<dyn Message>,
     response: Box<dyn Message>,
 
@@ -25,9 +25,9 @@ pub(crate) struct RPCCall {
 }
 
 #[allow(dead_code)]
-impl RPCCall {
+impl RpcCall {
     pub(crate) fn new(req: Box<dyn Message>, rsp: Box<dyn Message>) -> Self {
-        RPCCall {
+        RpcCall {
             request: req,
             response: rsp,
             on_state_change: Box::new(|_, _| {}),

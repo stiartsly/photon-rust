@@ -1,11 +1,13 @@
-use crate::node::{Node, Visit};
+use std::time::SystemTime;
+use crate::node::{Node, Connectivity};
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct CandidateNode {
-    nodeinfo: Node,
+    node: Node,
 
-    last_sent: u64,
-    last_reply: u64,
+    last_sent: SystemTime,
+    last_reply: SystemTime,
 
     reachable: bool,
     acked: bool,
@@ -16,12 +18,12 @@ pub(crate) struct CandidateNode {
 
 #[allow(dead_code)]
 impl CandidateNode {
-    pub(crate) fn new(ni: &Node) -> Self {
+    pub(crate) fn new(node: &Node, reachable: bool) -> Self {
         CandidateNode {
-            nodeinfo: ni.clone(),
-            last_sent: 0,
-            last_reply: 0,
-            reachable: false, // TODO:
+            node: node.clone(),
+            last_sent: SystemTime::UNIX_EPOCH,
+            last_reply: SystemTime::UNIX_EPOCH,
+            reachable,
             acked: false,
             pinged: 0,
             token: 0
@@ -29,12 +31,12 @@ impl CandidateNode {
     }
 
     pub(crate) fn set_sent(&mut self) {
-        self.last_sent = 0; // TODO:
-        self.last_reply = 0;
+        self.last_sent = SystemTime::now();
+        self.pinged += 1;
     }
 
     pub(crate) fn clear_sent(&mut self) {
-        self.last_sent = 0
+        self.last_sent = SystemTime::UNIX_EPOCH;
     }
 
     pub(crate) fn pinged(&self) -> i32 {
@@ -42,27 +44,27 @@ impl CandidateNode {
     }
 
     pub(crate) fn set_replied(&mut self) {
-        self.last_reply = 0; // TODO:
-    }
-
-    pub(crate) fn token(&self) -> i32 {
-        self.token
+        self.last_reply = SystemTime::now();
     }
 
     pub(crate) fn set_token(&mut self, token: i32) {
         self.token = token
     }
 
+    pub(crate) fn token(&self) -> i32 {
+        self.token
+    }
+
     pub(crate) fn is_inflight(&self) -> bool {
-        self.last_sent != 0
+        self.last_sent != SystemTime::UNIX_EPOCH
     }
 
     pub(crate) fn is_eligible(&self) -> bool {
-        self.last_sent == 0 && self.pinged < 3
+        self.last_sent == SystemTime::UNIX_EPOCH && self.pinged < 3
     }
 }
 
-impl Visit for CandidateNode {
+impl Connectivity for CandidateNode {
     fn reachable(&self) -> bool {
         self.reachable
     }

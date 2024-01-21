@@ -1,10 +1,9 @@
 use tokio::io::{self, Interest};
 use tokio::net::UdpSocket;
 use tokio::runtime::{self};
-//use crate::message::message;
 
 use crate::dht::DHT;
-use crate::rpccall::RPCCall;
+use crate::rpccall::RpcCall;
 use crate::msg::message::Message;
 
 #[allow(dead_code)]
@@ -78,7 +77,7 @@ impl RpcServer {
         unimplemented!()
     }
 
-    pub(crate) fn send_call(&self, _: Box<RPCCall>) {
+    pub(crate) fn send_call(&self, _: Box<RpcCall>) {
         unimplemented!()
     }
 
