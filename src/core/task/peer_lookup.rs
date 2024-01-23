@@ -2,7 +2,7 @@
 use std::time::SystemTime;
 
 use crate::id::Id;
-use crate::value::Value;
+use crate::peer::Peer;
 use crate::rpccall::RpcCall;
 use crate::msg::msg::Msg;
 use super::task::{Task, State};
@@ -10,33 +10,57 @@ use super::task::{Task, State};
 #[allow(dead_code)]
 pub(crate) struct PeerLookupTask {
     //dht: Rc<&'a DHT>,
-    id: Id,
+    //id: Id,
 
     bootstrap: bool,
     want_token: bool,
 
-    result_fn: Option<Box<dyn FnMut(Option<Vec<Box<Value>>>, &mut Box<dyn Task>)>>,
-
+    result_fn: Box<dyn FnMut(&mut Box<dyn Task>, Option<Vec<Box<Peer>>>)>,
     listeners: Vec<Box<dyn FnMut(&Box<dyn Task>)>>,
 }
 
 #[allow(dead_code)]
-impl PeerLookupTask {
-    pub(crate) fn new(id: &Id) -> Self {
-        PeerLookupTask {
-            //dht,
-            id: id.clone(),
-            bootstrap: false,
-            want_token: false,
-            result_fn: None,
-            listeners: Vec::new(),
+pub(crate) struct PeerLookupTaskBuilder<'a> {
+    name: Option<&'a str>,
+    target: &'a Id,
+
+    result_fn: Option<Box<dyn FnMut(&mut Box<dyn Task>, Option<Vec<Box<Peer>>>)>>,
+}
+
+impl<'a> PeerLookupTaskBuilder<'a> {
+    pub(crate) fn new(target: &'a Id) -> Self {
+        PeerLookupTaskBuilder {
+            name: Some("task"),
+            target,
+            result_fn: None
         }
-        // TODO:
+    }
+
+    pub(crate) fn with_name(&mut self, name: &'a str) {
+        self.name = Some(name);
     }
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(Option<Vec<Box<Value>>>, &mut Box<dyn Task>) + 'static {
+    where F: FnMut(&mut Box<dyn Task>, Option<Vec<Box<Peer>>>) + 'static {
         self.result_fn = Some(Box::new(f));
+    }
+
+    pub(crate) fn build(&mut self) -> PeerLookupTask {
+        PeerLookupTask::new(self)
+    }
+}
+
+#[allow(dead_code)]
+impl PeerLookupTask {
+    pub(crate) fn new(builder: &mut PeerLookupTaskBuilder) -> Self {
+        PeerLookupTask {
+            //dht,
+            //id: id.clone(),
+            bootstrap: false,
+            want_token: false,
+            result_fn: builder.result_fn.take().unwrap(),
+            listeners: Vec::new(),
+        }
     }
 
     pub(crate) fn add_listener<F>(&mut self, f: F)
@@ -86,10 +110,6 @@ impl Task for PeerLookupTask {
         unimplemented!()
     }
 
-    fn with_name(&mut self, _: &str) {
-        unimplemented!()
-    }
-
     fn set_nested(&mut self, _: Box<dyn Task>) {
         unimplemented!()
     }
@@ -106,7 +126,7 @@ impl Task for PeerLookupTask {
         unimplemented!()
     }
 
-    fn call_response(&mut self, _: &Box<RpcCall>, _: &dyn Msg){
+    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>){
         unimplemented!()
     }
 

@@ -4,8 +4,8 @@ use crate::id::Id;
 use super::candidate_node::CandidateNode;
 
 #[allow(dead_code)]
-pub(crate) struct ClosestSet<'a> {
-    target: &'a Id,
+pub(crate) struct ClosestSet {
+    target: Id,
     capacity: usize,
 
     closest: HashMap<Id, Box<CandidateNode>>,
@@ -15,10 +15,10 @@ pub(crate) struct ClosestSet<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> ClosestSet<'a> {
-    pub(crate) fn new(target: &'a Id, capacity: usize) -> Self {
+impl ClosestSet {
+    pub(crate) fn new(target: &Id, capacity: usize) -> Self {
         ClosestSet {
-            target,
+            target: target.clone(),
             capacity,
             closest: HashMap::new(),
             insert_attempt_since_tail_modification: 0,

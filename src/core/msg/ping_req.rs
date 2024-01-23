@@ -1,4 +1,5 @@
 use std::fmt;
+use std::any::Any;
 use std::net::SocketAddr;
 
 //use ciborium::value::Integer;
@@ -51,6 +52,10 @@ impl Msg for Message {
 
     fn with_verion(&mut self, ver: i32) {
         self.ver = ver
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

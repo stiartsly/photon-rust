@@ -7,20 +7,52 @@ use crate::id::Id;
 use crate::node::Node;
 //use crate::dht::DHT;
 use crate::rpccall::RpcCall;
-use crate::msg::msg::Msg;
+use crate::constants;
+use crate::msg::msg::{self, Msg};
+use crate::msg::lookup::{Result as MsgResult};
+use crate::msg::find_node_rsp::{self};
 use super::task::{Task, State};
-use super::lookup::LookupTask;
+use super::lookup::{LookupTask};
 use super::candidate_node::CandidateNode;
 use super::closest_set::ClosestSet;
 use super::closest_candidates::ClosestCandidates;
 
 use log::{debug};
 
+pub(crate) struct NodeLookupTaskBuilder<'a> {
+    name: Option<&'a str>,
+    target: &'a Id,
+
+    result_fn: Option<Box<dyn FnMut(&mut dyn Task, Option<Box<Node>>)>>
+}
+
+impl<'a> NodeLookupTaskBuilder<'a> {
+    pub(crate) fn new(target: &'a Id) -> Self {
+        NodeLookupTaskBuilder {
+            name: None,
+            target,
+            result_fn: None,
+        }
+    }
+    pub(crate) fn with_name(&mut self, name: &'a str) {
+        self.name = Some(name)
+    }
+
+    pub(crate) fn set_result_fn<F>(&mut self, f: F)
+    where F: FnMut(&mut dyn Task, Option<Box<Node>>) + 'static {
+        self.result_fn = Some(Box::new(f));
+    }
+
+    pub(crate) fn build(&mut self) -> NodeLookupTask {
+        NodeLookupTask::new(self)
+    }
+}
+
 #[allow(dead_code)]
-pub(crate) struct NodeLookupTask<'a> {
+pub(crate) struct NodeLookupTask {
     //dht: Rc<&'a DHT>,
     taskid: i32,
-    name: Option<String>,
+    name: String,
     state: State,
 
     // nested: *const libc::c_void,
@@ -32,41 +64,42 @@ pub(crate) struct NodeLookupTask<'a> {
     listeners: Vec<Box<dyn FnMut(&Box<dyn Task>)>>,
 
     // Lookup
-    target: Option<Id>,
-    closest_set: Option<ClosestSet<'a>>,
-    closest_candidates: Option<ClosestCandidates>,
+    target: Id,
+    closest_set: ClosestSet,
+    closest_candidates: ClosestCandidates,
 
     // NodeLookup
     bootstrap: bool,
     want_token: bool,
-    result_fn: Option<Box<dyn FnMut(Option<Box<Node>>, &mut Box<dyn Task>)>>,
+    result_fn: Box<dyn FnMut(&mut dyn Task, Option<Box<Node>>)>,
 }
 
 #[allow(dead_code)]
-impl<'a> NodeLookupTask<'a> {
-    pub(crate) fn new(id: &Id) -> Self {
+impl NodeLookupTask {
+    pub(crate) fn new(b: &mut NodeLookupTaskBuilder) -> Self {
         NodeLookupTask { //dht,
             taskid: 0,
-            name: None,
+            name: b.name.take().unwrap().to_string(),
             state: State::INITIAL,
             started_time: SystemTime::UNIX_EPOCH,
             finished_time: SystemTime::UNIX_EPOCH,
             inflights: HashMap::new(),
             listeners: Vec::new(),
 
-            target: Some(id.clone()),
-            closest_set: None,
-            closest_candidates: None,
+            target: b.target.clone(),
+            closest_set: ClosestSet::new(
+                b.target,
+                constants::MAX_ENTRIES_PER_BUCKET
+            ),
+            closest_candidates: ClosestCandidates::new(
+                b.target,
+                3 * constants::MAX_ENTRIES_PER_BUCKET
+            ),
 
             bootstrap: false,
             want_token: false,
-            result_fn: None,
+            result_fn: b.result_fn.take().unwrap()
         }
-    }
-
-    pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(Option<Box<Node>>, &mut Box<dyn Task>) + 'static {
-        self.result_fn = Some(Box::new(f));
     }
 
     pub(crate) fn add_listener<F>(&mut self, f: F)
@@ -81,18 +114,32 @@ impl<'a> NodeLookupTask<'a> {
     pub(crate) fn with_want_token(&mut self, _: bool) {
         unimplemented!()
     }
+
+    fn remove_candidate(&mut self, id: &Id) ->Option<Box<CandidateNode>> {
+        self.closest_candidates.remove(id)
+    }
+
+    /*
+    Sp<CandidateNode> removeCandidate(const Id& id) {
+        return closestCandidates.remove(id);
+    }
+
+    Sp<CandidateNode> getNextCandidate() const {
+        return closestCandidates.next();
+    }
+
+    void addClosest(Sp<CandidateNode> candidateNode) {
+        closestSet.add(candidateNode);
+    }*/
 }
 
-impl<'a> Task for NodeLookupTask<'a> {
+impl Task for NodeLookupTask {
     fn taskid(&self) -> i32 {
         self.taskid
     }
 
     fn name(&self) -> &str{
-        match self.name.as_ref() {
-            Some(n) => &n,
-            None => "task"
-        }
+        &self.name
     }
 
     fn state(&self) -> State{
@@ -121,10 +168,6 @@ impl<'a> Task for NodeLookupTask<'a> {
 
     fn age(&self) -> u128 {
         self.started_time.elapsed().unwrap().as_millis()
-    }
-
-    fn with_name(&mut self, name: &str) {
-        self.name = Some(name.to_string())
     }
 
     fn set_nested(&mut self, _: Box<dyn Task>) {
@@ -161,16 +204,38 @@ impl<'a> Task for NodeLookupTask<'a> {
         //    nested.cancel()
     }
 
-    fn call_sent(&mut self, _: &Box<RpcCall>){
-        unimplemented!()
+    fn call_sent(&mut self, _: &Box<RpcCall>) {}
+
+    fn call_responsed(&mut self, call: &Box<RpcCall>, rsp: &Box<dyn Msg>) {
+        // TODO: LookupTask::callResponsed(xxx)
+
+        if !call.matches_target() ||
+            rsp.kind() != msg::Kind::Response ||
+            rsp.method() != msg::Method::FindNode {
+            return
+        }
+
+        match rsp.as_any().downcast_ref::<find_node_rsp::Message>() {
+            Some(downcasted) => {
+                let nodes = downcasted.nodes4(); // TODO:
+                if !nodes.is_empty() {
+                    self.add_candidates(&nodes);
+                }
+
+                nodes.iter().for_each(|item| {
+                    if item.id() == self.target() {
+                        //self.result_fn.unwrap()(Some(Box::new(item.clone())), self as &mut dyn Task);
+                    }
+                })
+            }
+            None => {
+                panic!("panic on powncasting to find_node_response msg")
+            }
+        }
     }
 
-    fn call_response(&mut self, _: &Box<RpcCall>, _: &dyn Msg){
-        unimplemented!()
-    }
-
-    fn call_error(&mut self, _: &Box<RpcCall>){
-        unimplemented!()
+    fn call_error(&mut self, _: &Box<RpcCall>) {
+        //self.as_closest_candidates().remove(call.id())
     }
 
     fn call_timeout(&mut self, _: &Box<RpcCall>){
@@ -190,9 +255,9 @@ impl<'a> Task for NodeLookupTask<'a> {
     }
 }
 
-impl<'a> LookupTask for NodeLookupTask<'a> {
+impl LookupTask for NodeLookupTask {
     fn target(&self) -> &Id {
-        self.target.as_ref().unwrap()
+        &self.target
     }
 
     fn candidate_node(&self) -> &CandidateNode {
@@ -202,9 +267,25 @@ impl<'a> LookupTask for NodeLookupTask<'a> {
     fn closest_set(&self) -> ClosestSet {
         unimplemented!()
     }
+
+    fn add_candidates(&mut self, _: &[Node]) {
+        unimplemented!()
+    }
+
+    fn remove_candidate(&mut self, _: &Id) {
+        unimplemented!()
+    }
+
+    fn next_candidate(&self) -> Box<CandidateNode> {
+        unimplemented!()
+    }
+
+    fn add_closest(&mut self,_: &Box<CandidateNode>) {
+        unimplemented!()
+    }
 }
 
-impl<'a> fmt::Display for NodeLookupTask<'a> {
+impl fmt::Display for NodeLookupTask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "#{}[{}] DHT:{}, state:{}",
             self.taskid,

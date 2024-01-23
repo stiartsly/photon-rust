@@ -1,4 +1,5 @@
 use std::fmt;
+use std::any::Any;
 use std::net::SocketAddr;
 
 //use ciborium::{de::from_reader, Value};
@@ -8,6 +9,7 @@ use std::io::{Error};
 
 use crate::id::Id;
 
+#[derive(PartialEq)]
 pub(crate) enum Kind {
     Error = 0x00,
     Request = 0x20,
@@ -39,6 +41,7 @@ impl fmt::Display for Kind {
     }
 }
 
+#[derive(PartialEq)]
 pub(crate) enum Method {
     Unknown = 0x00,
     Ping = 0x01,
@@ -100,6 +103,8 @@ pub(crate) trait Msg {
     fn with_verion(&mut self, _: i32);
 
     //fn with_cbor(&mut self, _: &[u8]);
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 #[allow(dead_code)]

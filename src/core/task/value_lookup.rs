@@ -11,33 +11,56 @@ use super::task::{Task, State};
 #[allow(dead_code)]
 pub(crate) struct ValueLookupTask {
     //dht: Rc<&'a DHT>,
-    id: Id,
+    //id: Id,
 
     bootstrap: bool,
     want_token: bool,
 
-    result_fn: Option<Box<dyn FnMut(Option<Box<Value>>, &mut Box<dyn Task>)>>,
-
+    result_fn: Box<dyn FnMut(&mut Box<dyn Task>, Option<Box<Value>>)>,
     listeners: Vec<Box<dyn FnMut(&Box<dyn Task>)>>,
 }
 
 #[allow(dead_code)]
-impl ValueLookupTask {
-    pub(crate) fn new(id: &Id) -> Self {
-        ValueLookupTask {
-            //dht,
-            id: id.clone(),
-            bootstrap: false,
-            want_token: false,
-            result_fn: None,
-            listeners: Vec::new(),
+pub(crate) struct ValueLookupTaskBuilder<'a> {
+    name: Option<&'a str>,
+    target: &'a Id,
+
+    result_fn: Option<Box<dyn FnMut(&mut Box<dyn Task>, Option<Box<Value>>)>>,
+}
+
+impl<'a> ValueLookupTaskBuilder<'a> {
+    pub(crate) fn new(target: &'a Id) -> Self {
+        ValueLookupTaskBuilder {
+            name: Some("task"),
+            target,
+            result_fn: None
         }
-        // TODO:
+    }
+
+    pub(crate) fn with_name(&mut self, name: &'a str) {
+        self.name = Some(name);
     }
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(Option<Box<Value>>, &mut Box<dyn Task>) + 'static {
+    where F: FnMut(&mut Box<dyn Task>, Option<Box<Value>>) + 'static {
         self.result_fn = Some(Box::new(f));
+    }
+
+    pub(crate) fn build(&mut self) -> ValueLookupTask {
+        ValueLookupTask::new(self)
+    }
+}
+
+#[allow(dead_code)]
+impl ValueLookupTask {
+    pub(crate) fn new(builder: &mut ValueLookupTaskBuilder) -> Self {
+        ValueLookupTask {
+            //dht,
+            bootstrap: false,
+            want_token: false,
+            result_fn: builder.result_fn.take().unwrap(),
+            listeners: Vec::new(),
+        }
     }
 
     pub(crate) fn add_listener<F>(&mut self, f: F)
@@ -87,10 +110,6 @@ impl Task for ValueLookupTask {
         unimplemented!()
     }
 
-    fn with_name(&mut self, _: &str) {
-        unimplemented!()
-    }
-
     fn set_nested(&mut self, _: Box<dyn Task>) {
         unimplemented!()
     }
@@ -107,7 +126,7 @@ impl Task for ValueLookupTask {
         unimplemented!()
     }
 
-    fn call_response(&mut self, _: &Box<RpcCall>, _: &dyn Msg){
+    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>){
         unimplemented!()
     }
 

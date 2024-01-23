@@ -29,11 +29,11 @@ use crate::msg::{
     announce_peer_rsp::{self}
 };
 use crate::task::{
-    task::{self, Task},
+    task::Task,
     task_manager::TaskManager,
-    node_lookup::NodeLookupTask,
-    value_lookup::ValueLookupTask,
-    peer_lookup::PeerLookupTask
+    node_lookup::NodeLookupTaskBuilder,
+    value_lookup::ValueLookupTaskBuilder,
+    peer_lookup::PeerLookupTaskBuilder
 };
 
 use log::{info, warn, debug};
@@ -70,129 +70,95 @@ impl DHT {
     }
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where F: Fn(&Option<Box<Node>>) + 'static {
-        let mut found: Option<Box<Node>> = None;
-        match self.routing_table.bucket_entry(id) {
-            Some(e) => {
-                found = Some(Box::new(e.node().clone()));
-            },
-            None => {}
-        }
+    where F: Fn(Option<Box<Node>>) + 'static {
+        let mut entry = self.routing_table.bucket_entry(id).map(
+            |entry| Box::new(entry.node().clone())
+        );
 
-        let found_rc = Rc::new(RefCell::new(found.take()));
-        let found_shadow = Rc::clone(&found_rc);
+        let result = Rc::new(RefCell::new(entry.take()));
+        let result_shadow = Rc::clone(&result);
 
-        let mut task = Box::new(NodeLookupTask::new(id));
-        task.with_name("node lookup");
-
-        task.set_result_fn(move|_node, task| {
-            if _node.is_some() {
-                let mut found_borrowed = found_rc.borrow_mut();
-                *found_borrowed = Some(_node.as_ref().unwrap().clone());
+        let mut builder = NodeLookupTaskBuilder::new(id);
+        builder.with_name("node lookup");
+        builder.set_result_fn(move|arg_task, arg_node| {
+            if arg_node.is_some() {
+                let mut found_borrowed = result.borrow_mut();
+                *found_borrowed = Some(arg_node.unwrap());
             }
             if option == LookupOption::CONSERVATIVE {
-                task.cancel()
+                arg_task.cancel()
             }
         });
-
+        let mut task = Box::new(builder.build());
         task.add_listener(move |_| {
-            complete_fn(&found_shadow.borrow().clone());
+            complete_fn(result_shadow.borrow_mut().take());
         });
 
         self.task_manager.add(task as Box<dyn Task>);
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where F: Fn(&Option<Box<Value>>) + 'static {
-        let mut found: Option<Box<Value>> = None;
-        let mut task = Box::new(ValueLookupTask::new(id));
+    where F: Fn(Option<Box<Value>>) + 'static {
+        let mut empty: Option<Box<Value>> = None;
+        let result_ref = Rc::new(RefCell::new(empty.take()));
+        let result_shadow = Rc::clone(&result_ref);
 
-        let found_rc = Rc::new(RefCell::new(found.take()));
-        let found_shadow = Rc::clone(&found_rc);
-
-        task.with_name("value lookup");
-        task.set_result_fn(move | value_arg, task_arg| {
-            let mut found_borrowed = found_rc.borrow_mut();
-            match found_rc.borrow().as_ref() {
+        let mut builder = ValueLookupTaskBuilder::new(id);
+        builder.with_name("value lookup");
+        builder.set_result_fn(move | arg_task, arg_value| {
+            let mut found_borrowed = result_ref.borrow_mut();
+            let value_ref = arg_value.as_ref().unwrap();
+            match result_ref.borrow().as_ref() {
                 Some(value) => {
-                    if value_arg.as_ref().unwrap().is_mutable() &&
-                        value.sequence_number() < value_arg.as_ref().unwrap().sequence_number() {
-                        *found_borrowed = Some(value_arg.as_ref().unwrap().clone());
+                    if arg_value.as_ref().unwrap().is_mutable() &&
+                        value.sequence_number() < value_ref.sequence_number() {
+                        *found_borrowed = Some(value_ref.clone());
                     }
                 },
                 None => {
-                    *found_borrowed = Some(value_arg.as_ref().unwrap().clone())
+                    *found_borrowed = Some(value_ref.clone())
                 }
             }
-            if option != LookupOption::CONSERVATIVE ||
-                value_arg.as_ref().unwrap().is_mutable() {
-                    task_arg.cancel()
+            if option != LookupOption::CONSERVATIVE || value_ref.is_mutable() {
+                arg_task.cancel()
             }
         });
 
+        let mut task = Box::new(builder.build());
         task.add_listener(move |_| {
-            complete_fn(&found_shadow.borrow().clone());
+            complete_fn(result_shadow.borrow_mut().take());
         });
-        self.task_manager.add(task as Box<dyn Task>);
+
+        self.task_manager.add(Box::new(builder.build()));
     }
 
-    pub(crate) fn store_value<F>(&self, value: &Value, _: F)
-    where F: Fn(&Option<Vec<Box<Node>>>) + 'static {
-        let mut task = Box::new(NodeLookupTask::new(&value.id()));
-        task.with_want_token(true);
-        task.with_name("store_value");
-        task.add_listener(move |task_arg| {
-            if task_arg.state() != task::State::FINISHED {
-                return;
-            }
-
-            /*
-            auto closestSet = (static_cast<NodeLookup*>(t))->getClosestSet();
-        if (closestSet.size() == 0) {
-            // this should never happen
-            log->warn("!!! Value announce task not started because the node lookup task got the empty closest nodes.");
-            completeHandler({});
-            return;
-        }
-
-        auto announce = std::make_shared<ValueAnnounce>(this, closestSet, value);
-        announce->addListener([=](Task*) {
-            std::list<Sp<NodeInfo>> result{};
-            for(const auto& item: closestSet.getEntries()) {
-                result.push_back(item);
-            }
-            completeHandler(result);
-        });
-        announce->setName("Nested value Store");
-        t->setNestedTask(announce);
-        taskMan.add(announce);*/
-
-        });
-
-        self.task_manager.add(task as Box<dyn Task>);
+    pub(crate) fn store_value<F>(&self, _: &Value, _: F)
+    where F: Fn(Option<Vec<Box<Node>>>) + 'static {
+        unimplemented!()
     }
 
     pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
-    where F: Fn(&Option<Vec<Box<Peer>>>) + 'static {
-        let mut found: Option<Vec<Box<Peer>>> = None;
-        let mut task = Box::new(PeerLookupTask::new(id));
-        task.with_name("peer-lookup");
+    where F: Fn(Option<Vec<Box<Peer>>>) + 'static {
+        let mut empty: Option<Vec<Box<Peer>>> = None;
+        let result_rc = Rc::new(RefCell::new(empty.take()));
+        let result_shadow = Rc::clone(&result_rc);
 
-        let found_rc = Rc::new(RefCell::new(found.take()));
-        let found_shadow = Rc::clone(&found_rc);
-
-        task.set_result_fn(move |_, task_arg| {
-            let found_borrowed = found_rc.borrow_mut();
+        let mut builder = PeerLookupTaskBuilder::new(id);
+        builder.with_name("peer-lookup");
+        builder.set_result_fn(move |arg_task, _| {
+            let found_borrowed = result_rc.borrow_mut();
             // peers->insert(peers->end(), listOfPeers.begin(), listOfPeers.end());
             if option != LookupOption::CONSERVATIVE && (*found_borrowed).as_ref().unwrap().len() >= expected {
-                task_arg.cancel();
+                arg_task.cancel();
                 return;
             }
         });
 
+        let mut task = Box::new(builder.build());
         task.add_listener(move |_| {
-            complete_fn(&found_shadow.borrow())
+            complete_fn(result_shadow.borrow_mut().take())
         });
+
         self.task_manager.add(task as Box<dyn Task>);
     }
 

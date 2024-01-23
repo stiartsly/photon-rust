@@ -43,14 +43,13 @@ pub(crate) trait Task {
 
     fn age(&self) -> u128;
 
-    fn with_name(&mut self, _: &str);
     fn set_nested(&mut self, _: Box<dyn Task>);
 
     fn start(&mut self);
     fn cancel(&mut self);
 
     fn call_sent(&mut self, _: &Box<RpcCall>);
-    fn call_response(&mut self, _: &Box<RpcCall>, _: &dyn Msg);
+    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>);
     fn call_error(&mut self, _: &Box<RpcCall>);
     fn call_timeout(&mut self, _: &Box<RpcCall>);
 

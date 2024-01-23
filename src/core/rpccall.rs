@@ -1,4 +1,5 @@
 use std::boxed::Box;
+use crate::node::Node;
 use crate::msg::msg::Msg;
 use crate::id::Id;
 
@@ -15,6 +16,8 @@ enum State {
 
 #[allow(dead_code)]
 pub(crate) struct RpcCall {
+    target: Option<Box<Node>>,
+
     request: Box<dyn Msg>,
     response: Box<dyn Msg>,
 
@@ -28,6 +31,7 @@ pub(crate) struct RpcCall {
 impl RpcCall {
     pub(crate) fn new(req: Box<dyn Msg>, rsp: Box<dyn Msg>) -> Self {
         RpcCall {
+            target: None,
             request: req,
             response: rsp,
             on_state_change: Box::new(|_, _| {}),
@@ -47,5 +51,9 @@ impl RpcCall {
 
     pub(crate) fn id(&self) -> &Id {
         unimplemented!()
+    }
+
+    pub(crate) fn matches_target(&self) -> bool {
+        self.request.id() == self.target.as_ref().unwrap().id()
     }
 }
