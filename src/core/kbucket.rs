@@ -8,7 +8,7 @@ use log::{info};
 
 use crate::id::Id;
 use crate::prefix::Prefix;
-use crate::node::Connectivity;
+use crate::node::CheckReach;
 use crate::kbucket_entry::{KBucketEntry};
 use crate::constants;
 

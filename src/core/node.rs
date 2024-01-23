@@ -3,7 +3,7 @@ use std::net::{IpAddr, SocketAddr};
 use crate::id::Id;
 use crate::version;
 
-pub(crate) trait Connectivity {
+pub(crate) trait CheckReach {
     fn reachable(&self) -> bool;
     fn unreachable(&self) -> bool;
     fn with_reachable(&mut self, _: bool) -> &mut Self;
@@ -68,7 +68,7 @@ impl Node {
     }
 }
 
-impl Connectivity for Node {
+impl CheckReach for Node {
     fn reachable(&self) -> bool { false }
     fn unreachable(&self) -> bool { false }
     fn with_reachable(&mut self, _: bool) -> &mut Self { self }

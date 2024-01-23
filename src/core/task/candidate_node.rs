@@ -1,7 +1,7 @@
 use std::time::SystemTime;
-use crate::node::{Node, Connectivity};
 
-#[allow(dead_code)]
+use crate::node::{Node, CheckReach};
+
 #[derive(Debug)]
 pub(crate) struct CandidateNode {
     node: Node,
@@ -10,7 +10,7 @@ pub(crate) struct CandidateNode {
     last_reply: SystemTime,
 
     reachable: bool,
-    acked: bool,
+    // acked: bool, // TODO: CHECK
     pinged: i32,
 
     token: i32
@@ -24,10 +24,14 @@ impl CandidateNode {
             last_sent: SystemTime::UNIX_EPOCH,
             last_reply: SystemTime::UNIX_EPOCH,
             reachable,
-            acked: false,
+            // acked: false,
             pinged: 0,
             token: 0
         }
+    }
+
+    pub(crate) fn node(&self) -> &Node {
+        &self.node
     }
 
     pub(crate) fn set_sent(&mut self) {
@@ -64,7 +68,7 @@ impl CandidateNode {
     }
 }
 
-impl Connectivity for CandidateNode {
+impl CheckReach for CandidateNode {
     fn reachable(&self) -> bool {
         self.reachable
     }

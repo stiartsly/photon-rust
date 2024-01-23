@@ -3,30 +3,30 @@ use std::cell::RefCell;
 use std::net::SocketAddr;
 
 use crate::constants;
+use crate::version;
 use crate::id::Id;
 use crate::lookup_option::LookupOption;
 use crate::node::Node;
 use crate::peer::Peer;
-use crate::value::{Value};
+use crate::value::Value;
 use crate::rpccall::RpcCall;
 use crate::rpcserver::RpcServer;
 use crate::kclosest_nodes::KClosestNodes;
 use crate::token_manager::TokenManager;
 use crate::routing_table::RoutingTable;
-use crate::version;
 use crate::msg::{
     msg::{self, Msg},
     lookup::{self, Result},
     error::{self, ErrorResult},
-    ping_req::{self},
-    find_node_rsp::{self},
-    find_value_req::{self},
+    ping_req,
+    find_node_rsp,
+    find_value_req,
     find_value_rsp::{self, ValueResult},
     find_peer_rsp::{self, PeerResult},
-    store_value_req::{self},
-    store_value_rsp::{self},
-    announce_peer_req::{self},
-    announce_peer_rsp::{self}
+    store_value_req,
+    store_value_rsp,
+    announce_peer_req,
+    announce_peer_rsp
 };
 use crate::task::{
     task::Task,
@@ -40,33 +40,41 @@ use log::{info, warn, debug};
 
 #[allow(dead_code)]
 pub(crate) struct DHT {
+    // node: Rc<NodeRunner>,
+
+    server: Rc<RpcServer>,
+    token_man: TokenManager,
+
     addr: SocketAddr,
-    persist_root: String,
 
     routing_table: Box<RoutingTable>,
-    rpcserver: Rc<RpcServer>,
-    token_manager: TokenManager,
     task_manager: TaskManager,
 
+    persist_path: String,
     running: bool,
 }
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(addr: &SocketAddr, server: Rc<RpcServer>) -> Self {
-        DHT {
-            addr: addr.clone(),
-            persist_root: "".to_string(),
-            rpcserver: server,
+    pub(crate) fn new(binding_addr: &SocketAddr, server: Rc<RpcServer>) -> Self {
+        DHT { server,
+            token_man: TokenManager::new(),
+
+            addr: binding_addr.clone(),
+            persist_path: "".to_string(),
+
             routing_table: Box::new(RoutingTable::new()),
-            token_manager: TokenManager::new(),
             task_manager: TaskManager::new(),
             running: false,
         }
     }
 
     pub(crate) fn enable_persistence(&mut self, path: &str) {
-        self.persist_root = path.to_string()
+        self.persist_path = path.to_string()
+    }
+
+    pub(crate)fn bootstrap() {
+        unimplemented!()
     }
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
@@ -169,7 +177,7 @@ impl DHT {
 
     pub(crate) fn on_timeout(&self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
-        if !self.running || !self.rpcserver.is_reachable() {
+        if !self.running || !self.server.is_reachable() {
             return;
         }
         self.routing_table.on_timeout(call.id());
@@ -228,7 +236,7 @@ impl DHT {
         err.with_msg(str);
         err.with_code(code);
 
-        self.rpcserver.send_msg(err);
+        self.server.send_msg(err);
     }
 
 
@@ -239,7 +247,7 @@ impl DHT {
         msg.with_txid(request.txid());
         msg.with_addr(request.addr());
 
-        self.rpcserver.send_msg(msg);
+        self.server.send_msg(msg);
     }
 
     fn on_find_node<T>(&self, request: &Box<T>) where T: Msg + lookup::Condition {
@@ -266,11 +274,11 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-                self.token_manager.generate_token()
+                self.token_man.generate_token()
             }
         );
 
-        self.rpcserver.send_msg(resp)
+        self.server.send_msg(resp)
     }
 
     fn on_find_value<T>(&self, request: &Box<T>)
@@ -309,10 +317,10 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_manager.generate_token()
+            self.token_man.generate_token()
         });
 
-        self.rpcserver.send_msg(resp);
+        self.server.send_msg(resp);
     }
 
     fn on_store_value<T>(&self, request: &Box<T>)
@@ -320,7 +328,7 @@ impl DHT {
         let value = request.value();
         let value_id = value.id();
 
-        if !self.token_manager.verify_token(request.token(), request.id(), request.addr(), &value_id) {
+        if !self.token_man.verify_token(request.token(), request.id(), request.addr(), &value_id) {
             warn!("Received a store value request with invalid token from {}", request.addr());
             self.send_err(request.as_ref(), 203, "Invalid token for STORE VALUE request");
             return;
@@ -337,7 +345,7 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.rpcserver.send_msg(resp);
+        self.server.send_msg(resp);
     }
 
     fn on_find_peers<T>(&self, request: &Box<T>)
@@ -373,10 +381,10 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_manager.generate_token()
+            self.token_man.generate_token()
         });
 
-        self.rpcserver.send_msg(resp);
+        self.server.send_msg(resp);
     }
 
     fn on_announce_peer<T>(&self, request: &Box<T>)
@@ -384,10 +392,17 @@ impl DHT {
         let bogon = false;
 
         if bogon {
-            info!("Received an announce peer request from bogon address {}, ignored ", request.addr());
+            info!("Received an announce peer request from bogon address {}, ignored ",
+                request.addr()
+            );
         }
 
-        if !self.token_manager.verify_token(request.token(), request.id(), request.addr(), request.target()) {
+        if !self.token_man.verify_token(
+            request.token(),
+            request.id(),
+            request.addr(),
+            request.target()
+        ) {
             warn!("Received an announce peer request with invalid token from {}", request.addr());
             self.send_err(request.as_ref(), 203, "Invalid token for ANNOUNCE PEER request");
             return;
@@ -401,7 +416,10 @@ impl DHT {
             }
         };
 
-        debug!("Received an announce peer request from {}, saving peer {}", request.addr(), request.target());
+        debug!("Received an announce peer request from {}, saving peer {}",
+            request.addr(),
+            request.target()
+        );
         // TODO: Store peers.
 
         let mut resp = Box::new(announce_peer_rsp::Message::new());
@@ -410,6 +428,6 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.rpcserver.send_msg(resp);
+        self.server.send_msg(resp);
     }
 }

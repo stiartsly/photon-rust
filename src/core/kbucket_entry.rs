@@ -2,7 +2,7 @@ use std::fmt;
 use std::net::{SocketAddr};
 use std::time::{SystemTime, Duration};
 use crate::id::Id;
-use crate::node::{Node, Connectivity};
+use crate::node::{Node, CheckReach};
 use crate::constants;
 use crate::version;
 
@@ -148,7 +148,7 @@ impl KBucketEntry {
     }
 }
 
-impl Connectivity for KBucketEntry {
+impl CheckReach for KBucketEntry {
     fn reachable(&self) -> bool {
         self.reachable
     }

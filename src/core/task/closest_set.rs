@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::id::Id;
+use crate::id::{Id, distance};
 use super::candidate_node::CandidateNode;
 
 #[allow(dead_code)]
@@ -42,7 +42,12 @@ impl ClosestSet {
         self.closest.get(id).is_some()
     }
 
-    pub(crate) fn add(&self, _: &Box<CandidateNode>) {
+    pub(crate) fn add(&mut self, candidate: Box<CandidateNode>) {
+        let _ = self.closest.insert(
+            candidate.node().id().clone(),
+            candidate
+        );
+
         unimplemented!()
     }
 
@@ -51,14 +56,27 @@ impl ClosestSet {
     }
 
     pub(crate) fn tail(&self) -> Id {
-        unimplemented!()
+        match self.closest.is_empty() {
+            true => distance(&self.target, &Id::max()),
+            false => {
+                let (id, _) = self.closest.iter().last().unwrap();
+                id.clone()
+            }
+        }
     }
 
     pub(crate) fn head(&self) -> Id {
-        unimplemented!()
+        match self.closest.is_empty() {
+            true => distance(&self.target, &Id::max()),
+            false => {
+                let (id, _) = self.closest.iter().next().unwrap();
+                id.clone()
+            }
+        }
     }
 
     pub(crate) fn is_eligible(&self) -> bool {
-        self.reach_capacity() && self.insert_attempt_since_tail_modification > self.capacity
+        self.reach_capacity() &&
+            self.insert_attempt_since_tail_modification > self.capacity
     }
 }
