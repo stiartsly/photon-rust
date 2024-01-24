@@ -180,7 +180,7 @@ impl DHT {
         if !self.running || !self.server.is_reachable() {
             return;
         }
-        self.routing_table.on_timeout(call.id());
+        self.routing_table.on_timeout(call.target_id());
     }
 
     pub(crate) fn on_send(&self, id: &Id) {

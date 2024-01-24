@@ -209,7 +209,7 @@ impl Task for NodeLookupTask {
     fn call_responsed(&mut self, call: &Box<RpcCall>, rsp: &Box<dyn Msg>) {
         // TODO: LookupTask::callResponsed(xxx)
 
-        if !call.matches_target() ||
+        if !call.matches_id() ||
             rsp.kind() != msg::Kind::Response ||
             rsp.method() != msg::Method::FindNode {
             return
