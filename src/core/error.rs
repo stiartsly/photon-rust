@@ -1,7 +1,6 @@
 use std::{fmt, io, net, result};
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct BosonError {
     kind: Error,
 }
@@ -70,9 +69,3 @@ impl From<net::AddrParseError> for BosonError {
 }
 
 pub type Result<T> = result::Result<T, BosonError>;
-
-#[allow(dead_code)]
-fn example_function() -> Result<()> {
-    //Err(BosonError::generic("An example error"))
-    unimplemented!()
-}

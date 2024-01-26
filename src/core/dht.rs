@@ -259,7 +259,7 @@ impl DHT {
 
         resp.populate_closest_nodes4(request.want4(), || {
             Some(KClosestNodes::new(
-                self, // TODO: about DHT reference
+                Rc::new(self),
                 request.target(),
                 constants::MAX_ENTRIES_PER_BUCKET
             ).fill(true).as_nodes())
@@ -267,7 +267,7 @@ impl DHT {
 
         resp.populate_closest_nodes6(request.want6(), || {
             Some(KClosestNodes::new(
-                self, // TODO: about DHT reference
+                Rc::new(self),
                 request.target(),
                 constants::MAX_ENTRIES_PER_BUCKET
             ).fill(true).as_nodes())
@@ -303,14 +303,16 @@ impl DHT {
         });
 
         resp.populate_closest_nodes4(request.want4() && has_value, || {
-            Some(KClosestNodes::new(self,
+            Some(KClosestNodes::new(
+                Rc::new(&self),
                 request.target(),
                 constants::MAX_ENTRIES_PER_BUCKET
             ).fill(true).as_nodes())
         });
 
         resp.populate_closest_nodes6(request.want6() && has_value, || {
-            Some(KClosestNodes::new(self,
+            Some(KClosestNodes::new(
+                Rc::new(&self),
                 request.target(),
                 constants::MAX_ENTRIES_PER_BUCKET
             ).fill(true).as_nodes())
@@ -367,14 +369,16 @@ impl DHT {
         });
 
         resp.populate_closest_nodes4(request.want4() && has_peers, || {
-            Some(KClosestNodes::new(self,
+            Some(KClosestNodes::new(
+                Rc::new(&self),
                 request.target(),
                 constants::MAX_ENTRIES_PER_BUCKET
             ).fill(true).as_nodes())
         });
 
         resp.populate_closest_nodes6(request.want6() && has_peers, || {
-            Some(KClosestNodes::new(self,
+            Some(KClosestNodes::new(
+                Rc::new(&self),
                 request.target(),
                 constants::MAX_ENTRIES_PER_BUCKET
             ).fill(true).as_nodes())

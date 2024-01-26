@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::vec::Vec;
 use std::collections::LinkedList;
 
@@ -9,7 +10,7 @@ use crate::kbucket::KBucket;
 
 #[allow(dead_code)]
 pub(crate) struct KClosestNodes<'a> {
-    dht: &'a DHT,
+    dht: Rc<&'a DHT>,
     target: &'a Id,
 
     entries: LinkedList<Box<KBucketEntry>>,
@@ -20,7 +21,10 @@ pub(crate) struct KClosestNodes<'a> {
 
 #[allow(dead_code)]
 impl<'a> KClosestNodes<'a> {
-    pub(crate) fn new(dht: &'a DHT, target: &'a Id, max_entries: usize) -> Self {
+    pub(crate) fn new(dht: Rc<&'a DHT>,
+        target: &'a Id,
+        max_entries: usize
+    ) -> Self {
         KClosestNodes {
             dht,
             target,
@@ -30,8 +34,12 @@ impl<'a> KClosestNodes<'a> {
         }
     }
 
-    pub(crate) fn with_filter<F>(dht: &'a DHT, target: &'a Id, max_entries: usize, filter: &'static F) -> Self
-    where F: Fn(&Box<KBucketEntry>) -> bool {
+    pub(crate) fn with_filter<F>(dht: Rc<&'a DHT>,
+        target: &'a Id,
+        max_entries: usize,
+        filter: F
+    ) -> Self
+    where F: Fn(&Box<KBucketEntry>) -> bool + 'static{
         KClosestNodes {
             dht,
             target,
@@ -41,7 +49,7 @@ impl<'a> KClosestNodes<'a> {
         }
     }
 
-    pub(crate) const fn targget(&self) -> &Id {
+    pub(crate) const fn target(&self) -> &Id {
         &self.target
     }
 
@@ -49,7 +57,11 @@ impl<'a> KClosestNodes<'a> {
         self.entries.len()
     }
 
-    pub(crate) fn is_full(&self) -> bool {
+    pub(crate) fn fill(&mut self, _: bool) -> &Self {
+        unimplemented!()
+    }
+
+    pub(crate) fn full(&self) -> bool {
         self.entries.len() >= self.max_entries
     }
 
@@ -61,11 +73,16 @@ impl<'a> KClosestNodes<'a> {
         })
     }
 
-    pub(crate) fn fill(&mut self, _: bool) -> &Self {
-        unimplemented!()
-    }
-
     fn shave(&self) {
+        let overshoot = self.entries.len() - self.max_entries;
+        if overshoot <= 0 {
+            return;
+        }
+
+        /*self.entries.sort_by(|a, b| {
+            self.target.three_way_compare(a.id(), b.id())
+        }); */
+
         unimplemented!()
     }
 

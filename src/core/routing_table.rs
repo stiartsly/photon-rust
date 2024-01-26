@@ -21,12 +21,12 @@ impl RoutingTable {
         }
     }
 
-    pub(crate) fn attach_dht(&mut self, dht: Rc<DHT>) -> &mut Self {
+    pub(crate) fn binding_dht(&mut self, dht: Rc<DHT>) -> &mut Self {
         self.dht = Some(dht); self
     }
 
-    fn dht(&self) -> &Rc<DHT> {
-        &self.dht.as_ref().unwrap()
+    fn dht(&self) -> Rc<DHT> {
+        self.dht.as_ref().unwrap().clone()
     }
 
     fn bucket_mut(&self, _: &Id) -> &mut Box<KBucket> {
@@ -85,7 +85,7 @@ impl RoutingTable {
         unimplemented!();
     }
 
-    fn _put(&mut self, entry: Box<KBucketEntry>) {
+    fn _put(&mut self, entry: &Box<KBucketEntry>) {
         let id = entry.id();
         let mut bucket = self.bucket_mut(id);
 

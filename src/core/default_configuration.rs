@@ -1,4 +1,3 @@
-use std::option::{Option};
 use std::net::SocketAddr;
 use crate::node::Node;
 use crate::config::Config;
