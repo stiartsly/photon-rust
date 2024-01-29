@@ -3,6 +3,8 @@ use crate::signature;
 use crate::cryptobox;
 use crate::error::Error;
 
+use sha2::{Digest, Sha256};
+
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Value {
@@ -38,19 +40,18 @@ pub struct EncryptedValueBuidler<'a> {
 
 impl<'a> ValueBuilder<'a> {
     pub fn default(value: &'a [u8]) -> Self {
+        assert!(!value.is_empty(), "Value data can not be empty");
         ValueBuilder { data: value }
     }
 
-    pub fn build(&self) -> Result<Value, Error> {
-        if self.data.is_empty() {
-            return Err(Error::Argument(format!("Value can not be empty")));
-        }
-        Ok(Value::default(self))
+    pub fn build(&self) -> Value {
+        Value::default(self)
     }
 }
 
 impl<'a> SignedValueBuidler<'a> {
     pub fn default(value: &'a [u8]) -> Self {
+        assert!(!value.is_empty(), "Value data can not be empty");
         SignedValueBuidler {
             data: value,
             keypair: None,
@@ -59,11 +60,11 @@ impl<'a> SignedValueBuidler<'a> {
         }
     }
 
-    pub fn with_keypair(&mut self, keypair: &'a signature::KeyPair) -> &mut Self {
+    pub fn with_keypair(&mut self, keypair: &signature::KeyPair) -> &mut Self {
         self.keypair = Some(keypair.clone()); self
     }
 
-    pub fn with_nonce(&mut self, nonce: &'a cryptobox::Nonce) -> &mut Self {
+    pub fn with_nonce(&mut self, nonce: &cryptobox::Nonce) -> &mut Self {
         self.nonce = Some(nonce.clone()); self
     }
 
@@ -71,10 +72,7 @@ impl<'a> SignedValueBuidler<'a> {
         self.seq = sequence_number; self
     }
 
-    pub fn buld(&mut self) -> Result<Value, Error> {
-        if self.data.is_empty() {
-            return Err(Error::Argument(format!("Value can not be empty")));
-        }
+    pub fn buld(&mut self) -> Value {
         if self.keypair.is_none() {
             self.keypair = Some(signature::KeyPair::random());
         }
@@ -82,12 +80,13 @@ impl<'a> SignedValueBuidler<'a> {
             self.nonce = Some(cryptobox::Nonce::random());
         }
 
-        Ok(Value::with_signed(self))
+        Value::with_signed(self)
     }
 }
 
 impl<'a> EncryptedValueBuidler<'a> {
     pub fn default(value: &'a [u8], recipient: &'a Id) -> Self {
+        assert!(!value.is_empty(), "Value data can not be empty");
         EncryptedValueBuidler {
             data: value,
             keypair: None,
@@ -97,11 +96,11 @@ impl<'a> EncryptedValueBuidler<'a> {
         }
     }
 
-    pub fn with_keypair(&mut self, keypair: &'a signature::KeyPair) -> &mut Self {
+    pub fn with_keypair(&mut self, keypair: &signature::KeyPair) -> &mut Self {
         self.keypair = Some(keypair.clone()); self
     }
 
-    pub fn with_nonce(&mut self, nonce: &'a cryptobox::Nonce) -> &mut Self {
+    pub fn with_nonce(&mut self, nonce: &cryptobox::Nonce) -> &mut Self {
         self.nonce = Some(nonce.clone()); self
     }
 
@@ -109,10 +108,7 @@ impl<'a> EncryptedValueBuidler<'a> {
         self.seq = sequence_number; self
     }
 
-    pub fn buld(&mut self) -> Result<Value, Error> {
-        if self.data.is_empty() {
-            return Err(Error::Argument(format!("Value can not be empty")));
-        }
+    pub fn buld(&mut self) -> Value {
         if self.keypair.is_none() {
             self.keypair = Some(signature::KeyPair::random());
         }
@@ -120,7 +116,7 @@ impl<'a> EncryptedValueBuidler<'a> {
             self.nonce = Some(cryptobox::Nonce::random());
         }
 
-        Ok(Value::with_encrypted(self))
+        Value::with_encrypted(self)
     }
 }
 
@@ -164,7 +160,20 @@ impl Value {
     }
 
     pub fn id(&self) -> Id {
-        unimplemented!()
+        let mut input: Vec<u8> = Vec::new();
+        match self.pk.as_ref() {
+            Some(pk) => {
+                input.extend_from_slice(pk.as_bytes());
+                input.extend_from_slice(self.nonce.as_ref().unwrap().as_bytes());
+            },
+            None => {
+                input.extend_from_slice(self.data.as_ref())
+            }
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(input);
+        Id::try_from_bytes(hasher.finalize().as_slice())
     }
 
     pub fn public_key(&self) -> Option<&Id> {
@@ -191,10 +200,6 @@ impl Value {
         self.nonce.as_ref()
     }
 
-    pub fn has_signature(&self) -> bool {
-        self.signature.is_some()
-    }
-
     pub fn signature(&self) -> Option<&[u8]> {
         match self.signature.as_ref() {
             Some(s) => Some(&s[..]),
@@ -204,6 +209,15 @@ impl Value {
 
     pub fn data(&self) -> &[u8] {
         &self.data[..]
+    }
+
+    pub fn size(&self) -> usize {
+        let mut len = self.data.len();
+        match self.signature.as_ref() {
+            Some(sig) => len += sig.len(),
+            None => {}
+        }
+        len
     }
 
     pub fn is_encrypted(&self) -> bool {
@@ -224,11 +238,36 @@ impl Value {
 }
 
 impl std::fmt::Display for Value {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "id:{}", self.id())?;
+        if self.is_mutable() {
+            write!(f,
+                ",publicKey:{}, nonce:{}",
+                self.pk.as_ref().unwrap(),
+                self.nonce.as_ref().unwrap()
+            )?;
+        }
+        if self.is_encrypted() {
+            write!(f,
+                ",recipient:{}",
+                self.recipent.as_ref().unwrap()
+            )?;
+        }
+        if self.is_signed() {
+            write!(f,
+                ",sig:{}",
+                hex::encode(self.signature.as_ref().unwrap())
+            )?;
+        }
+        write!(f,
+            "seq:{}, data:{}",
+            self.seq,
+            hex::encode(self.data.as_slice())
+        )?;
+        Ok(())
     }
 }
 
-pub fn value_id(_: &Value) -> Id {
-    unimplemented!()
+pub fn value_id(value: &Value) -> Id {
+    value.id()
 }

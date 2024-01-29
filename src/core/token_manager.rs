@@ -1,14 +1,22 @@
-use std::net::SocketAddr;
+use std::net::{SocketAddr, IpAddr};
 use std::time::SystemTime;
 use crate::id::Id;
 
-const TOKEN_TIMEOUT: u128 = 5 * 60 * 1000;   //5 minutes
+use sha2::{Digest, Sha256};
 
 macro_rules! as_millis {
     ($time:expr) => {{
         $time.elapsed().unwrap().as_millis()
     }};
 }
+
+macro_rules! as_usize {
+    ($val:expr) => {{
+        $val as usize
+    }};
+}
+
+const TOKEN_TIMEOUT: u128 = 5 * 60 * 1000;   //5 minutes
 
 #[allow(dead_code)]
 pub(crate) struct TokenManager {
@@ -21,11 +29,11 @@ pub(crate) struct TokenManager {
 impl TokenManager {
     pub(crate) fn new() -> Self {
         let mut seed = [0u8; 32];
-        unsafe {
+        unsafe { // // Always success.
             libsodium_sys::randombytes_buf(
                 seed.as_mut_ptr() as *mut libc::c_void,
                 32
-            ); // Always success.
+            );
         }
         TokenManager {
             session_secret: seed,
@@ -60,15 +68,29 @@ impl TokenManager {
     }
 }
 
-fn generate_token(_: &Id, _: &SocketAddr, _: &Id, _: &SystemTime, _: &[u8]) -> i32 {
-    /*let port:u16 = addr.port();
+fn generate_token(nodeid: &Id, addr: &SocketAddr, target: &Id, timestamp: &SystemTime, secret: &[u8]) -> i32 {
+    let port:u16 = addr.port();
 
     let mut input: Vec<u8> = Vec::new();
-    input.extend_from_slice(nodeid.as_vec());
+    input.extend_from_slice(nodeid.as_bytes());
     input.extend_from_slice(port.to_le_bytes().as_ref());
-    input.extend_from_slice(target.as_vec());
+    input.extend_from_slice(target.as_bytes());
+    match addr.ip() {
+        IpAddr::V4(ipv4) => input.extend_from_slice(ipv4.octets().as_ref()),
+        IpAddr::V6(ipv6) => input.extend_from_slice(ipv6.octets().as_ref())
+    };
     input.extend_from_slice(as_millis!(timestamp).to_le_bytes().as_ref());
-    input.extend_from_slice(session_secret);
-    digest(input)*/
-    unimplemented!()
+    input.extend_from_slice(secret);
+
+    let mut hasher = Sha256::new();
+    hasher.update(input);
+    let digest = hasher.finalize().to_vec();
+
+    let pos = (as_usize!(digest[0]) & 0xff) & 0x1f ; // mod 32
+    let token = ((as_usize!(digest[pos]) & 0xff) << 24) |
+            ((as_usize!(digest[(pos + 1) & 0x1f]) & 0xff) << 16) |
+            ((as_usize!(digest[(pos + 2) & 0x1f]) & 0xff) << 8) |
+            (as_usize!(digest[(pos + 3) & 0x1f]) & 0xff);
+
+    token as i32
 }

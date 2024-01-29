@@ -22,6 +22,16 @@ impl Nonce {
     pub fn random() -> Nonce {
         Nonce {}
     }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        unimplemented!()
+    }
+}
+
+impl std::fmt::Display for Nonce {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unimplemented!()
+    }
 }
 
 impl KeyPair {

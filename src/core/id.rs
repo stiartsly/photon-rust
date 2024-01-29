@@ -38,6 +38,20 @@ impl Id {
         Id { bytes }
     }
 
+    pub fn try_from_bytes(bytes: &[u8]) -> Self {
+        assert_eq!(
+            bytes.len(),
+            ID_BYTES,
+            "Incorrect bytes length {} for Id, should be {}",
+            bytes.len(),
+            ID_BYTES
+        );
+
+        let mut _bytes = [0u8; ID_BYTES];
+        _bytes.copy_from_slice(bytes);
+        Id { bytes: _bytes }
+    }
+
     pub fn try_from_hex(idstr: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
         let _ = hex::decode_to_slice(idstr, &mut bytes[..]).map_err(|err| match err {
@@ -103,7 +117,7 @@ impl Id {
         ID_BYTES
     }
 
-    pub fn as_vec(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         self.bytes.as_ref()
     }
 
