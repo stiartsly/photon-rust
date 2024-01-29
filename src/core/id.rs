@@ -99,6 +99,14 @@ impl Id {
         unimplemented!()
     }
 
+    pub fn size(&self) -> usize {
+        ID_BYTES
+    }
+
+    pub fn as_vec(&self) -> &[u8] {
+        self.bytes.as_ref()
+    }
+
     pub fn three_way_compare(&self, id1: &Self, id2: &Self) -> Ordering {
         let mut mmi = i32::MAX;
         for i in 0..ID_BYTES {

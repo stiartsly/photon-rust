@@ -86,6 +86,12 @@ impl KBucketEntry {
         self.reachable && self.failed_requests < 3
     }
 
+    pub(crate) fn is_eligible_for_local_lookup(&self) -> bool {
+        // allow implicit initial ping during lookups
+        // TODO: make this work now that we don't keep unverified entries in the main bucket
+        (self.reachable && self.failed_requests <= 3) || self.failed_requests <= 0
+    }
+
     /**
      * Should be called to signal that a request to this node has timed out;
      */
@@ -102,7 +108,6 @@ impl KBucketEntry {
     }
 
     pub(crate) fn needs_ping(&self) -> bool {
-
         // don't ping if recently seen to allow NAT entries to time out
         // see https://arxiv.org/pdf/1605.05606v1.pdf for numbers
         // and do exponential backoff after failures to reduce traffic

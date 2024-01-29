@@ -190,7 +190,7 @@ impl DHT {
         self.routing_table.on_send(id)
     }
 
-    fn on_message<T>(&self, msg: &Box<T> )
+    fn on_message<T>(&mut self, msg: &Box<T> )
     where T: Msg + lookup::Condition + find_value_req::ValueOption + store_value_req::StoreOption +
         announce_peer_req::AnnounceOption + error::ErrorResult{
         match msg.kind() {
@@ -200,7 +200,7 @@ impl DHT {
         }
     }
 
-    fn on_request<T>(&self, msg: &Box<T>)
+    fn on_request<T>(&mut self, msg: &Box<T>)
     where T: Msg + lookup::Condition + find_value_req::ValueOption + store_value_req::StoreOption +
         announce_peer_req::AnnounceOption {
         match msg.method() {
@@ -274,7 +274,11 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-                self.token_man.generate_token()
+                self.token_man.generate_token(
+                    request.id(),
+                    request.addr(),
+                    request.target()
+                )
             }
         );
 
@@ -319,13 +323,17 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man.generate_token()
+            self.token_man.generate_token(
+                request.id(),
+                request.addr(),
+                request.target()
+            )
         });
 
         self.server.send_msg(resp);
     }
 
-    fn on_store_value<T>(&self, request: &Box<T>)
+    fn on_store_value<T>(&mut self, request: &Box<T>)
     where T: Msg + lookup::Condition + store_value_req::StoreOption {
         let value = request.value();
         let value_id = value.id();
@@ -385,13 +393,17 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man.generate_token()
+            self.token_man.generate_token(
+                request.id(),
+                request.addr(),
+                request.target()
+            )
         });
 
         self.server.send_msg(resp);
     }
 
-    fn on_announce_peer<T>(&self, request: &Box<T>)
+    fn on_announce_peer<T>(&mut self, request: &Box<T>)
     where T: Msg + lookup::Condition + announce_peer_req::AnnounceOption {
         let bogon = false;
 
