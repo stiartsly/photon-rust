@@ -220,7 +220,7 @@ fn load_key(key_path: &str) -> Result<KeyPair, &'static str> {
         return Err("Incorrect key size");
     }
 
-    Ok(KeyPair::from_private_key_data(buf.as_slice())?)
+    Ok(KeyPair::from_private_key_bytes(buf.as_slice()))
 }
 
 fn init_key(key_pair: &KeyPair, key_path: &str) -> Result<(), &'static str> {

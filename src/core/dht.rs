@@ -426,7 +426,7 @@ impl DHT {
 
         let peers = request.peers();
         for peer in peers.iter() {
-            if peer.is_valid().is_err() {
+            if !peer.is_valid() {
                 self.send_err(request.as_ref(), 203, "One peer is invalid peer");
                 return;
             }

@@ -106,7 +106,7 @@ impl Id {
     }
 
     pub fn to_signature_key(&self) -> signature::PublicKey {
-        signature::PublicKey::from(self.bytes.as_slice()).unwrap()
+        signature::PublicKey::from(self.bytes.as_slice())
     }
 
     pub fn to_encryption_key(&self) -> cryptobox::PublicKey {
@@ -118,7 +118,7 @@ impl Id {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.as_ref()
+        self.bytes.as_slice()
     }
 
     pub fn three_way_compare(&self, id1: &Self, id2: &Self) -> Ordering {
