@@ -8,7 +8,17 @@ use libsodium_sys::{
     crypto_box_BEFORENMBYTES,
     crypto_box_MACBYTES,
     crypto_sign_ed25519_sk_to_curve25519,
-    crypto_sign_ed25519_pk_to_curve25519
+    crypto_sign_ed25519_pk_to_curve25519,
+    randombytes_buf,
+    sodium_increment,
+    crypto_box_keypair,
+    crypto_scalarmult_base,
+    crypto_box_seed_keypair,
+    crypto_box_beforenm,
+    crypto_box_easy_afternm,
+    crypto_box_open_easy_afternm,
+    crypto_box_easy,
+    crypto_box_open_easy
 };
 
 use crate::signature;
@@ -31,9 +41,7 @@ impl PrivateKey {
     pub const BYTES: usize = 32;
 
     pub fn new() -> Self {
-        PrivateKey {
-            key: [0; Self::BYTES]
-        }
+        PrivateKey { key: [0; Self::BYTES] }
     }
 
     pub fn from(input: &[u8]) -> Self {
@@ -154,11 +162,32 @@ impl Nonce {
         }
     }
     pub fn random() -> Self {
-        unimplemented!()
+        let mut nonce = [0u8; Self::BYTES];
+        unsafe { // Always success.
+            randombytes_buf(
+                nonce.as_mut_ptr() as *mut libc::c_void,
+                Self::BYTES
+            );
+        }
+        Nonce { nonce }
+    }
+
+    pub fn increment(&mut self) -> &Self {
+        unsafe { // Always success.
+            sodium_increment(
+                self.nonce.as_mut_ptr() as *mut libc::c_uchar,
+                Self::BYTES
+            )
+        }
+        self
+    }
+
+    pub fn size(&self) -> usize {
+        Self::BYTES
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        unimplemented!()
+        self.nonce.as_slice()
     }
 
     pub fn clear(&mut self) {
@@ -167,8 +196,9 @@ impl Nonce {
 }
 
 impl std::fmt::Display for Nonce {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        unimplemented!()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", hex::encode(self.nonce))?;
+        Ok(())
     }
 }
 
@@ -183,19 +213,99 @@ impl KeyPair {
     pub const SEED_BYTES: usize = 32;
 
     pub fn new() -> Self {
-        unimplemented!()
+        let mut pk = vec!(0u8; PublicKey::BYTES);
+        let mut sk = vec!(0u8; PrivateKey::BYTES);
+
+        unsafe {// Always success.
+            crypto_box_keypair(
+                pk.as_mut_ptr() as *mut libc::c_uchar,
+                sk.as_mut_ptr() as *mut libc::c_uchar
+            );
+        }
+
+        KeyPair {
+            sk: PrivateKey::from(sk.as_slice()),
+            pk: PublicKey::from(pk.as_slice())
+        }
     }
 
-    pub fn from_private_key(_: &PrivateKey) -> Self {
-        unimplemented!()
+    pub fn from(sk: &[u8]) -> Self {
+        assert_eq!(
+            sk.len(),
+            PrivateKey::BYTES,
+            "Invalid raw private key size {}, should be {}",
+            sk.len(),
+            PrivateKey::BYTES
+        );
+
+        let mut pk = vec!(0u8; PublicKey::BYTES);
+
+        unsafe {
+            crypto_scalarmult_base(
+                pk.as_mut_ptr() as *mut libc::c_uchar,
+                sk.as_ptr() as *const libc::c_uchar
+            );
+        }
+
+        KeyPair {
+            sk: PrivateKey::from(sk),
+            pk: PublicKey::from(pk.as_slice())
+        }
     }
 
-    pub fn from_seed(_: &[u8]) -> Self {
-        unimplemented!()
+    pub fn from_private_key(sk: &PrivateKey) -> Self {
+        let mut pk = vec!(0u8; PublicKey::BYTES);
+
+        unsafe {
+            crypto_scalarmult_base(
+                pk.as_mut_ptr() as *mut libc::c_uchar,
+                sk.as_bytes().as_ptr() as *const libc::c_uchar,
+            );
+        }
+
+        KeyPair {
+            sk: sk.clone(),
+            pk: PublicKey::from(pk.as_slice())
+        }
     }
 
-    pub fn from_signature_keypair(_: &signature::KeyPair) -> Self {
-        unimplemented!()
+    pub fn from_seed(seed: &[u8]) -> Self {
+        assert_eq!(
+            seed.len(),
+            KeyPair::SEED_BYTES,
+            "Invalid seed size {}, should be {}",
+            seed.len(),
+            KeyPair::SEED_BYTES
+        );
+
+        let mut pk = vec!(0u8; PublicKey::BYTES);
+        let mut sk = vec!(0u8; PrivateKey::BYTES);
+
+        unsafe {
+            crypto_box_seed_keypair(
+                pk.as_mut_ptr() as *mut libc::c_uchar,
+                sk.as_mut_ptr() as *mut libc::c_uchar,
+                seed.as_ptr() as *const libc::c_uchar
+            );
+        }
+
+        KeyPair {
+            sk: PrivateKey::from(sk.as_slice()),
+            pk: PublicKey::from(pk.as_slice())
+        }
+    }
+
+    pub fn from_signature_keypair(sign_keypair: &signature::KeyPair) -> Self {
+        let mut x25519 = vec!(0u8; crypto_box_SECRETKEYBYTES as usize);
+
+        unsafe {
+            crypto_sign_ed25519_sk_to_curve25519(
+                x25519.as_mut_ptr() as *mut libc::c_uchar,
+                sign_keypair.private_key().as_bytes().as_ptr() as *const libc::c_uchar
+            );
+        }
+
+        Self::from(x25519.as_slice())
     }
 
     pub fn private_key(&self) -> &PrivateKey {
@@ -222,11 +332,28 @@ impl CryptoBox {
     pub const MAC_BYTES: usize = 16;
 
     pub fn new() -> Self {
-        unimplemented!()
+        CryptoBox {
+            key: [0u8; Self::SYMMETRIC_KEY_BYTES]
+        }
     }
 
-    pub fn from(_: &PublicKey, _: &PrivateKey) -> Self {
-        unimplemented!()
+    pub fn try_from(pk: &PublicKey, sk: &PrivateKey) -> Result<Self, Error> {
+        let mut k = vec!(0u8; Self::SYMMETRIC_KEY_BYTES);
+        unsafe {
+            let result = crypto_box_beforenm(
+                k.as_mut_ptr() as *mut libc::c_uchar,
+                pk.as_bytes().as_ptr() as *const libc::c_uchar,
+                sk.as_bytes().as_ptr() as *const libc::c_uchar
+            );
+
+            if result != 0 {
+                return Err(Error::Crypto(format!("Compute symmetric key failed, wrong pk or sk")));
+            }
+        }
+
+        Ok(CryptoBox {
+            key: k.try_into().unwrap()
+        })
     }
 
     pub fn size(&self) -> usize {
@@ -241,43 +368,144 @@ impl CryptoBox {
         self.key.fill(0)
     }
 
-    pub fn encrypt(&self, _: &mut [u8], _: &[u8], _: &Nonce) {
-        unimplemented!()
+    pub fn encrypt(&self, cipher: &mut [u8], plain: &[u8], nonce: &Nonce) -> Result<(), Error>{
+        if cipher.len() < plain.len() + crypto_box_MACBYTES as usize {
+            return Err(Error::Argument(format!("The cipher buffer is too small")));
+        }
+
+        unsafe {
+            let result = crypto_box_easy_afternm(
+                cipher.as_mut_ptr() as *mut libc::c_uchar,
+                plain.as_ptr() as *const libc::c_uchar,
+                plain.len() as libc::c_ulonglong,
+                nonce.as_bytes().as_ptr() as *const libc::c_uchar,
+                self.key.as_ptr() as *const libc::c_uchar
+            );
+            if result != 0 {
+                return Err(Error::Crypto(format!("Encrypt data failed")));
+            }
+        }
+
+        Ok(())
     }
 
     pub fn encrypt_into(&self, plain: &[u8], nonce: &Nonce) -> Vec<u8> {
         let mut cipher = vec!(0u8; plain.len() + Self::MAC_BYTES);
-        self.encrypt(cipher.as_mut_slice(), plain, nonce);
+        self.encrypt(cipher.as_mut_slice(), plain, nonce).unwrap();
         cipher
     }
 
-    pub fn decrypt(&self, _: &mut[u8], _: &[u8], _: &Nonce) {
-        unimplemented!()
+    pub fn decrypt(&self, plain: &mut[u8], cipher: &[u8], nonce: &Nonce) -> Result<(), Error> {
+        if plain.len() < cipher.len() - crypto_box_MACBYTES as usize {
+            return Err(Error::Argument(format!("The plain buffer is too small")));
+        }
+
+        unsafe {
+            let result = crypto_box_open_easy_afternm(
+                plain.as_mut_ptr() as *mut libc::c_uchar,
+                cipher.as_ptr() as *const libc::c_uchar,
+                cipher.len() as libc::c_ulonglong,
+                nonce.as_bytes().as_ptr() as *const libc::c_uchar,
+                self.key.as_ptr() as *const libc::c_uchar
+            );
+            if result != 0 {
+                return Err(Error::Crypto(format!("Encrypt data failed")));
+            }
+        }
+
+        Ok(())
     }
 
     pub fn decrypt_into(&self, cipher: &[u8], nonce: &Nonce) -> Vec<u8> {
         let mut plain = vec!(0u8; cipher.len() - Self::MAC_BYTES);
-        self.decrypt(plain.as_mut_slice(), cipher, nonce);
+        self.decrypt(plain.as_mut_slice(), cipher, nonce).unwrap();
         plain
     }
 }
 
-pub fn encrypt(_: &mut [u8], _: &[u8], _: &Nonce, _: &PublicKey, _: &PrivateKey) {
-    unimplemented!()
+pub fn encrypt(cipher: &mut [u8],
+    plain: &[u8],
+    nonce: &Nonce,
+    pk: &PublicKey,
+    sk: &PrivateKey
+) -> Result<(), Error> {
+
+    if cipher.len() < plain.len() + crypto_box_MACBYTES as usize {
+        return Err(Error::Argument(format!("The cipher buffer is too small")));
+    }
+
+    unsafe {
+        let result = crypto_box_easy(
+            cipher.as_mut_ptr() as *mut libc::c_uchar,
+            plain.as_ptr() as *const libc::c_uchar,
+            plain.len() as libc::c_ulonglong,
+            nonce.as_bytes().as_ptr() as *const libc::c_uchar,
+            pk.as_bytes().as_ptr() as *const libc::c_uchar,
+            sk.as_bytes().as_ptr() as *const libc::c_uchar
+        );
+        if result != 0 {
+            return Err(Error::Crypto(format!("Encrypt data failed")));
+        }
+    }
+    Ok(())
 }
 
-pub fn encrypt_into(plain: &[u8], nonce: &Nonce, pk: &PublicKey, sk: &PrivateKey) -> Vec<u8> {
+pub fn encrypt_into(plain: &[u8],
+    nonce: &Nonce,
+    pk: &PublicKey,
+    sk: &PrivateKey
+) -> Vec<u8> {
     let mut cipher = vec!(0u8; plain.len() + CryptoBox::MAC_BYTES);
-    encrypt(cipher.as_mut_slice(), plain, nonce, pk, sk);
+    encrypt(cipher.as_mut_slice(), plain, nonce, pk, sk).unwrap();
     cipher
 }
 
-pub fn decrypt(_: &mut [u8], _: &[u8], _: &Nonce, _: &PublicKey, _: &PrivateKey) {
-    unimplemented!()
+/*
+void CryptoBox::decrypt(Blob& plain, const Blob& cipher,
+        const PublicKey& pk, const PrivateKey& sk, const Nonce& nonce)
+{
+    assert(plain.size() >= cipher.size() - crypto_box_MACBYTES);
+    if (plain.size() < cipher.size() - crypto_box_MACBYTES)
+        throw std::invalid_argument("The plain buffer is too small.");
+
+    if (crypto_box_open_easy(plain.ptr(), cipher.ptr(), cipher.size(), nonce.bytes(), pk.bytes(), sk.bytes()) != 0)
+        throw CryptoError(std::string("Decrypt data failed."));
+}*/
+
+pub fn decrypt(plain: &mut [u8],
+    cipher: &[u8],
+    nonce: &Nonce,
+    pk: &PublicKey,
+    sk: &PrivateKey
+) -> Result<(), Error> {
+    if plain.len() < cipher.len() - crypto_box_MACBYTES as usize {
+        return Err(Error::Argument(format!("The plain buffer is too small")));
+    }
+
+    unsafe {
+        let result = crypto_box_open_easy(
+            plain.as_mut_ptr() as *mut libc::c_uchar,
+            cipher.as_ptr() as *const libc::c_uchar,
+            cipher.len() as libc::c_ulonglong,
+            nonce.as_bytes().as_ptr() as *const libc::c_uchar,
+            pk.as_bytes().as_ptr() as *const libc::c_uchar,
+            sk.as_bytes().as_ptr() as *const libc::c_uchar
+        );
+
+        if result != 0 {
+            return Err(Error::Crypto(format!("Decrypt data failed")))
+        }
+    }
+
+    Ok(())
 }
 
-pub fn decrypt_into(cipher: &[u8], nonce: &Nonce, pk: &PublicKey, sk: &PrivateKey) -> Vec<u8> {
+pub fn decrypt_into(cipher: &[u8],
+    nonce: &Nonce,
+    pk: &PublicKey,
+    sk: &PrivateKey
+) -> Vec<u8> {
     let mut plain = vec!(0u8; cipher.len() - CryptoBox::MAC_BYTES);
-    decrypt(plain.as_mut_slice(), cipher, nonce, pk, sk);
+    decrypt(plain.as_mut_slice(), cipher, nonce, pk, sk).unwrap();
     plain
 }
