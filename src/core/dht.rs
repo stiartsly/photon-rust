@@ -344,7 +344,7 @@ impl DHT {
             return;
         }
 
-        if value.is_valid().is_err() {
+        if !value.is_valid() {
             self.send_err(request.as_ref(), 203, "Invalid value");
             return;
         }

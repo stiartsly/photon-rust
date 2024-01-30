@@ -77,7 +77,7 @@ impl CheckReach for CandidateNode {
         self.pinged >= 3
     }
 
-    fn with_reachable(&mut self, reachable: bool) -> &mut Self {
+    fn set_reachable(&mut self, reachable: bool) -> &mut Self {
         self.reachable = reachable; self
     }
 }

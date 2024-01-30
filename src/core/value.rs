@@ -1,11 +1,9 @@
-use crate::id::Id;
+use crate::id::{self, Id};
 use crate::signature;
 use crate::cryptobox;
-use crate::error::Error;
 
 use sha2::{Digest, Sha256};
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Value {
     pk: Option<Id>,
@@ -134,8 +132,7 @@ impl Value {
     }
 
     fn with_signed(b: &SignedValueBuidler) -> Value {
-        // TODO: signature.
-        Value {
+        let mut value = Value {
             pk: Some(Id::from_signature_key(b.keypair.unwrap().public_key())),
             sk: Some(b.keypair.unwrap().private_key().clone()),
             recipent: None,
@@ -143,12 +140,17 @@ impl Value {
             signature: None,
             data: b.data.to_vec(),
             seq: b.seq,
-        }
+        };
+        let signature = signature::sign(
+            value.to_signdata().as_slice(),
+            value.sk.as_ref().unwrap()
+        );
+        value.signature = Some(signature);
+        value
     }
 
     fn with_encrypted(b: &EncryptedValueBuidler) -> Value {
-        // TODO: signature.
-        Value {
+        let mut value = Value {
             pk: Some(Id::from_signature_key(b.keypair.unwrap().public_key())),
             sk: Some(b.keypair.unwrap().private_key().clone()),
             recipent: Some(b.recipient.clone()),
@@ -156,7 +158,24 @@ impl Value {
             signature: None,
             data: b.data.to_vec(),
             seq: b.seq
-        }
+        };
+
+        let owner_sk = cryptobox::PrivateKey::from_signature_key(
+            b.keypair.unwrap().private_key()
+        );
+
+        value.data = cryptobox::encrypt_into(
+            b.data,
+            b.nonce.as_ref().unwrap(),
+            &b.recipient.to_encryption_key(),
+            &owner_sk.unwrap());
+
+        let signature = signature::sign(
+            value.to_signdata().as_slice(),
+            value.sk.as_ref().unwrap()
+        );
+        value.signature = Some(signature);
+        value
     }
 
     pub fn id(&self) -> Id {
@@ -208,7 +227,7 @@ impl Value {
     }
 
     pub fn data(&self) -> &[u8] {
-        &self.data[..]
+        self.data.as_slice()
     }
 
     pub fn size(&self) -> usize {
@@ -232,8 +251,39 @@ impl Value {
         self.pk.is_some()
     }
 
-    pub fn is_valid(&self) -> Result<bool, Error> {
-        unimplemented!()
+    pub fn is_valid(&self) -> bool {
+        assert!(!self.data.is_empty(), "data should not be empty");
+
+        match self.is_mutable() {
+            true => signature::verify(
+                self.to_signdata().as_slice(),
+                self.signature.as_ref().unwrap().as_slice(),
+                &self.public_key().unwrap().to_signature_key()
+            ),
+            false => true
+        }
+    }
+
+    fn to_signdata(&self) -> Vec<u8> {
+        let mut len = 0;
+
+        len += match self.is_encrypted() {
+            true => { id::ID_BYTES },
+            false => { 0 }
+        };
+        len += cryptobox::Nonce::BYTES;
+        len += std::mem::size_of::<i32>();
+        len += self.data.len();
+
+        let mut input:Vec<u8> = Vec::with_capacity(len);
+        if self.is_encrypted() {
+            input.extend_from_slice(self.recipent.unwrap().as_bytes());
+        }
+        input.extend_from_slice(self.nonce.unwrap().as_bytes());
+        input.extend_from_slice(self.seq.to_le_bytes().as_ref());
+        input.extend_from_slice(self.data.as_ref());
+
+        input
     }
 }
 

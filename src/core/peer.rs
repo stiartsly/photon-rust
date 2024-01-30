@@ -1,7 +1,12 @@
 use unicode_normalization::UnicodeNormalization;
 
 use crate::id::{Id, ID_BYTES};
-use crate::signature::{PrivateKey, KeyPair, Signature};
+use crate::signature::{
+    self,
+    PrivateKey,
+    KeyPair,
+    Signature
+};
 
 #[derive(Debug)]
 pub struct Peer {
@@ -136,7 +141,7 @@ impl Peer {
         self.fill_sign_data(&mut data);
 
         let pk = self.pk.to_signature_key();
-        Signature::verify_with(data.as_ref(), self.signature.as_slice(), &pk)
+        signature::verify(data.as_ref(), self.signature.as_slice(), &pk)
     }
 
     fn fill_sign_data<'a>(&self, _: &'a mut [u8]) {

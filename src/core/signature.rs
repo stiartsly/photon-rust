@@ -377,12 +377,12 @@ impl Signature {
             result == 0
         }
     }
+}
 
-    pub fn sign_with(&self, data: &[u8], sk: &PrivateKey) -> Vec<u8> {
-        sk.sign_into(data)
-    }
+pub fn sign(data: &[u8], sk: &PrivateKey) -> Vec<u8> {
+    sk.sign_into(data)
+}
 
-    pub fn verify_with(data: &[u8], signature: &[u8], pk: &PublicKey) -> bool {
-        pk.verify(data, signature)
-    }
+pub fn verify(data: &[u8], signature: &[u8], pk: &PublicKey) -> bool {
+    pk.verify(data, signature)
 }

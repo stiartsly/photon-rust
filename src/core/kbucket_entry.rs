@@ -130,7 +130,7 @@ impl KBucketEntry {
         self.last_sent = self.last_sent.max(other.last_sent);
 
         if other.reachable() {
-            self.with_reachable(true);
+            self.set_reachable(true);
         }
         if other.failed_requests() > 0 {
             self.failed_requests = self.failed_requests.min(other.failed_requests);
@@ -171,7 +171,7 @@ impl CheckReach for KBucketEntry {
         self.last_sent == SystemTime::UNIX_EPOCH
     }
 
-    fn with_reachable(&mut self, reachable: bool) -> &mut Self {
+    fn set_reachable(&mut self, reachable: bool) -> &mut Self {
         self.reachable = reachable; self
     }
 }

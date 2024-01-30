@@ -6,7 +6,7 @@ use crate::version;
 pub(crate) trait CheckReach {
     fn reachable(&self) -> bool;
     fn unreachable(&self) -> bool;
-    fn with_reachable(&mut self, _: bool) -> &mut Self;
+    fn set_reachable(&mut self, _: bool) -> &mut Self;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -71,7 +71,7 @@ impl Node {
 impl CheckReach for Node {
     fn reachable(&self) -> bool { false }
     fn unreachable(&self) -> bool { false }
-    fn with_reachable(&mut self, _: bool) -> &mut Self { self }
+    fn set_reachable(&mut self, _: bool) -> &mut Self { self }
 }
 
 impl std::fmt::Display for Node {
