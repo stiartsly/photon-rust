@@ -1,5 +1,5 @@
+use std::mem;
 use unicode_normalization::UnicodeNormalization;
-
 use crate::id::{Id, ID_BYTES};
 use crate::signature::{
     self,
@@ -13,10 +13,10 @@ pub struct Peer {
     pk: Id,
     sk: Option<PrivateKey>,
     id: Id,
-    origin: Option<Id>,
+    origin: Id,
     port: u16,
     url: Option<String>,
-    signature: Vec<u8>,
+    sig: Vec<u8>,
 }
 
 #[allow(dead_code)]
@@ -26,7 +26,7 @@ pub struct Builder<'a> {
     origin: Option<&'a Id>,
     port: u16,
     url: Option<&'a str>,
-    signature: Option<&'a [u8]>
+    sig: Option<&'a [u8]>
 }
 
 impl<'a> Builder<'a> {
@@ -37,7 +37,7 @@ impl<'a> Builder<'a> {
             origin: None,
             port: 0,
             url: None,
-            signature: None
+            sig: None
         }
     }
     pub fn with_keypair(&mut self, keypair: &'a KeyPair) -> &mut Self {
@@ -71,15 +71,15 @@ impl Peer {
             sk: Some(*b.keypair.unwrap().private_key()),
             id: b.id.clone(),
             origin: match b.origin {
-                Some(origin) => Some (origin.clone()),
-                None => None
+                Some(origin) => origin.clone(),
+                None => b.id.clone()
             },
             port: b.port,
             url: match b.url {
                 Some(url) => {Some(url.nfc().collect::<String>())},
                 None => None,
             },
-            signature: Vec::new()
+            sig: Vec::new()
         }
     }
 
@@ -99,12 +99,8 @@ impl Peer {
         &self.id
     }
 
-    pub fn has_origin(&self) -> bool {
-        self.origin.is_some()
-    }
-
-    pub fn origin(&self) -> Option<&Id> {
-        self.origin.as_ref()
+    pub fn origin(&self) -> &Id {
+        &self.origin
     }
 
     pub fn port(&self) -> u16 {
@@ -119,41 +115,47 @@ impl Peer {
         self.url.as_ref()
     }
 
-    pub fn signature(&self) -> &Vec<u8> {
-        &self.signature
+    pub fn signature(&self) -> &[u8] {
+        &self.sig
     }
 
     pub fn is_delegated(&self) -> bool {
-        self.origin.is_some() && self.origin.unwrap() != self.id
+        self.origin != self.id
     }
 
     pub fn is_valid(&self) -> bool {
         assert_eq!(
-            self.signature.len(),
+            self.sig.len(),
             Signature::BYTES,
             "Invalid signature data length {}, should be {}",
-            self.signature.len(),
+            self.sig.len(),
             Signature::BYTES
         );
 
-        let capacity = self.fill_sign_data_size();
-        let mut data = vec![0u8; capacity];
-        self.fill_sign_data(&mut data);
-
+        let sigdata = self.to_signdata();
         let pk = self.pk.to_signature_key();
-        signature::verify(data.as_ref(), self.signature.as_slice(), &pk)
+        signature::verify(sigdata.as_ref(), self.sig.as_slice(), &pk)
     }
 
-    fn fill_sign_data<'a>(&self, _: &'a mut [u8]) {
-        unimplemented!()
-    }
+    fn to_signdata(&self) -> Vec<u8> {
+        let mut len: usize = 0;
 
-    fn fill_sign_data_size(&self) -> usize {
-        let mut size = ID_BYTES * 2 + std::mem::size_of::<u16>();
+        len += ID_BYTES * 2;
+        len += mem::size_of::<u16>();
+
         if self.url.is_some() {
-            size += self.url.as_deref().unwrap().len();
+            len += self.url.as_ref().unwrap().len();
         }
-        return size;
+
+        let mut input:Vec<u8> = Vec::with_capacity(len);
+        input.extend_from_slice(self.id.as_bytes());
+        input.extend_from_slice(self.origin.as_bytes());
+        input.extend_from_slice(self.port.to_le_bytes().as_ref());
+
+        if self.url.is_some() {
+            input.extend_from_slice(self.url.as_ref().unwrap().as_ref());
+        }
+        input
     }
 }
 
@@ -161,7 +163,7 @@ impl std::fmt::Display for Peer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{},{},", self.pk, self.id)?;
         if self.is_delegated() {
-            write!(f, "{},", self.origin.unwrap())?;
+            write!(f, "{},", self.origin)?;
         }
         write!(f, "{}", self.port)?;
         if self.url.is_some() {
