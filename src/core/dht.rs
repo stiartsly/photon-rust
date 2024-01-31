@@ -12,7 +12,7 @@ use crate::value::Value;
 use crate::rpccall::RpcCall;
 use crate::rpcserver::RpcServer;
 use crate::kclosest_nodes::KClosestNodes;
-use crate::token_manager::TokenManager;
+use crate::token_man::TokenManager;
 use crate::routing_table::RoutingTable;
 use crate::msg::{
     msg::{self, Msg},
