@@ -38,7 +38,7 @@ impl Id {
         Id { bytes }
     }
 
-    pub fn try_from_bytes(bytes: &[u8]) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         assert_eq!(
             bytes.len(),
             ID_BYTES,

@@ -1,8 +1,8 @@
 use std::net::{SocketAddr, IpAddr};
 use std::time::SystemTime;
-use crate::id::Id;
-
 use sha2::{Digest, Sha256};
+
+use crate::id::Id;
 
 macro_rules! as_millis {
     ($time:expr) => {{
@@ -18,14 +18,12 @@ macro_rules! as_usize {
 
 const TOKEN_TIMEOUT: u128 = 5 * 60 * 1000;   //5 minutes
 
-#[allow(dead_code)]
 pub(crate) struct TokenManager {
     session_secret: [u8; 32],
     timestamp: SystemTime,
     previous_timestamp: SystemTime
 }
 
-#[allow(dead_code)]
 impl TokenManager {
     pub(crate) fn new() -> Self {
         let mut seed = [0u8; 32];
@@ -69,12 +67,13 @@ impl TokenManager {
 }
 
 fn generate_token(nodeid: &Id, addr: &SocketAddr, target: &Id, timestamp: &SystemTime, secret: &[u8]) -> i32 {
+    let mut input: Vec<u8> = Vec::new();
     let port:u16 = addr.port();
 
-    let mut input: Vec<u8> = Vec::new();
     input.extend_from_slice(nodeid.as_bytes());
     input.extend_from_slice(port.to_le_bytes().as_ref());
     input.extend_from_slice(target.as_bytes());
+
     match addr.ip() {
         IpAddr::V4(ipv4) => input.extend_from_slice(ipv4.octets().as_ref()),
         IpAddr::V6(ipv6) => input.extend_from_slice(ipv6.octets().as_ref())

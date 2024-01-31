@@ -1,4 +1,5 @@
 use std::fmt;
+use std::mem;
 use static_assertions::const_assert;
 use libsodium_sys::{
     randombytes_buf,
@@ -23,6 +24,18 @@ const_assert!(PublicKey::BYTES == crypto_sign_PUBLICKEYBYTES as usize);
 const_assert!(KeyPair::SEED_BYTES == crypto_sign_SEEDBYTES as usize);
 const_assert!(Signature::BYTES == crypto_sign_BYTES as usize);
 
+macro_rules! as_uchar_ptr {
+    ($val:expr) => {{
+        $val.as_ptr() as *const libc::c_uchar
+    }};
+}
+
+macro_rules! as_uchar_ptr_mut {
+    ($val:expr) => {{
+        $val.as_mut_ptr() as *mut libc::c_uchar
+    }};
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PrivateKey {
     key: [u8; Self::BYTES]
@@ -46,8 +59,9 @@ impl PrivateKey {
             Self::BYTES
         );
 
-        let sk: [u8; Self::BYTES] = input.try_into().unwrap();
-        PrivateKey { key: sk }
+        PrivateKey {
+            key: input.try_into().unwrap()
+        }
     }
 
     pub fn size(&self) -> usize {
@@ -71,21 +85,21 @@ impl PrivateKey {
             Signature::BYTES
         );
 
-        unsafe {
+        unsafe { // Always success
             crypto_sign_detached(
-                signature.as_mut_ptr(),
+                as_uchar_ptr_mut!(signature),
                 std::ptr::null_mut(),
-                data.as_ptr(),
-                data.len() as u64,
-                self.key.as_ptr()
-            ); // Always success
+                as_uchar_ptr!(data),
+                data.len() as libc::c_ulonglong,
+                as_uchar_ptr!(self.key)
+            );
         }
     }
 
     pub fn sign_into(&self, data: &[u8]) -> Vec<u8> {
-        let mut signature = vec![0u8; Signature::BYTES];
-        self.sign(data, signature.as_mut_slice());
-        signature
+        let mut sig = vec![0u8; Signature::BYTES];
+        self.sign(data, sig.as_mut_slice());
+        sig
     }
 }
 
@@ -120,8 +134,9 @@ impl PublicKey {
             Self::BYTES
         );
 
-        let pk: [u8; Self::BYTES] = input.try_into().unwrap();
-        PublicKey { key: pk }
+        PublicKey {
+            key: input.try_into().unwrap()
+        }
     }
 
     pub fn size(&self) -> usize {
@@ -147,10 +162,10 @@ impl PublicKey {
 
         unsafe {
             let rc = crypto_sign_verify_detached(
-                signature.as_ptr(),
-                data.as_ptr(),
-                data.len() as u64,
-                self.key.as_ptr(),
+                as_uchar_ptr!(signature),
+                as_uchar_ptr!(data),
+                data.len() as libc::c_ulonglong,
+                as_uchar_ptr!(self.key)
             );
 
             match rc {
@@ -184,8 +199,8 @@ impl KeyPair {
 
         unsafe { // Always success
             crypto_sign_keypair(
-                pk.as_mut_ptr(),
-                sk.as_mut_ptr()
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr_mut!(sk)
             );
         }
         KeyPair {
@@ -198,11 +213,11 @@ impl KeyPair {
         let sk = input.clone();
         let mut pk = vec![0u8; PublicKey::BYTES];
 
-        unsafe {
+        unsafe { // Always success
             crypto_sign_ed25519_sk_to_pk(
-                pk.as_mut_ptr(),
-                input.as_bytes().as_ptr()
-            ); // Always success
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr!(input.as_bytes())
+            );
         }
         KeyPair {
             sk,
@@ -220,11 +235,11 @@ impl KeyPair {
         );
 
         let mut pk = vec![0u8; PublicKey::BYTES];
-        unsafe {
+        unsafe { // Always success
             crypto_sign_ed25519_sk_to_pk(
-                pk.as_mut_ptr(),
-                input.as_ptr()
-            ); // Always success
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr!(input)
+            );
         }
 
         KeyPair {
@@ -247,10 +262,10 @@ impl KeyPair {
 
         unsafe {
             crypto_sign_seed_keypair(
-                pk.as_mut_ptr(),
-                sk.as_mut_ptr(),
-                input.as_ptr()
-            ); // Always success
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr_mut!(sk),
+                as_uchar_ptr!(input)
+            );
         }
         KeyPair {
             sk: PrivateKey::from(&sk),
@@ -260,22 +275,22 @@ impl KeyPair {
 
     pub fn random() -> Self {
         let mut seed = [0u8; KeyPair::SEED_BYTES];
-        unsafe {
+        unsafe { // Always success.
             randombytes_buf(
                 seed.as_mut_ptr() as *mut libc::c_void,
                 KeyPair::SEED_BYTES
-            ); // Always success.
+            );
         }
 
         let mut sk = vec![0u8; PrivateKey::BYTES];
         let mut pk = vec![0u8; PublicKey::BYTES];
 
-        unsafe {
+        unsafe { // Always success
             crypto_sign_seed_keypair(
-                pk.as_mut_ptr(),
-                sk.as_mut_ptr(),
-                seed.as_ptr()
-            ); // Always success
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr_mut!(sk),
+                as_uchar_ptr!(seed)
+            );
         }
         KeyPair {
             sk: PrivateKey::from(&sk),
@@ -314,7 +329,7 @@ impl Signature {
 
     pub fn reset(&mut self) {
         assert!(
-            std::mem::size_of::<SignState>() >= std::mem::size_of::<crypto_sign_state>(),
+            mem::size_of::<SignState>() >= mem::size_of::<crypto_sign_state>(),
             "Inappropriate signature state size."
         );
 
@@ -328,51 +343,52 @@ impl Signature {
         let s = &mut self.state.0 as *mut _ as *mut crypto_sign_state;
         unsafe {
             crypto_sign_update(s,
-                part.as_ptr() as *mut libc::c_uchar,
-                part.len() as u64
+                as_uchar_ptr!(part),
+                part.len() as libc::c_ulonglong,
             );
         }
     }
 
-    pub fn sign(&mut self, sign: &mut [u8], sk: &PrivateKey) {
+    pub fn sign(&mut self, sig: &mut [u8], sk: &PrivateKey) {
         assert_eq!(
-            sign.len(),
+            sig.len(),
             Signature::BYTES,
             "Invalid signature length {}, should be {}",
-            sign.len(),
+            sig.len(),
             Signature::BYTES
         );
 
         let s = &mut self.state.0 as *mut _ as *mut crypto_sign_state;
         unsafe {
             crypto_sign_final_create(s,
-                sign.as_ptr() as *mut libc::c_uchar,
+                as_uchar_ptr_mut!(sig),
                 std::ptr::null_mut(),
-                sk.as_bytes().as_ptr() as *mut libc::c_uchar
+                as_uchar_ptr!(sk.as_bytes())
             );
         }
     }
 
     pub fn sign_into(&mut self, sk: &PrivateKey) -> Vec<u8> {
-        let mut signature = vec![0u8; Self::BYTES];
-        self.sign(signature.as_mut_slice(), sk);
-        signature
+        let mut sig = vec![0u8; Self::BYTES];
+        self.sign(sig.as_mut_slice(), sk);
+        sig
     }
 
-    pub fn verify(&mut self, sign: &[u8], pk: &PublicKey) -> bool {
+    pub fn verify(&mut self, sig: &[u8], pk: &PublicKey) -> bool {
         assert_eq!(
-            sign.len(),
+            sig.len(),
             Signature::BYTES,
             "Invalid signature length {}, should be {}",
-            sign.len(),
+            sig.len(),
             Signature::BYTES
         );
 
         let s = &mut self.state.0 as *mut _ as *mut crypto_sign_state;
         unsafe {
-            let result = crypto_sign_final_verify(s,
-                sign.as_ptr() as *mut libc::c_uchar,
-                pk.as_bytes().as_ptr() as *mut libc::c_uchar
+            let result = crypto_sign_final_verify(
+                s,
+                as_uchar_ptr!(sig),
+                as_uchar_ptr!(pk.as_bytes())
             );
             result == 0
         }

@@ -4,13 +4,19 @@ use crate::cryptobox;
 
 use sha2::{Digest, Sha256};
 
+macro_rules! unwrap {
+    ($val:expr) => {{
+        $val.as_ref().unwrap()
+    }};
+}
+
 #[derive(Clone, Debug)]
 pub struct Value {
     pk: Option<Id>,
     sk: Option<signature::PrivateKey>,
-    recipent: Option<Id>,
+    recipient: Option<Id>,
     nonce: Option<cryptobox::Nonce>,
-    signature: Option<Vec<u8>>,
+    sig: Option<Vec<u8>>,
     data: Vec<u8>,
     seq: i32
 }
@@ -19,7 +25,7 @@ pub struct ValueBuilder<'a> {
     data:&'a [u8]
 }
 
-pub struct SignedValueBuidler<'a> {
+pub struct SignedBuidler<'a> {
     keypair: Option<signature::KeyPair>,
     nonce: Option<cryptobox::Nonce>,
 
@@ -27,7 +33,7 @@ pub struct SignedValueBuidler<'a> {
     seq: i32
 }
 
-pub struct EncryptedValueBuidler<'a> {
+pub struct EncryptedBuilder<'a> {
     keypair: Option<signature::KeyPair>,
     nonce: Option<cryptobox::Nonce>,
 
@@ -47,10 +53,10 @@ impl<'a> ValueBuilder<'a> {
     }
 }
 
-impl<'a> SignedValueBuidler<'a> {
+impl<'a> SignedBuidler<'a> {
     pub fn default(value: &'a [u8]) -> Self {
         assert!(!value.is_empty(), "Value data can not be empty");
-        SignedValueBuidler {
+        SignedBuidler {
             data: value,
             keypair: None,
             nonce: None,
@@ -78,19 +84,19 @@ impl<'a> SignedValueBuidler<'a> {
             self.nonce = Some(cryptobox::Nonce::random());
         }
 
-        Value::with_signed(self)
+        Value::signed(self)
     }
 }
 
-impl<'a> EncryptedValueBuidler<'a> {
+impl<'a> EncryptedBuilder<'a> {
     pub fn default(value: &'a [u8], recipient: &'a Id) -> Self {
         assert!(!value.is_empty(), "Value data can not be empty");
-        EncryptedValueBuidler {
+        EncryptedBuilder {
             data: value,
             keypair: None,
             nonce: None,
-            recipient,
-            seq: 0
+            seq: 0,
+            recipient
         }
     }
 
@@ -114,7 +120,7 @@ impl<'a> EncryptedValueBuidler<'a> {
             self.nonce = Some(cryptobox::Nonce::random());
         }
 
-        Value::with_encrypted(self)
+        Value::encrypted(self)
     }
 }
 
@@ -123,39 +129,45 @@ impl Value {
         Value {
             pk: None,
             sk: None,
-            recipent: None,
+            recipient: None,
             nonce: None,
-            signature: None,
+            sig: None,
             data: b.data.to_vec(),
             seq: -1
         }
     }
 
-    fn with_signed(b: &SignedValueBuidler) -> Value {
+    fn signed(b: &SignedBuidler) -> Value {
+        assert!(b.keypair.is_some());
+        assert!(b.nonce.is_some());
+
         let mut value = Value {
             pk: Some(Id::from_signature_key(b.keypair.unwrap().public_key())),
             sk: Some(b.keypair.unwrap().private_key().clone()),
-            recipent: None,
+            recipient: None,
             nonce: Some(b.nonce.unwrap().clone()),
-            signature: None,
+            sig: None,
             data: b.data.to_vec(),
             seq: b.seq,
         };
-        let signature = signature::sign(
+        let sig = signature::sign(
             value.to_signdata().as_slice(),
             value.sk.as_ref().unwrap()
         );
-        value.signature = Some(signature);
+        value.sig = Some(sig);
         value
     }
 
-    fn with_encrypted(b: &EncryptedValueBuidler) -> Value {
+    fn encrypted(b: &EncryptedBuilder) -> Value {
+        assert!(b.keypair.is_some());
+        assert!(b.nonce.is_some());
+
         let mut value = Value {
             pk: Some(Id::from_signature_key(b.keypair.unwrap().public_key())),
             sk: Some(b.keypair.unwrap().private_key().clone()),
-            recipent: Some(b.recipient.clone()),
+            recipient: Some(b.recipient.clone()),
             nonce: Some(b.nonce.unwrap().clone()),
-            signature: None,
+            sig: None,
             data: b.data.to_vec(),
             seq: b.seq
         };
@@ -166,15 +178,15 @@ impl Value {
 
         value.data = cryptobox::encrypt_into(
             b.data,
-            b.nonce.as_ref().unwrap(),
+            unwrap!(b.nonce),
             &b.recipient.to_encryption_key(),
             &owner_sk.unwrap());
 
-        let signature = signature::sign(
+        let sig = signature::sign(
             value.to_signdata().as_slice(),
-            value.sk.as_ref().unwrap()
+            unwrap!(value.sk),
         );
-        value.signature = Some(signature);
+        value.sig = Some(sig);
         value
     }
 
@@ -183,16 +195,16 @@ impl Value {
         match self.pk.as_ref() {
             Some(pk) => {
                 input.extend_from_slice(pk.as_bytes());
-                input.extend_from_slice(self.nonce.as_ref().unwrap().as_bytes());
+                input.extend_from_slice(unwrap!(self.nonce).as_bytes());
             },
             None => {
-                input.extend_from_slice(self.data.as_ref())
+                input.extend_from_slice(self.data.as_slice())
             }
         }
 
-        let mut hasher = Sha256::new();
-        hasher.update(input);
-        Id::try_from_bytes(hasher.finalize().as_slice())
+        let mut sha256 = Sha256::new();
+        sha256.update(input);
+        Id::from_bytes(sha256.finalize().as_slice())
     }
 
     pub fn public_key(&self) -> Option<&Id> {
@@ -200,7 +212,7 @@ impl Value {
     }
 
     pub fn recipient(&self) -> Option<&Id> {
-        self.recipent.as_ref()
+        self.recipient.as_ref()
     }
 
     pub fn has_private_key(&self) -> bool {
@@ -220,8 +232,8 @@ impl Value {
     }
 
     pub fn signature(&self) -> Option<&[u8]> {
-        match self.signature.as_ref() {
-            Some(s) => Some(&s[..]),
+        match self.sig.as_ref() {
+            Some(s) => Some(s.as_slice()),
             None => None
         }
     }
@@ -232,7 +244,7 @@ impl Value {
 
     pub fn size(&self) -> usize {
         let mut len = self.data.len();
-        match self.signature.as_ref() {
+        match self.sig.as_ref() {
             Some(sig) => len += sig.len(),
             None => {}
         }
@@ -240,11 +252,11 @@ impl Value {
     }
 
     pub fn is_encrypted(&self) -> bool {
-        self.recipent.is_some()
+        self.recipient.is_some()
     }
 
     pub fn is_signed(&self) -> bool {
-        self.signature.is_some()
+        self.sig.is_some()
     }
 
     pub fn is_mutable(&self) -> bool {
@@ -252,16 +264,20 @@ impl Value {
     }
 
     pub fn is_valid(&self) -> bool {
-        assert!(!self.data.is_empty(), "data should not be empty");
+        assert!(!self.data.is_empty());
 
-        match self.is_mutable() {
-            true => signature::verify(
-                self.to_signdata().as_slice(),
-                self.signature.as_ref().unwrap().as_slice(),
-                &self.public_key().unwrap().to_signature_key()
-            ),
-            false => true
+        if !self.is_mutable() {
+            return true;
         }
+
+        assert!(self.sig.is_some());
+        assert!(self.pk.is_some());
+
+        signature::verify(
+            self.to_signdata().as_slice(),
+            unwrap!(self.sig).as_slice(),
+            &unwrap!(self.pk).to_signature_key()
+        )
     }
 
     fn to_signdata(&self) -> Vec<u8> {
@@ -277,9 +293,9 @@ impl Value {
 
         let mut input:Vec<u8> = Vec::with_capacity(len);
         if self.is_encrypted() {
-            input.extend_from_slice(self.recipent.unwrap().as_bytes());
+            input.extend_from_slice(unwrap!(self.recipient).as_bytes());
         }
-        input.extend_from_slice(self.nonce.unwrap().as_bytes());
+        input.extend_from_slice(unwrap!(self.nonce).as_bytes());
         input.extend_from_slice(self.seq.to_le_bytes().as_ref());
         input.extend_from_slice(self.data.as_ref());
 
@@ -293,20 +309,20 @@ impl std::fmt::Display for Value {
         if self.is_mutable() {
             write!(f,
                 ",publicKey:{}, nonce:{}",
-                self.pk.as_ref().unwrap(),
-                self.nonce.as_ref().unwrap()
+                unwrap!(self.pk),
+                unwrap!(self.nonce)
             )?;
         }
         if self.is_encrypted() {
             write!(f,
                 ",recipient:{}",
-                self.recipent.as_ref().unwrap()
+                unwrap!(self.recipient)
             )?;
         }
         if self.is_signed() {
             write!(f,
                 ",sig:{}",
-                hex::encode(self.signature.as_ref().unwrap())
+                hex::encode(unwrap!(self.sig))
             )?;
         }
         write!(f,
