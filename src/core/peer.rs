@@ -8,7 +8,7 @@ use crate::signature::{
     Signature
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Peer {
     pk: Id,
     sk: Option<PrivateKey>,
@@ -66,9 +66,10 @@ impl<'a> Builder<'a> {
 
 impl Peer {
     fn new(b: &Builder) -> Self {
-        Peer {
-            pk: Id::from_signature_key(b.keypair.unwrap().public_key()),
-            sk: Some(*b.keypair.unwrap().private_key()),
+        let kp = &b.keypair.as_ref().unwrap();
+        let mut peer = Peer {
+            pk: Id::from_signature_key(kp.public_key()),
+            sk: Some(kp.private_key().clone()),
             id: b.id.clone(),
             origin: match b.origin {
                 Some(origin) => origin.clone(),
@@ -80,7 +81,19 @@ impl Peer {
                 None => None,
             },
             sig: Vec::new()
-        }
+        };
+
+        let sig = signature::sign(
+            peer.to_signdata().as_slice(),
+            peer.sk.as_ref().unwrap()
+        );
+        peer.sig = sig;
+        peer
+    }
+
+    #[allow(dead_code)]
+    fn pack(_: &Builder) -> Self {
+        unimplemented!()
     }
 
     pub fn id(&self) -> &Id {
@@ -141,13 +154,13 @@ impl Peer {
         let mut len: usize = 0;
 
         len += ID_BYTES * 2;
-        len += mem::size_of::<u16>();
+        len += mem::size_of::<u16>(); // padding port
 
         if self.url.is_some() {
             len += self.url.as_ref().unwrap().len();
         }
 
-        let mut input:Vec<u8> = Vec::with_capacity(len);
+        let mut input = Vec::<u8>::with_capacity(len);
         input.extend_from_slice(self.id.as_bytes());
         input.extend_from_slice(self.origin.as_bytes());
         input.extend_from_slice(self.port.to_le_bytes().as_ref());

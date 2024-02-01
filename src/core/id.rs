@@ -38,50 +38,62 @@ impl Id {
         Id { bytes }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Self {
+    pub fn from_bytes(input: &[u8]) -> Self {
         assert_eq!(
-            bytes.len(),
+            input.len(),
             ID_BYTES,
             "Incorrect bytes length {} for Id, should be {}",
-            bytes.len(),
+            input.len(),
             ID_BYTES
         );
 
-        let mut _bytes = [0u8; ID_BYTES];
-        _bytes.copy_from_slice(bytes);
-        Id { bytes: _bytes }
+        let mut bytes = [0u8; ID_BYTES];
+        bytes.copy_from_slice(input);
+        Id { bytes }
     }
 
-    pub fn try_from_hex(idstr: &str) -> Result<Self, Error> {
+    pub fn try_from_hex(input: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
-        let _ = hex::decode_to_slice(idstr, &mut bytes[..]).map_err(|err| match err {
+        let _ = hex::decode_to_slice(input, &mut bytes[..]).map_err(|err| match err {
             FromHexError::InvalidHexCharacter { c, index } => {
-                Error::Argument(format!("Invalid hex character '{}' at index {}", c, index))
+                Error::Argument(
+                    format!("Invalid hex character '{}' at index {}", c, index)
+                )
             }
             FromHexError::OddLength => {
-                Error::Argument(format!("Odd length hex string"))
+                Error::Argument(
+                    format!("Odd length hex string")
+                )
             },
             FromHexError::InvalidStringLength => {
-                Error::Argument(format!("Invalid hex string length {}", idstr.len()))
+                Error::Argument(
+                    format!("Invalid hex string length {}", input.len())
+                )
             }
         });
         Ok(Id{ bytes })
     }
 
-    pub fn try_from_base58(idstr: &str) -> Result<Self, Error> {
+    pub fn try_from_base58(input: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
-        let _ = bs58::decode(idstr)
+        let _ = bs58::decode(input)
             .with_alphabet(bs58::Alphabet::DEFAULT)
             .onto(&mut bytes)
             .map_err(|err| match err {
                 decode::Error::BufferTooSmall => {
-                    Error::Argument(format!("Invalid base58 string length {}", idstr.len()))
+                    Error::Argument(
+                        format!("Invalid base58 string length {}", input.len())
+                    )
                 }
                 decode::Error::InvalidCharacter {character, index} => {
-                    Error::Argument(format!("Invalid base58 character '{}' at index {}", character, index))
+                    Error::Argument(
+                        format!("Invalid base58 character '{}' at index {}", character, index)
+                    )
                 }
                 _ => {
-                    Error::Argument(format!("Invalid base58 string with unknown error"))
+                    Error::Argument(
+                        format!("Invalid base58 string with unknown error")
+                    )
                 }
         });
         Ok(Id { bytes })
@@ -106,11 +118,21 @@ impl Id {
     }
 
     pub fn to_signature_key(&self) -> signature::PublicKey {
-        signature::PublicKey::from(self.bytes.as_slice())
+        signature::PublicKey::from(self.as_bytes())
     }
 
     pub fn to_encryption_key(&self) -> cryptobox::PublicKey {
-        unimplemented!()
+        cryptobox::PublicKey::from_signature_key(
+            &self.to_signature_key()
+        ).unwrap()
+    }
+
+    pub fn distance(&self, other: &Id) -> Id {
+        let mut bytes = [0u8; ID_BYTES];
+        for i in 0..ID_BYTES {
+            bytes[i] = self.bytes[i] ^ other.bytes[i];
+        }
+        Id { bytes }
     }
 
     pub fn size(&self) -> usize {
@@ -137,18 +159,17 @@ impl Id {
         let b = id2.bytes[mmi as usize] ^ self.bytes[mmi as usize];
         a.cmp(&b)
     }
-}
 
-#[allow(dead_code)]
-pub fn distance(id1: &Id, id2: &Id) -> Id {
-    let mut bytes: [u8; ID_BYTES] = [0; ID_BYTES];
-    for i in 0..ID_BYTES {
-        bytes[i] = id1.bytes[i] ^ id2.bytes[i];
+    pub(crate) fn update<F>(&mut self, f: F)
+    where F: FnOnce(&mut [u8]) {
+        f(self.bytes.as_mut_slice());
     }
-    Id { bytes }
 }
 
-#[allow(dead_code)]
+pub fn distance(id1: &Id, id2: &Id) -> Id {
+    id1.distance(id2)
+}
+
 pub(crate) fn bits_equal(id1: &Id, id2: &Id, depth: i32) -> bool {
     if depth < 0 {
         return true;
@@ -164,8 +185,10 @@ pub(crate) fn bits_equal(id1: &Id, id2: &Id, depth: i32) -> bool {
 
     let idx = depth >> 3;
     let diff: u8 = id1.bytes[idx as usize] ^ id2.bytes[idx as usize];
-    let mask: u8 = (1 << (depth & 0x07)) - 1;  // Create a bitmask with the lower n bits set
-    let is_diff = (diff & !mask) == 0;  // Use the bitmask to check if the lower bits are all zeros
+    // Create a bitmask with the lower n bits set
+    let mask: u8 = (1 << (depth & 0x07)) - 1;
+    // Use the bitmask to check if the lower bits are all zeros
+    let is_diff = (diff & !mask) == 0;
 
     match mmi == idx {
         true => is_diff,
@@ -173,7 +196,6 @@ pub(crate) fn bits_equal(id1: &Id, id2: &Id, depth: i32) -> bool {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn bits_copy(src: &Id, dest: &mut Id, depth: i32) {
     if depth < 0 {
         return;

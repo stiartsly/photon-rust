@@ -27,7 +27,7 @@ pub(crate) struct TokenManager {
 impl TokenManager {
     pub(crate) fn new() -> Self {
         let mut seed = [0u8; 32];
-        unsafe { // // Always success.
+        unsafe { // Always success.
             libsodium_sys::randombytes_buf(
                 seed.as_mut_ptr() as *mut libc::c_void,
                 32
@@ -55,13 +55,25 @@ impl TokenManager {
     pub(crate) fn verify_token(&mut self, token: i32, nodeid: &Id, addr: &SocketAddr, target: &Id) -> bool {
         self.update_token_timestamp();
 
-        let current = generate_token(nodeid, addr, target, &self.timestamp, &self.session_secret);
+        let current = generate_token(
+            nodeid,
+            addr,
+            target,
+            &self.timestamp,
+            &self.session_secret
+        );
+
         match token == current {
             true => { return true },
             false => {}
         }
 
-        let prev = generate_token(nodeid, addr, target, &self.previous_timestamp, &self.session_secret);
+        let prev = generate_token(nodeid,
+            addr,
+            target,
+            &self.previous_timestamp,
+            &self.session_secret
+        );
         token == prev
     }
 }

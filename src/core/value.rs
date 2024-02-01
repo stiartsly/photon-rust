@@ -42,6 +42,16 @@ pub struct EncryptedBuilder<'a> {
     seq: i32
 }
 
+#[allow(dead_code)]
+pub(crate) struct PackBuilder {
+    pk: Option<Id>,
+    recipient: Option<Id>,
+    nonce: Option<cryptobox::Nonce>,
+    sig: Option<Vec<u8>>,
+    data: Vec<u8>,
+    seq: i32
+}
+
 impl<'a> ValueBuilder<'a> {
     pub fn default(value: &'a [u8]) -> Self {
         assert!(!value.is_empty(), "Value data can not be empty");
@@ -162,9 +172,10 @@ impl Value {
         assert!(b.keypair.is_some());
         assert!(b.nonce.is_some());
 
+        let kp = b.keypair.as_ref().unwrap();
         let mut value = Value {
-            pk: Some(Id::from_signature_key(b.keypair.unwrap().public_key())),
-            sk: Some(b.keypair.unwrap().private_key().clone()),
+            pk: Some(Id::from_signature_key(kp.public_key())),
+            sk: Some(kp.private_key().clone()),
             recipient: Some(b.recipient.clone()),
             nonce: Some(b.nonce.unwrap().clone()),
             sig: None,
@@ -173,7 +184,7 @@ impl Value {
         };
 
         let owner_sk = cryptobox::PrivateKey::from_signature_key(
-            b.keypair.unwrap().private_key()
+            kp.private_key()
         );
 
         value.data = cryptobox::encrypt_into(
@@ -188,6 +199,11 @@ impl Value {
         );
         value.sig = Some(sig);
         value
+    }
+
+    #[allow(dead_code)]
+    fn pack(_: &PackBuilder) -> Self {
+        unimplemented!()
     }
 
     pub fn id(&self) -> Id {
