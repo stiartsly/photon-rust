@@ -5,17 +5,12 @@ use std::time::SystemTime;
 use crate::constants;
 use crate::version;
 use crate::id::Id;
-use crate::node::{Node, CheckReach};
-
-macro_rules! as_millis {
-    ($time:expr) => {{
-        $time.elapsed().unwrap().as_millis()
-    }};
-}
+use crate::node::{Node, Reachable};
+use crate::as_millis;
 
 /**
- * Entry in a KBucket, it basically contains an IP address of a node, the UDP
- * port of the node and a node id.
+ * Entry in a KBucket, it basically contains an IP address of a node,
+ * the UDP port of the node and a node id.
  */
 #[derive(Clone, Debug)]
 pub(crate) struct KBucketEntry {
@@ -144,7 +139,7 @@ impl KBucketEntry {
                 std::cmp::min(0, self.failed_requests -1)
             );
         self.failed_requests != 0 &&
-            as_millis!(&self.last_sent) < backoff
+        as_millis!(&self.last_sent) < backoff
     }
 
     fn old_and_stale(&self) -> bool {
@@ -162,7 +157,7 @@ impl KBucketEntry {
     }
 }
 
-impl CheckReach for KBucketEntry {
+impl Reachable for KBucketEntry {
     fn reachable(&self) -> bool {
         self.reachable
     }
@@ -171,8 +166,8 @@ impl CheckReach for KBucketEntry {
         self.last_sent == SystemTime::UNIX_EPOCH
     }
 
-    fn set_reachable(&mut self, reachable: bool) -> &mut Self {
-        self.reachable = reachable; self
+    fn set_reachable(&mut self, reachable: bool) {
+        self.reachable = reachable
     }
 }
 

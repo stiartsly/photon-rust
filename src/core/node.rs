@@ -1,15 +1,16 @@
+use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 
 use crate::id::Id;
 use crate::version;
 
-pub(crate) trait CheckReach {
-    fn reachable(&self) -> bool;
-    fn unreachable(&self) -> bool;
-    fn set_reachable(&mut self, _: bool) -> &mut Self;
+pub(crate) trait Reachable {
+    fn reachable(&self) -> bool { false }
+    fn unreachable(&self) -> bool { false }
+    fn set_reachable(&mut self, _: bool) {}
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Node {
     id: Id,
     addr: SocketAddr,
@@ -18,7 +19,11 @@ pub struct Node {
 
 impl Node {
     pub fn new(id: &Id, addr: &SocketAddr) -> Self {
-        Node { id: *id, addr: *addr, ver: 0}
+        Node {
+            id: id.clone(),
+            addr: addr.clone(),
+            ver: 0
+        }
     }
 
     pub const fn ip(&self) -> IpAddr {
@@ -41,8 +46,8 @@ impl Node {
         self.ver
     }
 
-    pub fn set_version(&mut self, version: i32) -> &mut Self {
-        self.ver = version; self
+    pub fn set_version(&mut self, version: i32) {
+        self.ver = version
     }
 
     pub fn is_ipv4(&self) -> bool{
@@ -68,14 +73,12 @@ impl Node {
     }
 }
 
-impl CheckReach for Node {
-    fn reachable(&self) -> bool { false }
-    fn unreachable(&self) -> bool { false }
-    fn set_reachable(&mut self, _: bool) -> &mut Self { self }
+impl Reachable for Node {
+    // Use the default implementation of trait.
 }
 
-impl std::fmt::Display for Node {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{},{},{}",
             self.id,
             self.addr,

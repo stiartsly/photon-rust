@@ -22,6 +22,7 @@ use libsodium_sys::{
 };
 
 use crate::signature;
+use crate::{as_uchar_ptr, as_uchar_ptr_mut};
 use crate::error::Error;
 
 const_assert!(PrivateKey::BYTES == crypto_box_SECRETKEYBYTES as usize);
@@ -31,32 +32,13 @@ const_assert!(KeyPair::SEED_BYTES == crypto_box_SEEDBYTES as usize);
 const_assert!(CryptoBox::SYMMETRIC_KEY_BYTES == crypto_box_BEFORENMBYTES as usize);
 const_assert!(CryptoBox::MAC_BYTES == crypto_box_MACBYTES as usize);
 
-macro_rules! as_uchar_ptr {
-    ($val:expr) => {{
-        $val.as_ptr() as *const libc::c_uchar
-    }};
-}
-
-macro_rules! as_uchar_ptr_mut {
-    ($val:expr) => {{
-        $val.as_mut_ptr() as *mut libc::c_uchar
-    }};
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub struct PrivateKey {
     key: [u8; Self::BYTES]
 }
 
 impl PrivateKey {
     pub const BYTES: usize = 32;
-
-    pub fn new() -> Self {
-        PrivateKey {
-            key: [0; Self::BYTES]
-        }
-    }
 
     pub fn from(input: &[u8]) -> Self {
         assert_eq!(
@@ -111,19 +93,13 @@ impl fmt::Display for PrivateKey {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PublicKey {
     key: [u8; Self::BYTES]
 }
 
 impl PublicKey {
     pub const BYTES: usize = 32;
-
-    pub fn new() -> Self {
-        PublicKey {
-            key: [0u8; Self::BYTES]
-        }
-    }
 
     pub fn from(input: &[u8]) -> Self {
         assert_eq!(
@@ -178,7 +154,7 @@ impl fmt::Display for PublicKey {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Nonce {
     nonce: [u8; Self::BYTES]
 }
@@ -186,11 +162,6 @@ pub struct Nonce {
 impl Nonce {
     pub const BYTES: usize = 24;
 
-    pub fn new() -> Self {
-        Nonce {
-            nonce: [0; Self::BYTES]
-        }
-    }
     pub fn random() -> Self {
         let mut nonce = [0u8; Self::BYTES];
         unsafe { // Always success.
@@ -232,8 +203,7 @@ impl std::fmt::Display for Nonce {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct KeyPair {
     sk: PrivateKey,
     pk: PublicKey
@@ -352,7 +322,7 @@ impl KeyPair {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default, Debug)]
 pub struct CryptoBox {
     key: [u8; Self::SYMMETRIC_KEY_BYTES]
 }
@@ -360,12 +330,6 @@ pub struct CryptoBox {
 impl CryptoBox {
     pub const SYMMETRIC_KEY_BYTES: usize = 32;
     pub const MAC_BYTES: usize = 16;
-
-    pub fn new() -> Self {
-        CryptoBox {
-            key: [0u8; Self::SYMMETRIC_KEY_BYTES]
-        }
-    }
 
     pub fn try_from(pk: &PublicKey, sk: &PrivateKey) -> Result<Self, Error> {
         let mut k = vec!(0u8; Self::SYMMETRIC_KEY_BYTES);

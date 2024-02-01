@@ -1,7 +1,7 @@
 use std::fmt;
 use crate::{id, id::Id};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Prefix {
     depth: i32,
     id: Id,

@@ -13,6 +13,7 @@ mod kbucket;
 mod kbucket_entry;
 mod dht;
 mod msg;
+mod macros;
 
 pub mod signature;
 pub mod cryptobox;

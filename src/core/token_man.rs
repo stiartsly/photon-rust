@@ -3,18 +3,7 @@ use std::time::SystemTime;
 use sha2::{Digest, Sha256};
 
 use crate::id::Id;
-
-macro_rules! as_millis {
-    ($time:expr) => {{
-        $time.elapsed().unwrap().as_millis()
-    }};
-}
-
-macro_rules! as_usize {
-    ($val:expr) => {{
-        $val as usize
-    }};
-}
+use crate::{as_millis, as_usize};
 
 const TOKEN_TIMEOUT: u128 = 5 * 60 * 1000;   //5 minutes
 

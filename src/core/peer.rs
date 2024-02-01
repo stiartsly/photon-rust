@@ -7,8 +7,9 @@ use crate::signature::{
     KeyPair,
     Signature
 };
+use crate::unwrap;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Peer {
     pk: Id,
     sk: Option<PrivateKey>,
@@ -66,7 +67,7 @@ impl<'a> Builder<'a> {
 
 impl Peer {
     fn new(b: &Builder) -> Self {
-        let kp = &b.keypair.as_ref().unwrap();
+        let kp = unwrap!(b.keypair);
         let mut peer = Peer {
             pk: Id::from_signature_key(kp.public_key()),
             sk: Some(kp.private_key().clone()),
@@ -85,7 +86,7 @@ impl Peer {
 
         let sig = signature::sign(
             peer.to_signdata().as_slice(),
-            peer.sk.as_ref().unwrap()
+            unwrap!(peer.sk)
         );
         peer.sig = sig;
         peer
@@ -157,7 +158,7 @@ impl Peer {
         len += mem::size_of::<u16>(); // padding port
 
         if self.url.is_some() {
-            len += self.url.as_ref().unwrap().len();
+            len += unwrap!(self.url).len();
         }
 
         let mut input = Vec::<u8>::with_capacity(len);
@@ -166,7 +167,7 @@ impl Peer {
         input.extend_from_slice(self.port.to_le_bytes().as_ref());
 
         if self.url.is_some() {
-            input.extend_from_slice(self.url.as_ref().unwrap().as_ref());
+            input.extend_from_slice(unwrap!(self.url).as_ref());
         }
         input
     }
@@ -180,7 +181,7 @@ impl std::fmt::Display for Peer {
         }
         write!(f, "{}", self.port)?;
         if self.url.is_some() {
-            write!(f, ",{}", self.url.as_ref().unwrap())?;
+            write!(f, ",{}", unwrap!(self.url))?;
         }
         Ok(())
     }

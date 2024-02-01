@@ -19,24 +19,14 @@ use libsodium_sys::{
     crypto_sign_final_verify
 };
 
+use crate::{as_uchar_ptr, as_uchar_ptr_mut};
+
 const_assert!(PrivateKey::BYTES == crypto_sign_SECRETKEYBYTES as usize);
 const_assert!(PublicKey::BYTES == crypto_sign_PUBLICKEYBYTES as usize);
 const_assert!(KeyPair::SEED_BYTES == crypto_sign_SEEDBYTES as usize);
 const_assert!(Signature::BYTES == crypto_sign_BYTES as usize);
 
-macro_rules! as_uchar_ptr {
-    ($val:expr) => {{
-        $val.as_ptr() as *const libc::c_uchar
-    }};
-}
-
-macro_rules! as_uchar_ptr_mut {
-    ($val:expr) => {{
-        $val.as_mut_ptr() as *mut libc::c_uchar
-    }};
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PrivateKey {
     key: [u8; Self::BYTES]
 }
@@ -44,9 +34,9 @@ pub struct PrivateKey {
 impl PrivateKey {
     pub const BYTES: usize = 64;
 
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         PrivateKey {
-            key: [0; Self::BYTES]
+            key: [0u8; Self::BYTES]
         }
     }
 
@@ -111,19 +101,13 @@ impl fmt::Display for PrivateKey {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct PublicKey {
     key: [u8; Self::BYTES]
 }
 
 impl PublicKey {
     pub const BYTES: usize = 32;
-
-    pub fn new() -> Self {
-        PublicKey {
-            key: [0; Self::BYTES]
-        }
-    }
 
     pub fn from(input: &[u8]) -> Self {
         assert_eq!(
@@ -184,7 +168,7 @@ impl fmt::Display for PublicKey {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Debug)]
 pub struct KeyPair {
     sk: PrivateKey,
     pk: PublicKey

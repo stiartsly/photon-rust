@@ -10,16 +10,12 @@ use crate::error::Error;
 pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub struct Id {
     bytes: [u8; ID_BYTES],
 }
 
 impl Id {
-    pub fn default() -> Self {
-        Id { bytes: [0; ID_BYTES] }
-    }
-
     pub fn random() -> Self {
         let mut bytes = [0u8; ID_BYTES];
         unsafe {

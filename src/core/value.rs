@@ -1,16 +1,13 @@
-use crate::id::{self, Id};
-use crate::signature;
-use crate::cryptobox;
+use crate::id::{Id, ID_BYTES};
+use crate::{
+    signature,
+    cryptobox,
+    unwrap
+};
 
 use sha2::{Digest, Sha256};
 
-macro_rules! unwrap {
-    ($val:expr) => {{
-        $val.as_ref().unwrap()
-    }};
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Value {
     pk: Option<Id>,
     sk: Option<signature::PrivateKey>,
@@ -151,9 +148,10 @@ impl Value {
         assert!(b.keypair.is_some());
         assert!(b.nonce.is_some());
 
+        let kp = unwrap!(b.keypair);
         let mut value = Value {
-            pk: Some(Id::from_signature_key(b.keypair.unwrap().public_key())),
-            sk: Some(b.keypair.unwrap().private_key().clone()),
+            pk: Some(Id::from_signature_key(kp.public_key())),
+            sk: Some(kp.private_key().clone()),
             recipient: None,
             nonce: Some(b.nonce.unwrap().clone()),
             sig: None,
@@ -162,7 +160,7 @@ impl Value {
         };
         let sig = signature::sign(
             value.to_signdata().as_slice(),
-            value.sk.as_ref().unwrap()
+            unwrap!(value.sk)
         );
         value.sig = Some(sig);
         value
@@ -172,7 +170,7 @@ impl Value {
         assert!(b.keypair.is_some());
         assert!(b.nonce.is_some());
 
-        let kp = b.keypair.as_ref().unwrap();
+        let kp = unwrap!(b.keypair);
         let mut value = Value {
             pk: Some(Id::from_signature_key(kp.public_key())),
             sk: Some(kp.private_key().clone()),
@@ -300,7 +298,7 @@ impl Value {
         let mut len = 0;
 
         len += match self.is_encrypted() {
-            true => { id::ID_BYTES },
+            true => { ID_BYTES },
             false => { 0 }
         };
         len += cryptobox::Nonce::BYTES;

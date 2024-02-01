@@ -1,8 +1,8 @@
 use std::time::SystemTime;
 
-use crate::node::{Node, CheckReach};
+use crate::node::{Node, Reachable};
 
-#[derive(Debug)]
+#[derive(Clone)]
 pub(crate) struct CandidateNode {
     node: Node,
 
@@ -68,7 +68,7 @@ impl CandidateNode {
     }
 }
 
-impl CheckReach for CandidateNode {
+impl Reachable for CandidateNode {
     fn reachable(&self) -> bool {
         self.reachable
     }
@@ -77,7 +77,7 @@ impl CheckReach for CandidateNode {
         self.pinged >= 3
     }
 
-    fn set_reachable(&mut self, reachable: bool) -> &mut Self {
-        self.reachable = reachable; self
+    fn set_reachable(&mut self, reachable: bool) {
+        self.reachable = reachable
     }
 }

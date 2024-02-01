@@ -8,16 +8,11 @@ use libsodium_sys::randombytes_uniform;
 use log::{info};
 
 use crate::constants;
+use crate::as_millis;
 use crate::id::Id;
-use crate::node::CheckReach;
+use crate::node::Reachable;
 use crate::prefix::Prefix;
 use crate::kbucket_entry::KBucketEntry;
-
-macro_rules! as_millis {
-    ($time:expr) => {{
-        $time.elapsed().unwrap().as_millis()
-    }};
-}
 
 /**
  * A KBucket is just a list of KBucketEntry objects.
