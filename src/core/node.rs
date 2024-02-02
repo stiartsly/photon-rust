@@ -65,7 +65,7 @@ impl Node {
     }
 
     pub fn formatted_version(&self) -> String {
-        version::readable_version(self.ver)
+        version::formatted_version(self.ver)
     }
 
     pub fn matches(&self, other: &Node) -> bool {
@@ -80,7 +80,7 @@ impl fmt::Display for Node {
         write!(f, "{},{},{}",
             self.id,
             self.addr,
-            version::readable_version(self.ver)
+            version::formatted_version(self.ver)
         )?;
         Ok(())
     }

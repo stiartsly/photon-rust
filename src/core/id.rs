@@ -95,11 +95,11 @@ impl Id {
         Ok(Id { bytes })
     }
 
-    pub fn min() -> Self {
+    pub const fn min() -> Self {
         Id { bytes: [0x0; ID_BYTES]}
     }
 
-    pub fn max() -> Self {
+    pub const fn max() -> Self {
         Id { bytes: [0xFF; ID_BYTES] }
     }
 
@@ -131,11 +131,11 @@ impl Id {
         Id { bytes }
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         ID_BYTES
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub const fn as_bytes(&self) -> &[u8] {
         self.bytes.as_slice()
     }
 

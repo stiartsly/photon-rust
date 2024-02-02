@@ -77,8 +77,8 @@ impl PrivateKey {
         Self::BYTES
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        self.key.as_ref()
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.key.as_slice()
     }
 
     pub fn clear(&mut self) {
@@ -138,8 +138,8 @@ impl PublicKey {
         Self::BYTES
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        self.key.as_ref()
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.key.as_slice()
     }
 
     pub fn clear(&mut self) {
@@ -187,7 +187,7 @@ impl Nonce {
         Self::BYTES
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub const fn as_bytes(&self) -> &[u8] {
         self.nonce.as_slice()
     }
 
@@ -355,7 +355,7 @@ impl CryptoBox {
         Self::SYMMETRIC_KEY_BYTES
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub const fn as_bytes(&self) -> &[u8] {
         self.key.as_slice()
     }
 

@@ -6,7 +6,6 @@ use crate::kbucket::KBucket;
 use crate::kbucket_entry::KBucketEntry;
 use crate::node::Node;
 
-#[allow(dead_code)]
 pub(crate) struct RoutingTable {
     dht: Option<Rc<DHT>>,
     buckets: LinkedList<Box<KBucket>>

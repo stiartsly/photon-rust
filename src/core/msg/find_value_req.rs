@@ -162,7 +162,7 @@ impl fmt::Display for Message {
             write!(f, ",seq:{}", self.seq)?;
         }
 
-        write!(f, ",v:{}", version::readable_version(self.ver))?;
+        write!(f, ",v:{}", version::formatted_version(self.ver))?;
         Ok(())
     }
 }

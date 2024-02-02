@@ -220,7 +220,7 @@ impl DHT {
     fn on_error<T>(&self, msg: &Box<T>) where T: Msg + error::ErrorResult{
         warn!("Error from {}/{} - {}:{}, txid {}",
             msg.addr(),
-            version::readable_version(msg.version()),
+            version::formatted_version(msg.version()),
             msg.code(),
             msg.msg(),
             msg.txid()

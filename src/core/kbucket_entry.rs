@@ -37,11 +37,11 @@ impl KBucketEntry {
         }
     }
 
-    pub(crate) fn id(&self) -> &Id {
+    pub(crate) const fn id(&self) -> &Id {
         &self.node.id()
     }
 
-    pub(crate) fn node(&self) -> &Node {
+    pub(crate) const fn node(&self) -> &Node {
         &self.node
     }
 
@@ -75,13 +75,13 @@ impl KBucketEntry {
         self.last_sent = SystemTime::now();
     }
 
-    pub(crate) fn is_eligible_for_nodes_list(&self) -> bool {
+    pub(crate) const fn is_eligible_for_nodes_list(&self) -> bool {
         // 1 timeout can occasionally happen. should be fine to hand it out as long as
         // we've verified it at least once
         self.reachable && self.failed_requests < 3
     }
 
-    pub(crate) fn is_eligible_for_local_lookup(&self) -> bool {
+    pub(crate) const fn is_eligible_for_local_lookup(&self) -> bool {
         // allow implicit initial ping during lookups
         // TODO: make this work now that we don't keep unverified entries in the main bucket
         (self.reachable && self.failed_requests <= 3) || self.failed_requests <= 0
@@ -201,7 +201,7 @@ impl fmt::Display for KBucketEntry {
         }
         if self.node.version() != 0 {
             write!(f, "; ver: {}",
-                version::readable_version(self.node.version())
+                version::formatted_version(self.node.version())
             )?;
         }
         Ok(())

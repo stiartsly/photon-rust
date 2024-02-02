@@ -48,7 +48,7 @@ impl KBucket {
         }
     }
 
-    pub(crate) const fn is_home_bucket(&self) -> bool {
+    pub(crate) fn is_home_bucket(&self) -> bool {
         self.home_bucket
     }
 

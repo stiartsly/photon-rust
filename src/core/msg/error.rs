@@ -112,7 +112,7 @@ impl fmt::Display for Message {
             self.txid,
             self.code,
             self.msg.as_ref().unwrap(),
-            version::readable_version(self.ver)
+            version::formatted_version(self.ver)
         )?;
         Ok(())
     }

@@ -58,8 +58,8 @@ impl PrivateKey {
         Self::BYTES
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        self.key.as_ref()
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.key.as_slice()
     }
 
     pub fn clear(&mut self) {
@@ -127,8 +127,8 @@ impl PublicKey {
         Self::BYTES
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        self.key.as_ref()
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.key.as_slice()
     }
 
     pub fn clear(&mut self) {

@@ -86,7 +86,7 @@ impl fmt::Display for Message {
             self.kind(),
             self.method(),
             self.txid,
-            version::readable_version(self.ver)
+            version::formatted_version(self.ver)
         )?;
         Ok(())
     }
