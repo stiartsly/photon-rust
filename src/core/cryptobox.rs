@@ -73,7 +73,7 @@ impl PrivateKey {
         })
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         Self::BYTES
     }
 
@@ -134,7 +134,7 @@ impl PublicKey {
         })
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         Self::BYTES
     }
 
@@ -183,7 +183,7 @@ impl Nonce {
         self
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         Self::BYTES
     }
 
@@ -308,11 +308,11 @@ impl KeyPair {
         Self::from(x25519.as_slice())
     }
 
-    pub fn private_key(&self) -> &PrivateKey {
+    pub const fn private_key(&self) -> &PrivateKey {
         &self.sk
     }
 
-    pub fn public_key(&self) -> &PublicKey {
+    pub const fn public_key(&self) -> &PublicKey {
         &self.pk
     }
 
@@ -351,7 +351,7 @@ impl CryptoBox {
         })
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         Self::SYMMETRIC_KEY_BYTES
     }
 

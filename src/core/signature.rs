@@ -54,7 +54,7 @@ impl PrivateKey {
         }
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         Self::BYTES
     }
 
@@ -123,7 +123,7 @@ impl PublicKey {
         }
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         Self::BYTES
     }
 
@@ -282,11 +282,11 @@ impl KeyPair {
         }
     }
 
-    pub fn private_key(&self) -> &PrivateKey {
+    pub const fn private_key(&self) -> &PrivateKey {
         &self.sk
     }
 
-    pub fn public_key(&self) -> &PublicKey {
+    pub const fn public_key(&self) -> &PublicKey {
         &self.pk
     }
 
@@ -302,7 +302,6 @@ struct SignState(
     [u8; std::mem::size_of::<crypto_sign_state>()]
 );
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signature {
     state: SignState

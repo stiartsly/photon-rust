@@ -93,7 +93,7 @@ impl DHT {
                 let mut found_borrowed = result.borrow_mut();
                 *found_borrowed = Some(arg_node.unwrap());
             }
-            if option == LookupOption::CONSERVATIVE {
+            if option == LookupOption::Conservative {
                 arg_task.cancel()
             }
         });
@@ -127,7 +127,7 @@ impl DHT {
                     *found_borrowed = Some(value_ref.clone())
                 }
             }
-            if option != LookupOption::CONSERVATIVE || value_ref.is_mutable() {
+            if option != LookupOption::Conservative || value_ref.is_mutable() {
                 arg_task.cancel()
             }
         });
@@ -156,7 +156,7 @@ impl DHT {
         builder.set_result_fn(move |arg_task, _| {
             let found_borrowed = result_rc.borrow_mut();
             // peers->insert(peers->end(), listOfPeers.begin(), listOfPeers.end());
-            if option != LookupOption::CONSERVATIVE && (*found_borrowed).as_ref().unwrap().len() >= expected {
+            if option != LookupOption::Conservative && (*found_borrowed).as_ref().unwrap().len() >= expected {
                 arg_task.cancel();
                 return;
             }

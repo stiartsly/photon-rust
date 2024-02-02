@@ -1,13 +1,12 @@
-use crate::id::{Id, ID_BYTES};
-use crate::{
-    signature,
-    cryptobox,
-    unwrap
-};
-
+use std::fmt;
 use sha2::{Digest, Sha256};
 
-#[derive(Clone)]
+use crate::id::{Id, ID_BYTES};
+use crate::unwrap;
+use crate::signature;
+use crate::cryptobox;
+
+#[derive(Clone, Debug)]
 pub struct Value {
     pk: Option<Id>,
     sk: Option<signature::PrivateKey>,
@@ -39,13 +38,12 @@ pub struct EncryptedBuilder<'a> {
     seq: i32
 }
 
-#[allow(dead_code)]
-pub(crate) struct PackBuilder {
-    pk: Option<Id>,
-    recipient: Option<Id>,
-    nonce: Option<cryptobox::Nonce>,
-    sig: Option<Vec<u8>>,
-    data: Vec<u8>,
+pub(crate) struct PackBuilder<'a> {
+    pk: Option<&'a Id>,
+    recipient: Option<&'a Id>,
+    nonce: Option<&'a cryptobox::Nonce>,
+    sig: Option<&'a [u8]>,
+    data: &'a [u8],
     seq: i32
 }
 
@@ -131,6 +129,44 @@ impl<'a> EncryptedBuilder<'a> {
     }
 }
 
+#[allow(dead_code)]
+impl<'a> PackBuilder<'a> {
+    pub(crate) fn default(value: &'a [u8]) -> Self {
+        PackBuilder {
+            pk: None,
+            recipient: None,
+            nonce: None,
+            sig: None,
+            data: value,
+            seq: -1
+        }
+    }
+
+    pub(crate) fn with_pk(&mut self, pk: &'a Id) -> &mut Self {
+        self.pk = Some(pk); self
+    }
+
+    pub(crate) fn with_recipient(&mut self, recipient: &'a Id) -> &mut Self {
+        self.recipient = Some(recipient); self
+    }
+
+    pub(crate) fn with_nonce(&mut self, nonce: &'a cryptobox::Nonce) -> &mut Self {
+        self.nonce = Some(nonce); self
+    }
+
+    pub(crate) fn with_sig(&mut self, sig: &'a [u8]) -> &mut Self {
+        self.sig = Some(sig); self
+    }
+
+    pub(crate) fn with_seq(&mut self, seq: i32) -> &mut Self {
+        self.seq = seq; self
+    }
+
+    pub(crate) fn build(&self) -> Value {
+        Value::packed(self)
+    }
+}
+
 impl Value {
     fn default(b: &ValueBuilder) -> Value {
         Value {
@@ -159,7 +195,7 @@ impl Value {
             seq: b.seq,
         };
         let sig = signature::sign(
-            value.to_signdata().as_slice(),
+            value.serialize_signature_data().as_slice(),
             unwrap!(value.sk)
         );
         value.sig = Some(sig);
@@ -192,16 +228,23 @@ impl Value {
             &owner_sk.unwrap());
 
         let sig = signature::sign(
-            value.to_signdata().as_slice(),
+            value.serialize_signature_data().as_slice(),
             unwrap!(value.sk),
         );
         value.sig = Some(sig);
         value
     }
 
-    #[allow(dead_code)]
-    fn pack(_: &PackBuilder) -> Self {
-        unimplemented!()
+    fn packed(b: &PackBuilder) -> Self {
+        Value {
+            pk: b.pk.map(|v| v.clone()),
+            sk: None,
+            recipient: b.recipient.map(|v| v.clone()),
+            nonce: b.nonce.map(|v| v.clone()),
+            sig: b.sig.map(|v| v.to_vec()),
+            data: b.data.to_vec(),
+            seq: b.seq,
+        }
     }
 
     pub fn id(&self) -> Id {
@@ -221,27 +264,27 @@ impl Value {
         Id::from_bytes(sha256.finalize().as_slice())
     }
 
-    pub fn public_key(&self) -> Option<&Id> {
+    pub const fn public_key(&self) -> Option<&Id> {
         self.pk.as_ref()
     }
 
-    pub fn recipient(&self) -> Option<&Id> {
+    pub const fn recipient(&self) -> Option<&Id> {
         self.recipient.as_ref()
     }
 
-    pub fn has_private_key(&self) -> bool {
+    pub const fn has_private_key(&self) -> bool {
         self.sk.is_some()
     }
 
-    pub fn private_key(&self) -> Option<&signature::PrivateKey> {
+    pub const fn private_key(&self) -> Option<&signature::PrivateKey> {
         self.sk.as_ref()
     }
 
-    pub fn sequence_number(&self) -> i32 {
+    pub const fn sequence_number(&self) -> i32 {
         self.seq
     }
 
-    pub fn nonce(&self) -> Option<&cryptobox::Nonce> {
+    pub const fn nonce(&self) -> Option<&cryptobox::Nonce> {
         self.nonce.as_ref()
     }
 
@@ -265,15 +308,15 @@ impl Value {
         len
     }
 
-    pub fn is_encrypted(&self) -> bool {
+    pub const fn is_encrypted(&self) -> bool {
         self.recipient.is_some()
     }
 
-    pub fn is_signed(&self) -> bool {
+    pub const fn is_signed(&self) -> bool {
         self.sig.is_some()
     }
 
-    pub fn is_mutable(&self) -> bool {
+    pub const fn is_mutable(&self) -> bool {
         self.pk.is_some()
     }
 
@@ -288,13 +331,13 @@ impl Value {
         assert!(self.pk.is_some());
 
         signature::verify(
-            self.to_signdata().as_slice(),
+            self.serialize_signature_data().as_slice(),
             unwrap!(self.sig).as_slice(),
             &unwrap!(self.pk).to_signature_key()
         )
     }
 
-    fn to_signdata(&self) -> Vec<u8> {
+    fn serialize_signature_data(&self) -> Vec<u8> {
         let mut len = 0;
 
         len += match self.is_encrypted() {
@@ -317,8 +360,8 @@ impl Value {
     }
 }
 
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "id:{}", self.id())?;
         if self.is_mutable() {
             write!(f,

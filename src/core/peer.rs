@@ -1,5 +1,7 @@
+use std::fmt;
 use std::mem;
 use unicode_normalization::UnicodeNormalization;
+use crate::unwrap;
 use crate::id::{Id, ID_BYTES};
 use crate::signature::{
     self,
@@ -7,9 +9,8 @@ use crate::signature::{
     KeyPair,
     Signature
 };
-use crate::unwrap;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Peer {
     pk: Id,
     sk: Option<PrivateKey>,
@@ -20,14 +21,12 @@ pub struct Peer {
     sig: Vec<u8>,
 }
 
-#[allow(dead_code)]
 pub struct Builder<'a> {
     keypair: Option<KeyPair>,
     id: &'a Id,
     origin: Option<&'a Id>,
     port: u16,
-    url: Option<&'a str>,
-    sig: Option<&'a [u8]>
+    url: Option<&'a str>
 }
 
 impl<'a> Builder<'a> {
@@ -37,8 +36,7 @@ impl<'a> Builder<'a> {
             id: node_id,
             origin: None,
             port: 0,
-            url: None,
-            sig: None
+            url: None
         }
     }
     pub fn with_keypair(&mut self, keypair: &'a KeyPair) -> &mut Self {
@@ -85,7 +83,7 @@ impl Peer {
         };
 
         let sig = signature::sign(
-            peer.to_signdata().as_slice(),
+            peer.serialize_signature_data().as_slice(),
             unwrap!(peer.sk)
         );
         peer.sig = sig;
@@ -97,35 +95,35 @@ impl Peer {
         unimplemented!()
     }
 
-    pub fn id(&self) -> &Id {
+    pub const fn id(&self) -> &Id {
         &self.pk
     }
 
-    pub fn has_private_key(&self) -> bool {
+    pub const fn has_private_key(&self) -> bool {
         self.sk.is_some()
     }
 
-    pub fn private_key(&self) -> Option<&PrivateKey> {
+    pub const fn private_key(&self) -> Option<&PrivateKey> {
         self.sk.as_ref()
     }
 
-    pub fn node_id(&self) -> &Id {
+    pub const fn node_id(&self) -> &Id {
         &self.id
     }
 
-    pub fn origin(&self) -> &Id {
+    pub const fn origin(&self) -> &Id {
         &self.origin
     }
 
-    pub fn port(&self) -> u16 {
+    pub const fn port(&self) -> u16 {
         self.port
     }
 
-    pub fn has_alternative_url(&self) -> bool {
+    pub const fn has_alternative_url(&self) -> bool {
         self.url.is_some()
     }
 
-    pub fn alternative_url(&self) -> Option<&String> {
+    pub const fn alternative_url(&self) -> Option<&String> {
         self.url.as_ref()
     }
 
@@ -146,12 +144,12 @@ impl Peer {
             Signature::BYTES
         );
 
-        let sigdata = self.to_signdata();
+        let sigdata = self.serialize_signature_data();
         let pk = self.pk.to_signature_key();
         signature::verify(sigdata.as_ref(), self.sig.as_slice(), &pk)
     }
 
-    fn to_signdata(&self) -> Vec<u8> {
+    fn serialize_signature_data(&self) -> Vec<u8> {
         let mut len: usize = 0;
 
         len += ID_BYTES * 2;
@@ -173,8 +171,8 @@ impl Peer {
     }
 }
 
-impl std::fmt::Display for Peer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Peer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{},{},", self.pk, self.id)?;
         if self.is_delegated() {
             write!(f, "{},", self.origin)?;

@@ -34,15 +34,15 @@ impl Node {
         self.addr.port()
     }
 
-    pub fn id(&self) -> &Id {
+    pub const fn id(&self) -> &Id {
         &self.id
     }
 
-    pub fn socket_addr(&self) -> &SocketAddr {
+    pub const fn socket_addr(&self) -> &SocketAddr {
         &self.addr
     }
 
-    pub fn version(&self) -> i32 {
+    pub const fn version(&self) -> i32 {
         self.ver
     }
 
@@ -64,7 +64,7 @@ impl Node {
         }
     }
 
-    pub fn readable_version(&self) -> String {
+    pub fn formatted_version(&self) -> String {
         version::readable_version(self.ver)
     }
 
@@ -73,9 +73,7 @@ impl Node {
     }
 }
 
-impl Reachable for Node {
-    // Use the default implementation of trait.
-}
+impl Reachable for Node {}
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

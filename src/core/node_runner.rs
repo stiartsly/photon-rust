@@ -114,7 +114,7 @@ impl NodeRunner {
             dht4: None,
             dht6: None,
             dht_num: 0,
-            option: LookupOption::CONSERVATIVE,
+            option: LookupOption::Conservative,
 
             status: NodeStatus::Stopped,
 
