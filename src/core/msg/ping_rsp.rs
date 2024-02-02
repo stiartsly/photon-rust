@@ -75,7 +75,6 @@ impl Message {
     }
 }
 
-#[allow(dead_code)]
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "y:{},m:{},t:{},v:{}",

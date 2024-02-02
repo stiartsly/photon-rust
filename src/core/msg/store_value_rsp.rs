@@ -55,7 +55,6 @@ impl Msg for Message {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -63,7 +62,6 @@ pub(crate) struct Message {
     ver: i32
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {

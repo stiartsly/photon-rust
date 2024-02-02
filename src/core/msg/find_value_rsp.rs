@@ -126,7 +126,6 @@ pub(crate) struct Message {
     value: Option<Box<Value>>
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {

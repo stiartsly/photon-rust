@@ -106,7 +106,6 @@ impl ValueOption for Message {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
