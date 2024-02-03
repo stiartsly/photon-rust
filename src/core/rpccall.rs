@@ -1,60 +1,67 @@
 use std::rc::Rc;
+use std::cell::RefCell;
 use std::boxed::Box;
 use std::time::SystemTime;
-
-use crate::node::Node;
-use crate::rpcserver::RpcServer;
-use crate::msg::msg::{self, Msg};
-use crate::id::Id;
-
 use log::{warn};
 
-#[allow(dead_code)]
-#[derive(Clone, Copy, PartialEq)]
+use crate::{
+    id::Id,
+    dht::DHT,
+    node::Node,
+    msg::msg,
+    msg::msg::Msg
+};
+
+#[derive(Clone, PartialEq)]
 pub(crate) enum State {
-    UNSENT,
-    SENT,
-    STALLED,
-    TIMEOUT,
-    CANCELED,
-    ERR,
-    RESPONDED
+    Unsent,
+    Sent,
+    Stalled,
+    Timeout,
+    Canceled,
+    Err,
+    Responsed
 }
 
-#[allow(dead_code)]
 pub(crate) struct RpcCall {
+    //dht: Option<Rc<RefCell<DHT>>>,
     target: Node,
 
     req: Box<dyn Msg>,
     rsp: Option<Box<dyn Msg>>,
 
     sent_time: SystemTime,
-    resped_time: SystemTime,
+    responsed_time: SystemTime,
 
     state: State,
 
-    on_state_change_fn: Box<dyn Fn(&Self, &State, &State)>,
-    on_response_fn: Box<dyn Fn(&Self, &Box<dyn Msg>)>,
-    on_stall_fn: Box<dyn Fn(&Self)>,
-    on_timeout_fn: Box<dyn Fn(&Self)>
+    state_changed_fn: Box<dyn Fn(&Self, &State, &State)>,
+    responsed_fn: Box<dyn Fn(&Self, &Box<dyn Msg>)>,
+    stalled_fn: Box<dyn Fn(&Self)>,
+    timeout_fn: Box<dyn Fn(&Self)>
 }
 
 #[allow(dead_code)]
 impl RpcCall {
     pub(crate) fn new(node: &Node, req: Box<dyn Msg>) -> Self {
         RpcCall {
+            //dht: None,
             target: node.clone(),
             req, rsp: None,
 
             sent_time: SystemTime::UNIX_EPOCH,
-            resped_time: SystemTime::UNIX_EPOCH,
-            state: State::UNSENT,
+            responsed_time: SystemTime::UNIX_EPOCH,
+            state: State::Unsent,
 
-            on_state_change_fn: Box::new(|_, _,_| {}),
-            on_response_fn: Box::new(|_,_| {}),
-            on_stall_fn: Box::new(|_| {}),
-            on_timeout_fn: Box::new(|_|{})
+            state_changed_fn: Box::new(|_, _,_| {}),
+            responsed_fn: Box::new(|_,_| {}),
+            stalled_fn: Box::new(|_| {}),
+            timeout_fn: Box::new(|_|{})
         }
+    }
+
+    pub(crate) fn dht(&self) -> &Rc<RefCell<DHT>> {
+        unimplemented!()
     }
 
     pub(crate) fn target_id(&self) -> &Id {
@@ -76,11 +83,11 @@ impl RpcCall {
         }
     }
 
-    pub(crate) fn request(&self) -> &Box<dyn Msg> {
+    pub(crate) fn req(&self) -> &Box<dyn Msg> {
         &self.req
     }
 
-    pub(crate) fn response(&self) -> &Option<Box<dyn Msg>> {
+    pub(crate) fn rsp(&self) -> &Option<Box<dyn Msg>> {
         &self.rsp
     }
 
@@ -89,7 +96,7 @@ impl RpcCall {
     }
 
     pub(crate) fn responsed_time(&self) -> &SystemTime {
-        &self.resped_time
+        &self.responsed_time
     }
 
     pub(crate) fn state(&self) -> &State {
@@ -100,66 +107,44 @@ impl RpcCall {
         unimplemented!()
     }
 
-    pub(crate) fn set_state_change_fn<F>(&mut self, f: F)
+    pub(crate) fn set_state_changed_fn<F>(&mut self, f: F)
     where F: Fn(&Self, &State, &State) + 'static {
-        self.on_state_change_fn = Box::new(f)
+        self.state_changed_fn = Box::new(f)
     }
 
-    pub(crate) fn set_response_fn<F>(&mut self, f: F)
+    pub(crate) fn set_responsed_fn<F>(&mut self, f: F)
     where F: Fn(&Self, &Box<dyn Msg>) + 'static {
-        self.on_response_fn = Box::new(f)
+        self.responsed_fn = Box::new(f)
     }
 
-    pub(crate) fn set_stall_fn<F>(&mut self, f: F)
+    pub(crate) fn set_stalled_fn<F>(&mut self, f: F)
     where F: Fn(&Self) + 'static {
-        self.on_stall_fn = Box::new(f)
+        self.stalled_fn = Box::new(f)
     }
 
     pub(crate) fn set_timeout_fn<F>(&mut self, f: F)
     where F: Fn(&Self) + 'static {
-        self.on_timeout_fn = Box::new(f)
+        self.timeout_fn = Box::new(f)
     }
-
-    /*
-    void RPCCall::updateState(State currentState) {
-    auto prevState {this->state};
-    this->state = currentState;
-
-    stateChangeHandler(this, prevState, currentState);
-
-    switch (currentState) {
-    case State::TIMEOUT:
-        timeoutHandler(this);
-        break;
-    case State::STALLED:
-        stallHandler(this);
-        break;
-    case State::RESPONDED:
-        responseHandler(this, response);
-        break;
-    default:
-        break;
-    }
-}
-*/
 
     pub(crate) fn update_state(&mut self, new: State) {
         let old = self.state.clone();
         self.state = new;
 
-        (self.on_state_change_fn)(self, &old, &self.state);
+        (self.state_changed_fn)(self, &old, &self.state);
 
         match self.state {
-            State::TIMEOUT => (self.on_timeout_fn)(self),
-            State::STALLED => (self.on_stall_fn)(self),
-            State::RESPONDED => {
-                (self.on_response_fn)(self, self.rsp.as_ref().unwrap())
-            }
+            State::Timeout => (self.timeout_fn)(self),
+            State::Stalled => (self.stalled_fn)(self),
+            State::Responsed => (self.responsed_fn)(self, self.rsp.as_ref().unwrap()),
             _ => {}
         }
     }
 
-    pub(crate) fn sent(&self, _: &Rc<RpcServer>) {
+    //pub(crate) fn sent(&self, _: &Rc<RpcServer>) {
+    //    unimplemented!()
+    //}
+    pub(crate) fn send(&self) {
         unimplemented!()
     }
 
@@ -172,11 +157,11 @@ impl RpcCall {
         */
 
         self.rsp = Some(response);
-        self.resped_time = SystemTime::now();
+        self.responsed_time = SystemTime::now();
 
         match self.rsp.as_ref().unwrap().kind() {
-            msg::Kind::Response => self.update_state(State::RESPONDED),
-            msg::Kind::Error => self.update_state(State::ERR),
+            msg::Kind::Response => self.update_state(State::Responsed),
+            msg::Kind::Error => self.update_state(State::Err),
             _ => {
                 warn!("Unexpected message type received");
             }
@@ -184,18 +169,18 @@ impl RpcCall {
     }
 
     fn failed(&mut self) {
-        self.update_state(State::TIMEOUT)
+        self.update_state(State::Timeout)
     }
 
     fn cancel(&mut self) {
         // TOOD: timeout Timer.
 
-        self.update_state(State::CANCELED);
+        self.update_state(State::Canceled);
     }
 
     fn stall(&mut self) {
-        if self.state == State::SENT {
-            self.update_state(State::STALLED)
+        if self.state == State::Sent {
+            self.update_state(State::Stalled)
         }
     }
 

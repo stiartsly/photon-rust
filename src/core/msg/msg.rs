@@ -8,6 +8,7 @@ use core::result::Result;
 use std::io::{Error};
 
 use crate::id::Id;
+use crate::rpccall::RpcCall;
 
 #[derive(PartialEq)]
 pub(crate) enum Kind {
@@ -100,9 +101,12 @@ pub(crate) trait Msg {
     fn with_addr(&mut self, _: &SocketAddr);
 
     fn with_txid(&mut self, _: i32);
-    fn with_verion(&mut self, _: i32);
+    fn with_ver(&mut self, _: i32);
 
     //fn with_cbor(&mut self, _: &[u8]);
+
+    fn associated_call(&self) -> Option<Box<RpcCall>>;
+    fn with_associated_call(&mut self, _: Box<RpcCall>);
 
     fn as_any(&self) -> &dyn Any;
 }

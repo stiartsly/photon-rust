@@ -1,17 +1,29 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::time::SystemTime;
 use tokio::io::{self, Interest};
 use tokio::net::UdpSocket;
 use tokio::runtime::{self};
+use log::{info};
 
+use crate::version;
 use crate::dht::DHT;
 use crate::rpccall::RpcCall;
 use crate::msg::msg::Msg;
 
-#[allow(dead_code)]
+#[derive(Clone, PartialEq, Eq)]
+enum State {
+    Initial,
+    Running,
+    Stopped
+}
+
 pub(crate) struct RpcServer {
     dht4: Option<Rc<RefCell<DHT>>>,
     dht6: Option<Rc<RefCell<DHT>>>,
+
+    state: State,
+    started: SystemTime,
 
     reachable: bool
 }
@@ -22,6 +34,8 @@ impl RpcServer {
         RpcServer {
             dht4: None,
             dht6: None,
+            state: State::Initial,
+            started: SystemTime::UNIX_EPOCH,
             reachable: false,
         }
     }
@@ -46,36 +60,109 @@ impl RpcServer {
         self.reachable
     }
 
+    fn start(&mut self) {
+        if self.state != State::Initial {
+            return;
+        }
+
+        // open sockets
+
+        self.state = State::Running;
+        self.started = SystemTime::now();
+
+        if let Some(dht4) = self.dht4.as_ref() {
+            info!("Started RPC server on ipv4 address: {}", dht4.borrow().origin());
+        }
+        if let Some(dht6) = self.dht6.as_ref() {
+            info!("Started RPC server on ipv6 address: {}", dht6.borrow().origin());
+        }
+    }
+
+    fn stop(&mut self) {
+        if self.state == State::Stopped {
+            return;
+        }
+
+        self.state = State::Stopped;
+
+        // TODO
+
+        if let Some(dht4) = self.dht4.as_ref() {
+            info!("Stopped RPC server on ipv4: {}", dht4.borrow().origin());
+        }
+        if let Some(dht6) = self.dht6.as_ref() {
+            info!("Started RPC server on ipv6: {}", dht6.borrow().origin());
+        }
+    }
+
     fn run_loop(&self) -> io::Result<()> {
         let rt = runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
         rt.block_on(async move {
-            let socket = UdpSocket::bind("0.0.0.0:8080").await?;
+            let mut socket4: Option<UdpSocket> = None;
+            if let Some(dht4) = self.dht4.as_ref(){
+                socket4 = Some(UdpSocket::bind(dht4.borrow().origin()).await?);
+            }
+            let mut socket6: Option<UdpSocket> = None;
+            if let Some(dht6) = self.dht6.as_ref(){
+                socket6 = Some(UdpSocket::bind(dht6.borrow().origin()).await?);
+            }
 
             loop {
-                let ready = socket.ready(Interest::READABLE | Interest::WRITABLE).await?;
-                if ready.is_readable() {
-                    let mut data = [0; 1024];
-                    match socket.try_recv(&mut data[..]) {
-                        Ok(n) => {
-                            println!("received {:?}", &data[..n]);
+                if let Some(sock4) = socket4.as_ref() {
+                    let ready = sock4.ready(Interest::READABLE | Interest::WRITABLE).await?;
+                    if ready.is_readable() {
+                        let mut data = [0; 1024];
+                        match sock4.try_recv(&mut data[..]) {
+                            Ok(n) => {
+                                println!("received {:?}", &data[..n]);
+                            }
+                            // False-positive, continue
+                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                            Err(e) => {
+                                return Err(e);
+                            }
                         }
-                        // False-positive, continue
-                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                        Err(e) => {
-                            return Err(e);
+                    }
+                    if ready.is_writable() {
+                        match sock4.try_send(b"hello world") {
+                            Ok(n) => {
+                                println!("sent {} bytes", n);
+                            }
+                            // False-positive, continue
+                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                            Err(e) => {
+                                return Err(e);
+                            }
                         }
                     }
                 }
-                if ready.is_writable() {
-                    match socket.try_send(b"hello world") {
-                        Ok(n) => {
-                            println!("sent {} bytes", n);
+
+                if let Some(sock6) = socket6.as_ref() {
+                    let ready = sock6.ready(Interest::READABLE | Interest::WRITABLE).await?;
+                    if ready.is_readable() {
+                        let mut data = [0; 1024];
+                        match sock6.try_recv(&mut data[..]) {
+                            Ok(n) => {
+                                println!("received {:?}", &data[..n]);
+                            }
+                            // False-positive, continue
+                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                            Err(e) => {
+                                return Err(e);
+                            }
                         }
-                        // False-positive, continue
-                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                        Err(e) => {
-                            return Err(e);
+                    }
+                    if ready.is_writable() {
+                        match sock6.try_send(b"hello world") {
+                            Ok(n) => {
+                                println!("sent {} bytes", n);
+                            }
+                            // False-positive, continue
+                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                            Err(e) => {
+                                return Err(e);
+                            }
                         }
                     }
                 }
@@ -83,15 +170,21 @@ impl RpcServer {
         })
     }
 
-    pub(crate) fn send_msg(&self, _: Box<dyn Msg>) {
-        unimplemented!()
+    pub(crate) fn send_msg(&self, mut msg: Box<dyn Msg>) {
+        msg.with_ver(version::build(
+            version::NODE_SHORT_NAME,
+            version::NODE_VERSION
+        ));
+
+        if let Some(call) = msg.associated_call() {
+            call.dht().borrow().on_send(call.target_id());
+            call.send();
+        }
+
+        //sendData(msg);
     }
 
     pub(crate) fn send_call(&self, _: Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    pub(crate) fn send_err<'a>(&self, _: Box<dyn Msg>, _: i32, _: &'a str) {
         unimplemented!()
     }
 }
@@ -132,7 +225,7 @@ fn main() {
     let rt = Runtime::new_current_thread().unwrap();
 
     // Run the main asynchronous function
-    rt.block_on(async {
+    rt.block_on(async {``
         // Binding UDP sockets
         let ipv4_socket = UdpSocket::bind("127.0.0.1:8080").await.unwrap();
         let ipv6_socket = UdpSocket::bind("[::1]:8080").await.unwrap();

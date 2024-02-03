@@ -86,6 +86,10 @@ impl DHT {
         self.persist_path = path.to_string()
     }
 
+    pub(crate) fn origin(&self) -> &SocketAddr {
+        &self.addr
+    }
+
     pub(crate)fn bootstrap() {
         unimplemented!()
     }

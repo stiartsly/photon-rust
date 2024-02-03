@@ -3,6 +3,7 @@ use std::any::Any;
 use std::net::SocketAddr;
 
 use crate::id::Id;
+use crate::rpccall::RpcCall;
 use super::msg::{
     Msg,
     Kind,
@@ -46,8 +47,16 @@ impl Msg for Message {
         self.txid = txid
     }
 
-    fn with_verion(&mut self, ver: i32) {
+    fn with_ver(&mut self, ver: i32) {
         self.ver = ver
+    }
+
+    fn associated_call(&self) -> Option<Box<RpcCall>> {
+        unimplemented!()
+    }
+
+    fn with_associated_call(&mut self, _: Box<RpcCall>) {
+        unimplemented!()
     }
 
     fn as_any(&self) -> &dyn Any {

@@ -51,7 +51,7 @@ impl Id {
     pub fn try_from_hex(input: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
         let _ = hex::decode_to_slice(input, &mut bytes[..])
-            .map_err(|err| match err {
+            .map_err(|e| match e {
                 FromHexError::InvalidHexCharacter { c, index } => {
                     Error::Argument(
                         format!("Invalid hex character '{}' at index {}", c, index)
@@ -76,7 +76,7 @@ impl Id {
         let _ = bs58::decode(input)
             .with_alphabet(bs58::Alphabet::DEFAULT)
             .onto(&mut bytes)
-            .map_err(|err| match err {
+            .map_err(|e| match e {
                 decode::Error::BufferTooSmall => {
                     Error::Argument(
                         format!("Invalid base58 string length {}", input.len())

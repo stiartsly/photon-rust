@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::cell::RefCell;
 use std::collections::LinkedList;
 use crate::id::Id;
 use crate::dht::DHT;
@@ -7,7 +8,7 @@ use crate::kbucket_entry::KBucketEntry;
 use crate::node::Node;
 
 pub(crate) struct RoutingTable {
-    dht: Option<Rc<DHT>>,
+    dht: Option<Rc<RefCell<DHT>>>,
     buckets: LinkedList<Box<KBucket>>
 }
 
@@ -20,12 +21,17 @@ impl RoutingTable {
         }
     }
 
-    pub(crate) fn binding_dht(&mut self, dht: Rc<DHT>) -> &mut Self {
-        self.dht = Some(dht); self
+    pub(crate) fn bind_dht(&mut self, dht: Rc<RefCell<DHT>>) {
+        self.dht = Some(dht)
     }
 
-    fn dht(&self) -> Rc<DHT> {
-        self.dht.as_ref().unwrap().clone()
+    pub(crate) fn unbind_dht(&mut self) {
+        _ = self.dht.take()
+    }
+
+    fn dht(&self) -> &Rc<RefCell<DHT>> {
+        assert!(self.dht.is_some(), "not dht bound");
+        self.dht.as_ref().unwrap()
     }
 
     fn bucket_mut(&self, _: &Id) -> &mut Box<KBucket> {
