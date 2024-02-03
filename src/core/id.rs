@@ -50,24 +50,25 @@ impl Id {
 
     pub fn try_from_hex(input: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
-        let _ = hex::decode_to_slice(input, &mut bytes[..]).map_err(|err| match err {
-            FromHexError::InvalidHexCharacter { c, index } => {
-                Error::Argument(
-                    format!("Invalid hex character '{}' at index {}", c, index)
-                )
-            }
-            FromHexError::OddLength => {
-                Error::Argument(
-                    format!("Odd length hex string")
-                )
-            },
-            FromHexError::InvalidStringLength => {
-                Error::Argument(
-                    format!("Invalid hex string length {}", input.len())
-                )
-            }
+        let _ = hex::decode_to_slice(input, &mut bytes[..])
+            .map_err(|err| match err {
+                FromHexError::InvalidHexCharacter { c, index } => {
+                    Error::Argument(
+                        format!("Invalid hex character '{}' at index {}", c, index)
+                    )
+                }
+                FromHexError::OddLength => {
+                    Error::Argument(
+                        format!("Odd length hex string")
+                    )
+                },
+                FromHexError::InvalidStringLength => {
+                    Error::Argument(
+                        format!("Invalid hex string length {}", input.len())
+                    )
+                }
         });
-        Ok(Id{ bytes })
+        Ok(Id { bytes })
     }
 
     pub fn try_from_base58(input: &str) -> Result<Self, Error> {
@@ -139,48 +140,47 @@ impl Id {
         self.bytes.as_slice()
     }
 
+    pub(crate) fn as_mut_bytes(&mut self) -> &mut [u8] {
+        self.bytes.as_mut_slice()
+    }
+
     pub fn three_way_compare(&self, id1: &Self, id2: &Self) -> Ordering {
-        let mut mmi = i32::MAX;
+        let mut mmi = usize::MAX;
         for i in 0..ID_BYTES {
             if id1.bytes[i] != id2.bytes[i] {
-                mmi = i as i32;
+                mmi = i;
                 break;
             }
         }
-        if mmi == i32::MAX {
+        if mmi == usize::MAX {
             return Ordering::Equal;
         }
 
-        let a = id1.bytes[mmi as usize] ^ self.bytes[mmi as usize];
-        let b = id2.bytes[mmi as usize] ^ self.bytes[mmi as usize];
+        let a = id1.bytes[mmi] ^ self.bytes[mmi];
+        let b = id2.bytes[mmi] ^ self.bytes[mmi];
         a.cmp(&b)
     }
-
-    pub(crate) fn update<F>(&mut self, f: F)
-    where F: FnOnce(&mut [u8]) {
-        f(self.bytes.as_mut_slice());
-    }
 }
 
-pub fn distance(id1: &Id, id2: &Id) -> Id {
-    id1.distance(id2)
+pub fn distance(a: &Id, b: &Id) -> Id {
+    a.distance(b)
 }
 
-pub(crate) fn bits_equal(id1: &Id, id2: &Id, depth: i32) -> bool {
+pub(crate) fn bits_equal(a: &Id, b: &Id, depth: i32) -> bool {
     if depth < 0 {
         return true;
     }
 
-    let mut mmi = i32::MAX;
+    let mut mmi = usize::MAX;
     for i in 0..ID_BYTES {
-        if id1.bytes[i] != id2.bytes[i] {
-            mmi = i as i32;
+        if a.bytes[i] != b.bytes[i] {
+            mmi = i;
             break;
         }
     }
 
-    let idx = depth >> 3;
-    let diff: u8 = id1.bytes[idx as usize] ^ id2.bytes[idx as usize];
+    let idx = (depth >> 3) as usize;
+    let diff: u8 = a.bytes[idx] ^ b.bytes[idx];
     // Create a bitmask with the lower n bits set
     let mask: u8 = (1 << (depth & 0x07)) - 1;
     // Use the bitmask to check if the lower bits are all zeros
@@ -192,19 +192,19 @@ pub(crate) fn bits_equal(id1: &Id, id2: &Id, depth: i32) -> bool {
     }
 }
 
-pub(crate) fn bits_copy(src: &Id, dest: &mut Id, depth: i32) {
+pub(crate) fn bits_copy(src: &Id, dst: &mut Id, depth: i32) {
     if depth < 0 {
         return;
     }
 
     let idx = (depth >> 3) as usize;
     if idx > 0 {
-        dest.bytes[..idx].copy_from_slice(&src.bytes[..idx]);
+        dst.bytes[..idx].copy_from_slice(&src.bytes[..idx]);
     }
 
     let mask: u8 = (1 << (depth & 0x07)) - 1;
-    dest.bytes[idx] &= !mask;
-    dest.bytes[idx] |= src.bytes[idx] & mask;
+    dst.bytes[idx] &= !mask;
+    dst.bytes[idx] |= src.bytes[idx] & mask;
 }
 
 impl fmt::Display for Id {

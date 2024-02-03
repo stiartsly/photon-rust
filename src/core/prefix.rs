@@ -10,8 +10,8 @@ pub struct Prefix {
 impl Prefix {
     pub fn new() -> Self {
         Prefix {
-            depth: -1,
             id: Id::default(),
+            depth: -1
         }
     }
 
@@ -54,20 +54,14 @@ impl Prefix {
 
     pub fn split_branch(&mut self, high_branch: bool) -> Prefix {
         let mut branch = self.clone();
-        let _depth = branch.depth as usize;
+        let depth = branch.depth as usize;
         branch.depth += 1;
 
-        match high_branch {
-            true => {
-                self.id.update(|bytes| {
-                    bytes[_depth / 8] |= 0x80 >> (_depth % 8);
-                })
-            },
-            false => {
-                self.id.update(|bytes| {
-                    bytes[_depth / 8] &= !(0x80 >> (_depth % 8));
-                })
-            }
+        let bytes = self.id.as_mut_bytes();
+        if high_branch {
+            bytes[depth / 8] |= 0x80 >> (depth % 8);
+        } else {
+            bytes[depth / 8] &= !(0x80 >> (depth % 8));
         }
         branch
     }
@@ -85,9 +79,8 @@ impl Prefix {
 
     fn set_tail(&mut self, bit: i32) {
         let index = (bit >> 3) as usize;
-        self.id.update(|bytes| {
-            bytes[index] &= !(0x80 >> (bit & 0x07))
-        })
+        let bytes = self.id.as_mut_bytes();
+        bytes[index] &= !(0x80 >> (bit & 0x07))
     }
 }
 
