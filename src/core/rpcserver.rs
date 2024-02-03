@@ -1,15 +1,18 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::time::SystemTime;
-use tokio::io::{self, Interest};
+use tokio::io::{self};
 use tokio::net::UdpSocket;
 use tokio::runtime::{self};
 use log::{info};
 
+use crate::as_millis;
 use crate::version;
 use crate::dht::DHT;
 use crate::rpccall::RpcCall;
 use crate::msg::msg::Msg;
+
+const RPC_SERVER_REACHABILITY_TIMEOUT: u128 = 60 * 1000;
 
 #[derive(Clone, PartialEq, Eq)]
 enum State {
@@ -25,7 +28,12 @@ pub(crate) struct RpcServer {
     state: State,
     started: SystemTime,
 
-    reachable: bool
+    reachable: bool,
+    received_msgs: i32,
+    msgs_atleast_reachable_check: i32,
+    last_reachable_check: SystemTime,
+
+    // next_txid: i32, // TODO atomic ?
 }
 
 #[allow(dead_code)]
@@ -37,6 +45,11 @@ impl RpcServer {
             state: State::Initial,
             started: SystemTime::UNIX_EPOCH,
             reachable: false,
+            received_msgs: 0,
+            msgs_atleast_reachable_check: 0,
+            last_reachable_check: SystemTime::UNIX_EPOCH,
+
+            // next_txid: 0,
         }
     }
 
@@ -48,6 +61,10 @@ impl RpcServer {
         _ = self.dht4.take()
     }
 
+    fn has_dht4(&self) -> bool {
+        self.dht4.is_some()
+    }
+
     pub(crate) fn enable_dht6(&mut self, dht6: Rc<RefCell<DHT>>) {
         self.dht6 = Some(dht6)
     }
@@ -56,8 +73,28 @@ impl RpcServer {
         _ = self.dht6.take()
     }
 
+    fn has_dht6(&self) -> bool {
+        self.dht6.is_some()
+    }
+
     pub(crate) fn is_reachable(&self) -> bool {
         self.reachable
+    }
+
+    pub(crate) fn update_reachability(&mut self) {
+        // don't do pings too often if we're not receiving anything
+        // (connection might be dead)
+
+        if self.received_msgs != self.msgs_atleast_reachable_check {
+            self.reachable = true;
+            self.last_reachable_check = SystemTime::now();
+            self.msgs_atleast_reachable_check = self.received_msgs;
+            return;
+        }
+
+        if as_millis!(self.last_reachable_check) > RPC_SERVER_REACHABILITY_TIMEOUT {
+            self.reachable = false;
+        }
     }
 
     fn start(&mut self) {
@@ -99,71 +136,38 @@ impl RpcServer {
         let rt = runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
         rt.block_on(async move {
-            let mut socket4: Option<UdpSocket> = None;
+            let mut sock4: Option<UdpSocket> = None;
             if let Some(dht4) = self.dht4.as_ref(){
-                socket4 = Some(UdpSocket::bind(dht4.borrow().origin()).await?);
+                sock4 = Some(UdpSocket::bind(dht4.borrow().origin()).await?);
             }
-            let mut socket6: Option<UdpSocket> = None;
+            let mut sock6: Option<UdpSocket> = None;
             if let Some(dht6) = self.dht6.as_ref(){
-                socket6 = Some(UdpSocket::bind(dht6.borrow().origin()).await?);
+                sock6 = Some(UdpSocket::bind(dht6.borrow().origin()).await?);
             }
 
             loop {
-                if let Some(sock4) = socket4.as_ref() {
-                    let ready = sock4.ready(Interest::READABLE | Interest::WRITABLE).await?;
-                    if ready.is_readable() {
-                        let mut data = [0; 1024];
-                        match sock4.try_recv(&mut data[..]) {
-                            Ok(n) => {
-                                println!("received {:?}", &data[..n]);
-                            }
-                            // False-positive, continue
-                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                            Err(e) => {
-                                return Err(e);
-                            }
+                tokio::select! {
+                    result1 = read_socket(sock4.as_ref()) => {
+                        match result1 {
+                            Ok(data) => println!("Received data on socket1: {:?}", data),
+                            Err(err) => eprintln!("Error reading from socket1: {}", err),
                         }
                     }
-                    if ready.is_writable() {
-                        match sock4.try_send(b"hello world") {
-                            Ok(n) => {
-                                println!("sent {} bytes", n);
-                            }
-                            // False-positive, continue
-                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                            Err(e) => {
-                                return Err(e);
-                            }
-                        }
-                    }
-                }
 
-                if let Some(sock6) = socket6.as_ref() {
-                    let ready = sock6.ready(Interest::READABLE | Interest::WRITABLE).await?;
-                    if ready.is_readable() {
-                        let mut data = [0; 1024];
-                        match sock6.try_recv(&mut data[..]) {
-                            Ok(n) => {
-                                println!("received {:?}", &data[..n]);
-                            }
-                            // False-positive, continue
-                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                            Err(e) => {
-                                return Err(e);
-                            }
+                    result2 = read_socket(sock6.as_ref()) => {
+                        match result2 {
+                            Ok(data) => println!("Received data on socket2: {:?}", data),
+                            Err(err) => eprintln!("Error reading from socket2: {}", err),
                         }
                     }
-                    if ready.is_writable() {
-                        match sock6.try_send(b"hello world") {
-                            Ok(n) => {
-                                println!("sent {} bytes", n);
-                            }
-                            // False-positive, continue
-                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-                            Err(e) => {
-                                return Err(e);
-                            }
-                        }
+
+                    // Writable event for either socket
+                    _ = write_socket(sock4.as_ref()) => {
+                        println!("Socket1 is writable");
+                    }
+
+                    _ = write_socket(sock6.as_ref()) => {
+                        println!("Socket2 is writable");
                     }
                 }
             }
@@ -176,9 +180,9 @@ impl RpcServer {
             version::NODE_VERSION
         ));
 
-        if let Some(call) = msg.associated_call() {
+        if let Some(mut call) = msg.associated_call() {
             call.dht().borrow().on_send(call.target_id());
-            call.send();
+            call.send(&self);
         }
 
         //sendData(msg);
@@ -189,57 +193,29 @@ impl RpcServer {
     }
 }
 
-
-/*
-use tokio::net::UdpSocket;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use tokio::time::Duration;
-use tokio::runtime::Runtime;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-async fn send_receive(socket: UdpSocket, target_addr: SocketAddr, message: &'static str) {
-    loop {
-        // Sending data
-        match socket.send_to(message.as_bytes(), target_addr).await {
-            Ok(_) => println!("Sent message: {}", message),
-            Err(e) => eprintln!("Error sending message: {}", e),
+async fn read_socket(socket_option: Option<&UdpSocket>) -> Result<Vec<u8>, std::io::Error> {
+    match socket_option.as_ref() {
+        Some(socket) => {
+            let mut buffer = vec![0; 1024];
+            let (size, _) = socket.recv_from(&mut buffer).await?;
+            buffer.truncate(size);
+            Ok(buffer)
+        },
+        None => {
+            Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
         }
-
-        // Reading data
-        let mut buffer = [0u8; 1024];
-        match socket.recv_from(&mut buffer).await {
-            Ok((size, src)) => {
-                let received_message = String::from_utf8_lossy(&buffer[..size]);
-                println!("Received message from {}: {}", src, received_message);
-            }
-            Err(e) => eprintln!("Error receiving message: {}", e),
-        }
-
-        // Sleep for a while before the next iteration
-        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
-fn main() {
-    // Create a single-threaded Tokio runtime
-    let rt = Runtime::new_current_thread().unwrap();
-
-    // Run the main asynchronous function
-    rt.block_on(async {``
-        // Binding UDP sockets
-        let ipv4_socket = UdpSocket::bind("127.0.0.1:8080").await.unwrap();
-        let ipv6_socket = UdpSocket::bind("[::1]:8080").await.unwrap();
-
-        // Specify the target address for sending/receiving
-        let target_addr = SocketAddr::new(Ipv4Addr::new(127, 0, 0, 1).into(), 8080);
-
-        // Spawn tasks for continuous sending and receiving on both sockets
-        let task_ipv4 = send_receive(ipv4_socket, target_addr, "Hello from IPv4!");
-        let task_ipv6 = send_receive(ipv6_socket, target_addr, "Hello from IPv6!");
-
-        // Wait for both tasks to complete (Ctrl+C to exit)
-        tokio::try_join!(task_ipv4, task_ipv6).unwrap();
-    });
+async fn write_socket(socket_option: Option<&UdpSocket>) -> Result<(), std::io::Error> {
+    match socket_option.as_ref() {
+        Some(socket) => {
+            let message = b"Hello, World!";
+            socket.send(message).await?;
+            Ok(())
+        },
+        None => {
+            Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
+        }
+    }
 }
-
-*/

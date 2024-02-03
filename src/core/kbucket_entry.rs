@@ -2,11 +2,13 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 
-use crate::constants;
-use crate::version;
-use crate::id::Id;
-use crate::node::{Node, Reachable};
-use crate::as_millis;
+use crate::{
+    as_millis,
+    constants,
+    version,
+    id::Id,
+    node::{Node, Reachable}
+};
 
 /**
  * Entry in a KBucket, it basically contains an IP address of a node,

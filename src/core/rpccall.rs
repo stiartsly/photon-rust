@@ -9,10 +9,11 @@ use crate::{
     dht::DHT,
     node::Node,
     msg::msg,
-    msg::msg::Msg
+    msg::msg::Msg,
+    rpcserver::RpcServer
 };
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, PartialOrd, Hash)]
 pub(crate) enum State {
     Unsent,
     Sent,
@@ -30,8 +31,8 @@ pub(crate) struct RpcCall {
     req: Box<dyn Msg>,
     rsp: Option<Box<dyn Msg>>,
 
-    sent_time: SystemTime,
-    responsed_time: SystemTime,
+    sent: SystemTime,
+    responsed: SystemTime,
 
     state: State,
 
@@ -49,8 +50,8 @@ impl RpcCall {
             target: node.clone(),
             req, rsp: None,
 
-            sent_time: SystemTime::UNIX_EPOCH,
-            responsed_time: SystemTime::UNIX_EPOCH,
+            sent: SystemTime::UNIX_EPOCH,
+            responsed: SystemTime::UNIX_EPOCH,
             state: State::Unsent,
 
             state_changed_fn: Box::new(|_, _,_| {}),
@@ -77,9 +78,10 @@ impl RpcCall {
     }
 
     pub(crate) fn matches_address(&self) -> bool {
-        match self.rsp.as_ref() {
-            Some(msg) => msg.addr() == self.req.addr(),
-            None => false
+        if let Some(msg) = self.rsp.as_ref() {
+            msg.addr() == self.req.addr()
+        } else {
+            false
         }
     }
 
@@ -92,11 +94,11 @@ impl RpcCall {
     }
 
     pub(crate) fn sent_time(&self) -> &SystemTime {
-        &self.sent_time
+        &self.sent
     }
 
     pub(crate) fn responsed_time(&self) -> &SystemTime {
-        &self.responsed_time
+        &self.responsed
     }
 
     pub(crate) fn state(&self) -> &State {
@@ -104,7 +106,7 @@ impl RpcCall {
     }
 
     pub(crate) fn is_pending(&self) -> bool {
-        unimplemented!()
+        self.state < State::Timeout
     }
 
     pub(crate) fn set_state_changed_fn<F>(&mut self, f: F)
@@ -141,11 +143,11 @@ impl RpcCall {
         }
     }
 
-    //pub(crate) fn sent(&self, _: &Rc<RpcServer>) {
-    //    unimplemented!()
-    //}
-    pub(crate) fn send(&self) {
-        unimplemented!()
+    pub(crate) fn send(&mut self, _: &RpcServer) {
+        self.sent = SystemTime::now();
+        self.update_state(State::Sent);
+
+        // Timer
     }
 
     pub(crate) fn responsed(&mut self, response: Box<dyn Msg>) {
@@ -157,7 +159,7 @@ impl RpcCall {
         */
 
         self.rsp = Some(response);
-        self.responsed_time = SystemTime::now();
+        self.responsed = SystemTime::now();
 
         match self.rsp.as_ref().unwrap().kind() {
             msg::Kind::Response => self.update_state(State::Responsed),

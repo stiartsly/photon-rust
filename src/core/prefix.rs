@@ -1,5 +1,6 @@
 use std::fmt;
-use crate::{id, id::Id};
+use crate::id;
+use crate::id::Id;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Prefix {
@@ -36,7 +37,8 @@ impl Prefix {
             id: Id::max(),
             depth: self.depth
         };
-        self.id.distance(&p.id.distance(&Id::max()))
+        let d = p.id.distance(&Id::max());
+        self.id.distance(&d)
     }
 
     pub fn parent(&self) -> Prefix {
@@ -48,7 +50,6 @@ impl Prefix {
         // set last bit to zero
         parent.set_tail(parent.depth);
         parent.depth -= 1;
-
         parent
     }
 
@@ -58,10 +59,11 @@ impl Prefix {
         branch.depth += 1;
 
         let bytes = self.id.as_mut_bytes();
+        let val = 0x80 >> (depth % 8);
         if high_branch {
-            bytes[depth / 8] |= 0x80 >> (depth % 8);
+            bytes[depth / 8] |= val;
         } else {
-            bytes[depth / 8] &= !(0x80 >> (depth % 8));
+            bytes[depth / 8] &= !val;
         }
         branch
     }

@@ -2,18 +2,23 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::net::SocketAddr;
 
-use crate::constants;
-use crate::version;
-use crate::id::Id;
-use crate::lookup_option::LookupOption;
-use crate::node::Node;
-use crate::peer::Peer;
-use crate::value::Value;
-use crate::rpccall::RpcCall;
-use crate::rpcserver::RpcServer;
-use crate::kclosest_nodes::KClosestNodes;
-use crate::token_man::TokenManager;
-use crate::routing_table::RoutingTable;
+use log::{info, warn, debug};
+
+use crate::{
+    constants,
+    version,
+    id::Id,
+    lookup_option::LookupOption,
+    node::Node,
+    peer::Peer,
+    value::Value,
+    rpccall::RpcCall,
+    rpcserver::RpcServer,
+    kclosest_nodes::KClosestNodes,
+    token_man::TokenManager,
+    routing_table::RoutingTable
+};
+
 use crate::msg::{
     msg::{self, Msg},
     lookup::{self, Result},
@@ -36,9 +41,6 @@ use crate::task::{
     peer_lookup::PeerLookupTaskBuilder
 };
 
-use log::{info, warn, debug};
-
-#[allow(dead_code)]
 pub(crate) struct DHT {
     // node: Rc<NodeRunner>,
 

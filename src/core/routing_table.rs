@@ -1,11 +1,14 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::LinkedList;
-use crate::id::Id;
-use crate::dht::DHT;
-use crate::kbucket::KBucket;
-use crate::kbucket_entry::KBucketEntry;
-use crate::node::Node;
+
+use crate::{
+    id::Id,
+    node::Node,
+    dht::DHT,
+    kbucket::KBucket,
+    kbucket_entry::KBucketEntry
+};
 
 pub(crate) struct RoutingTable {
     dht: Option<Rc<RefCell<DHT>>>,
