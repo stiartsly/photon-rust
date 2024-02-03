@@ -1,3 +1,4 @@
+mod sqlite_storage;
 mod data_storage;
 mod token_man;
 mod version;

@@ -42,7 +42,7 @@ use log::{info, warn, debug};
 pub(crate) struct DHT {
     // node: Rc<NodeRunner>,
 
-    server: Rc<RpcServer>,
+    server: Option<Rc<RefCell<RpcServer>>>,
     token_man: TokenManager,
 
     addr: SocketAddr,
@@ -56,8 +56,9 @@ pub(crate) struct DHT {
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(binding_addr: &SocketAddr, server: Rc<RpcServer>) -> Self {
-        DHT { server,
+    pub(crate) fn new(binding_addr: &SocketAddr) -> Self {
+        DHT {
+            server: None,
             token_man: TokenManager::new(),
 
             addr: binding_addr.clone(),
@@ -67,6 +68,18 @@ impl DHT {
             task_manager: TaskManager::new(),
             running: false,
         }
+    }
+
+    pub(crate) fn link_server(&mut self, server: Rc<RefCell<RpcServer>>) {
+        self.server = Some(server)
+    }
+
+    pub(crate) fn unlink_server(&mut self) {
+        _ = self.server.take()
+    }
+
+    fn server(&self) -> &Rc<RefCell<RpcServer>> {
+        self.server.as_ref().unwrap()
     }
 
     pub(crate) fn enable_persistence(&mut self, path: &str) {
@@ -177,7 +190,7 @@ impl DHT {
 
     pub(crate) fn on_timeout(&self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
-        if !self.running || !self.server.is_reachable() {
+        if !self.running || !self.server().borrow().is_reachable() {
             return;
         }
         self.routing_table.on_timeout(call.target_id());
@@ -236,7 +249,7 @@ impl DHT {
         err.with_msg(str);
         err.with_code(code);
 
-        self.server.send_msg(err);
+        self.server().borrow().send_msg(err);
     }
 
 
@@ -247,7 +260,7 @@ impl DHT {
         msg.with_txid(request.txid());
         msg.with_addr(request.addr());
 
-        self.server.send_msg(msg);
+        self.server().borrow().send_msg(msg);
     }
 
     fn on_find_node<T>(&self, request: &Box<T>) where T: Msg + lookup::Condition {
@@ -282,7 +295,7 @@ impl DHT {
             }
         );
 
-        self.server.send_msg(resp)
+        self.server().borrow().send_msg(resp)
     }
 
     fn on_find_value<T>(&self, request: &Box<T>)
@@ -330,7 +343,7 @@ impl DHT {
             )
         });
 
-        self.server.send_msg(resp);
+        self.server().borrow().send_msg(resp);
     }
 
     fn on_store_value<T>(&mut self, request: &Box<T>)
@@ -355,7 +368,7 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.server.send_msg(resp);
+        self.server().borrow().send_msg(resp);
     }
 
     fn on_find_peers<T>(&self, request: &Box<T>)
@@ -400,7 +413,7 @@ impl DHT {
             )
         });
 
-        self.server.send_msg(resp);
+        self.server().borrow().send_msg(resp);
     }
 
     fn on_announce_peer<T>(&mut self, request: &Box<T>)
@@ -444,6 +457,6 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.server.send_msg(resp);
+        self.server().borrow().send_msg(resp);
     }
 }

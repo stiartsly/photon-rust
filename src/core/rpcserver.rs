@@ -1,3 +1,5 @@
+use std::rc::Rc;
+use std::cell::RefCell;
 use tokio::io::{self, Interest};
 use tokio::net::UdpSocket;
 use tokio::runtime::{self};
@@ -8,10 +10,10 @@ use crate::msg::msg::Msg;
 
 #[allow(dead_code)]
 pub(crate) struct RpcServer {
-    dht4: Option<Box<DHT>>,
-    dht6: Option<Box<DHT>>,
+    dht4: Option<Rc<RefCell<DHT>>>,
+    dht6: Option<Rc<RefCell<DHT>>>,
 
-    reachable: bool,
+    reachable: bool
 }
 
 #[allow(dead_code)]
@@ -24,12 +26,20 @@ impl RpcServer {
         }
     }
 
-    pub(crate) fn enable_dht4(&mut self, dht4: Box<DHT>) -> &mut Self {
-        self.dht4 = Some(dht4); self
+    pub(crate) fn enable_dht4(&mut self, dht4: Rc<RefCell<DHT>>) {
+        self.dht4 = Some(dht4)
     }
 
-    pub(crate) fn enable_dht6(&mut self, dht6: Box<DHT>) -> &mut Self {
-        self.dht6 = Some(dht6); self
+    pub(crate) fn disable_dht4(&mut self) {
+        _ = self.dht4.take()
+    }
+
+    pub(crate) fn enable_dht6(&mut self, dht6: Rc<RefCell<DHT>>) {
+        self.dht6 = Some(dht6)
+    }
+
+    pub(crate) fn disable_dht6(&mut self) {
+        _ = self.dht6.take()
     }
 
     pub(crate) fn is_reachable(&self) -> bool {

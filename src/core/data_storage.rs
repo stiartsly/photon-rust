@@ -6,6 +6,8 @@ use crate::value::Value;
 use crate::peer::Peer;
 
 pub(crate) trait DataStorage {
+    fn open(&mut self, _: &str) -> bool;
+
     fn get_value(&self, _: &Id) -> Box<Value>;
     fn remove_value(&mut self, _: &Id) -> bool;
 

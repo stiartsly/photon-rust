@@ -20,6 +20,7 @@ use crate::{
     rpcserver::RpcServer,
     token_man::TokenManager,
     data_storage::DataStorage,
+    sqlite_storage::SqliteStorage,
 };
 
 #[allow(dead_code)]
@@ -33,8 +34,8 @@ pub struct NodeRunner {
     storage_path: String,
 
     // kademlia DHT strategy
-    dht4: Option<RefCell<DHT>>,
-    dht6: Option<RefCell<DHT>>,
+    dht4: Option<Rc<RefCell<DHT>>>,
+    dht6: Option<Rc<RefCell<DHT>>>,
     dht_num: i32,
     option: LookupOption,
 
@@ -42,8 +43,8 @@ pub struct NodeRunner {
 
     cfg: Box<dyn Config>,
     token_man: Rc<TokenManager>,
-    // storage: Rc<ReCell<dyn DataStorage>>,
-    server: Rc<RpcServer>,
+    storage: Rc<RefCell<dyn DataStorage>>,
+    server: Rc<RefCell<RpcServer>>,
 }
 
 #[allow(dead_code)]
@@ -79,7 +80,8 @@ impl NodeRunner {
         if let Err(_) = fs::metadata(&keypath).map(|metadata| {
             match metadata.is_dir() {
                 true => {
-                    warn!("Key file path {} is an existing directory. DHT node will not be able to persist node key there.", keypath);
+                    warn!("Key file path {} is an existing directory. DHT node
+                        will not be able to persist node key there.", keypath);
                     persistent = false;
                     keypair = Some(KeyPair::random());
                 },
@@ -118,45 +120,63 @@ impl NodeRunner {
 
             status: NodeStatus::Stopped,
 
-
             cfg,
             token_man: Rc::new(TokenManager::new()),
+            storage: Rc::new(RefCell::new(SqliteStorage::new())),
             //storage:
-            server: Rc::new(RpcServer::new())
+            server: Rc::new(RefCell::new(RpcServer::new()))
         })
     }
 
-    pub fn start(&mut self) -> Result<(), &'static str> {
+    pub fn start(&mut self) -> Result<(), Error> {
         if self.status != NodeStatus::Stopped {
             return Ok(());
         }
+        self.status = NodeStatus::Initializing;
 
-        // self.set_status(NodeStatus::Stopped, NodeStatus::Initializing);
-        info!("Photon node {} is starting ...", self.id);
+        info!("DHT node {} is starting...", self.id);
 
-        self.server = Rc::new(RpcServer::new());
         if let Some(addr4) = self.cfg.ipv4() {
-            let dht4 = RefCell::new(DHT::new(addr4, Rc::clone(&self.server)));
+            let dht4 = Rc::new(RefCell::new(DHT::new(addr4)));
+            dht4.borrow_mut().link_server(Rc::clone(&self.server));
             if self.persistent {
                 dht4.borrow_mut().enable_persistence(&format!("{}/dht4.cache", self.storage_path));
-                self.dht4 = Some(dht4);
             }
+            self.dht4 = Some(Rc::clone(&dht4));
+            self.server.borrow_mut().enable_dht4(Rc::clone(&dht4))
         }
         if let Some(addr6) = self.cfg.ipv6() {
-            let dht6 = RefCell::new(DHT::new(addr6, Rc::clone(&self.server)));
+            let dht6 = Rc::new(RefCell::new(DHT::new(addr6)));
             if self.persistent {
                 dht6.borrow_mut().enable_persistence(&format!("{}/dht4.cache", self.storage_path));
-                self.dht6 = Some(dht6);
+                self.dht6 = Some(Rc::clone(&dht6));
             }
+            self.server.borrow_mut().enable_dht6(Rc::clone(&dht6));
         }
 
-        // self.set_status(NodeStatus::Initializing, NodeStatus::Running);
+        self.status = NodeStatus::Running;
+        let dbpath = self.storage_path.clone() + "/node.db";
+        self.storage.borrow_mut().open(dbpath.as_str());
+
+        // TODO:
 
         Ok(())
     }
 
     pub fn stop(&mut self) {
-        unimplemented!()
+        if self.status == NodeStatus::Stopped {
+            return;
+        }
+
+        info!("DHT node {} is stopping..", self.id);
+
+        self.server.borrow_mut().disable_dht4();
+        self.server.borrow_mut().disable_dht6();
+
+        // self.server.stop();
+
+        self.status = NodeStatus::Stopped;
+        info!("DHT node {} stopped", self.id);
     }
 
     pub(crate) fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
@@ -180,6 +200,13 @@ impl NodeRunner {
     }
 
     pub async fn bootstrap(&self, _: &[Node]) -> Result<(), Error> {
+        unimplemented!()
+    }
+
+    fn persistent_announce(&mut self) {
+        info!("Reannounce the perisitent values and peers...");
+
+        // let mut timestamp = SystemTime::now();
         unimplemented!()
     }
 
