@@ -61,7 +61,7 @@ impl KBucket {
     }
 
     pub(crate) fn is_full(&self) -> bool {
-        self.entries.len() >= crate::constants::MAX_ENTRIES_PER_BUCKET
+        self.entries.len() >= constants::MAX_ENTRIES_PER_BUCKET
     }
 
     pub(crate) fn random(&self) -> Option<&Box<KBucketEntry>> {
@@ -183,7 +183,7 @@ impl KBucket {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     fn _update_with_remove_or_insert(&mut self,

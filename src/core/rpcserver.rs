@@ -147,15 +147,15 @@ impl RpcServer {
 
             loop {
                 tokio::select! {
-                    result1 = read_socket(sock4.as_ref()) => {
-                        match result1 {
+                    rc1 = read_socket(sock4.as_ref()) => {
+                        match rc1 {
                             Ok(data) => println!("Received data on socket1: {:?}", data),
                             Err(err) => eprintln!("Error reading from socket1: {}", err),
                         }
                     }
 
-                    result2 = read_socket(sock6.as_ref()) => {
-                        match result2 {
+                    rc2 = read_socket(sock6.as_ref()) => {
+                        match rc2 {
                             Ok(data) => println!("Received data on socket2: {:?}", data),
                             Err(err) => eprintln!("Error reading from socket2: {}", err),
                         }

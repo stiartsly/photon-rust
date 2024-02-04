@@ -1,7 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::net::SocketAddr;
-
 use log::{info, warn, debug};
 
 use crate::{
@@ -36,20 +35,20 @@ use crate::msg::{
 use crate::task::{
     task::Task,
     task_manager::TaskManager,
-    node_lookup::NodeLookupTaskBuilder,
-    value_lookup::ValueLookupTaskBuilder,
-    peer_lookup::PeerLookupTaskBuilder
+    node_lookup::NodeLookupTask,
+    value_lookup::ValueLookupTask,
+    peer_lookup::PeerLookupTask
 };
 
 pub(crate) struct DHT {
     // node: Rc<NodeRunner>,
 
     server: Option<Rc<RefCell<RpcServer>>>,
-    token_man: TokenManager,
+    token_man: Option<Rc<RefCell<TokenManager>>>,
 
     addr: SocketAddr,
 
-    routing_table: Box<RoutingTable>,
+    routing_table: RoutingTable,
     task_manager: TaskManager,
 
     persist_path: String,
@@ -61,27 +60,40 @@ impl DHT {
     pub(crate) fn new(binding_addr: &SocketAddr) -> Self {
         DHT {
             server: None,
-            token_man: TokenManager::new(),
+            token_man: None,
 
             addr: binding_addr.clone(),
-            persist_path: "".to_string(),
 
-            routing_table: Box::new(RoutingTable::new()),
+            routing_table: RoutingTable::new(),
             task_manager: TaskManager::new(),
             running: false,
+
+            persist_path: String::new(),
         }
     }
 
-    pub(crate) fn link_server(&mut self, server: Rc<RefCell<RpcServer>>) {
+    pub(crate) fn set_server(&mut self, server: Rc<RefCell<RpcServer>>) {
         self.server = Some(server)
     }
 
-    pub(crate) fn unlink_server(&mut self) {
+    pub(crate) fn unset_server(&mut self) {
         _ = self.server.take()
     }
 
     fn server(&self) -> &Rc<RefCell<RpcServer>> {
         self.server.as_ref().unwrap()
+    }
+
+    pub(crate) fn set_token_manager(&mut self, token_man: Rc<RefCell<TokenManager>>) {
+        self.token_man = Some(token_man)
+    }
+
+    pub(crate) fn unset_token_manager(&mut self) {
+        _ = self.token_man.take()
+    }
+
+    fn token_man(&self) -> &Rc<RefCell<TokenManager>> {
+        self.token_man.as_ref().unwrap()
     }
 
     pub(crate) fn enable_persistence(&mut self, path: &str) {
@@ -98,30 +110,28 @@ impl DHT {
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
     where F: Fn(Option<Box<Node>>) + 'static {
-        let mut entry = self.routing_table.bucket_entry(id).map(
-            |entry| Box::new(entry.node().clone())
+        let node = self.routing_table.bucket_entry(id).map(
+            |item| Box::new(item.node().clone())
         );
 
-        let result = Rc::new(RefCell::new(entry.take()));
-        let result_shadow = Rc::clone(&result);
+        let node_rc1 = Rc::new(RefCell::new(node));
+        let node_rc2 = Rc::clone(&node_rc1);
 
-        let mut builder = NodeLookupTaskBuilder::new(id);
-        builder.with_name("node lookup");
-        builder.set_result_fn(move|arg_task, arg_node| {
-            if arg_node.is_some() {
-                let mut found_borrowed = result.borrow_mut();
-                *found_borrowed = Some(arg_node.unwrap());
+        let mut task = Box::new(NodeLookupTask::new(id));
+        task.with_name("node lookup");
+        task.set_result_fn(move|_task, _node| {
+            if _node.is_some() {
+                *(node_rc1.borrow_mut()) = Some(_node.unwrap());
             }
             if option == LookupOption::Conservative {
-                arg_task.cancel()
+                _task.cancel()
             }
         });
-        let mut task = Box::new(builder.build());
         task.add_listener(move |_| {
-            complete_fn(result_shadow.borrow_mut().take());
+            complete_fn(node_rc2.borrow_mut().take());
         });
 
-        self.task_manager.add(task as Box<dyn Task>);
+        self.task_manager.add(task);
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
@@ -130,9 +140,9 @@ impl DHT {
         let result_ref = Rc::new(RefCell::new(empty.take()));
         let result_shadow = Rc::clone(&result_ref);
 
-        let mut builder = ValueLookupTaskBuilder::new(id);
-        builder.with_name("value lookup");
-        builder.set_result_fn(move | arg_task, arg_value| {
+        let mut task = Box::new(ValueLookupTask::new(id));
+        task.with_name("value lookup");
+        task.set_result_fn(move | arg_task, arg_value| {
             let mut found_borrowed = result_ref.borrow_mut();
             let value_ref = arg_value.as_ref().unwrap();
             match result_ref.borrow().as_ref() {
@@ -151,12 +161,11 @@ impl DHT {
             }
         });
 
-        let mut task = Box::new(builder.build());
         task.add_listener(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         });
 
-        self.task_manager.add(Box::new(builder.build()));
+        self.task_manager.add(task);
     }
 
     pub(crate) fn store_value<F>(&self, _: &Value, _: F)
@@ -170,9 +179,9 @@ impl DHT {
         let result_rc = Rc::new(RefCell::new(empty.take()));
         let result_shadow = Rc::clone(&result_rc);
 
-        let mut builder = PeerLookupTaskBuilder::new(id);
-        builder.with_name("peer-lookup");
-        builder.set_result_fn(move |arg_task, _| {
+        let mut task = Box::new(PeerLookupTask::new(id));
+        task.with_name("peer-lookup");
+        task.set_result_fn(move |arg_task, _| {
             let found_borrowed = result_rc.borrow_mut();
             // peers->insert(peers->end(), listOfPeers.begin(), listOfPeers.end());
             if option != LookupOption::Conservative && (*found_borrowed).as_ref().unwrap().len() >= expected {
@@ -181,12 +190,11 @@ impl DHT {
             }
         });
 
-        let mut task = Box::new(builder.build());
         task.add_listener(move |_| {
             complete_fn(result_shadow.borrow_mut().take())
         });
 
-        self.task_manager.add(task as Box<dyn Task>);
+        self.task_manager.add(task);
     }
 
     pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
@@ -293,7 +301,7 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-                self.token_man.generate_token(
+                self.token_man().borrow().generate_token(
                     request.id(),
                     request.addr(),
                     request.target()
@@ -342,7 +350,7 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man.generate_token(
+            self.token_man().borrow().generate_token(
                 request.id(),
                 request.addr(),
                 request.target()
@@ -357,7 +365,7 @@ impl DHT {
         let value = request.value();
         let value_id = value.id();
 
-        if !self.token_man.verify_token(request.token(), request.id(), request.addr(), &value_id) {
+        if !self.token_man().borrow_mut().verify_token(request.token(), request.id(), request.addr(), &value_id) {
             warn!("Received a store value request with invalid token from {}", request.addr());
             self.send_err(request.as_ref(), 203, "Invalid token for STORE VALUE request");
             return;
@@ -412,7 +420,7 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man.generate_token(
+            self.token_man().borrow().generate_token(
                 request.id(),
                 request.addr(),
                 request.target()
@@ -432,7 +440,7 @@ impl DHT {
             );
         }
 
-        if !self.token_man.verify_token(
+        if !self.token_man().borrow_mut().verify_token(
             request.token(),
             request.id(),
             request.addr(),

@@ -1,52 +1,28 @@
-//use std::rc::Rc;
 use std::fmt;
 use std::collections::HashMap;
 use std::time::SystemTime;
+use log::debug;
 
-use crate::id::Id;
-use crate::node::Node;
-//use crate::dht::DHT;
-use crate::rpccall::RpcCall;
-use crate::constants;
-use crate::msg::msg::{self, Msg};
-use crate::msg::lookup::{Result as MsgResult};
-use crate::msg::find_node_rsp::{self};
-use super::task::{Task, State};
-use super::lookup::{LookupTask};
-use super::candidate_node::CandidateNode;
-use super::closest_set::ClosestSet;
-use super::closest_candidates::ClosestCandidates;
+use crate::{
+    constants,
+    id::Id,
+    node::Node,
+    rpccall::RpcCall
+};
 
-use log::{debug};
+use crate::msg::{
+    msg::{self, Msg},
+    lookup::{Result as MsgResult},
+    find_node_rsp::{self}
+};
 
-pub(crate) struct NodeLookupTaskBuilder<'a> {
-    name: Option<&'a str>,
-    target: &'a Id,
-
-    result_fn: Option<Box<dyn FnMut(&mut dyn Task, Option<Box<Node>>)>>
-}
-
-impl<'a> NodeLookupTaskBuilder<'a> {
-    pub(crate) fn new(target: &'a Id) -> Self {
-        NodeLookupTaskBuilder {
-            name: None,
-            target,
-            result_fn: None,
-        }
-    }
-    pub(crate) fn with_name(&mut self, name: &'a str) {
-        self.name = Some(name)
-    }
-
-    pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(&mut dyn Task, Option<Box<Node>>) + 'static {
-        self.result_fn = Some(Box::new(f));
-    }
-
-    pub(crate) fn build(&mut self) -> NodeLookupTask {
-        NodeLookupTask::new(self)
-    }
-}
+use super::{
+    task::{Task, State},
+    lookup::LookupTask,
+    candidate_node::CandidateNode,
+    closest_set::ClosestSet,
+    closest_candidates::ClosestCandidates
+};
 
 #[allow(dead_code)]
 pub(crate) struct NodeLookupTask {
@@ -76,30 +52,35 @@ pub(crate) struct NodeLookupTask {
 
 #[allow(dead_code)]
 impl NodeLookupTask {
-    pub(crate) fn new(b: &mut NodeLookupTaskBuilder) -> Self {
+    pub(crate) fn new(target :&Id) -> Self {
         NodeLookupTask { //dht,
             taskid: 0,
-            name: b.name.take().unwrap().to_string(),
-            state: State::INITIAL,
+            name: String::from("N/A"),
+            state: State::Initial,
             started_time: SystemTime::UNIX_EPOCH,
             finished_time: SystemTime::UNIX_EPOCH,
             inflights: HashMap::new(),
             listeners: Vec::new(),
 
-            target: b.target.clone(),
+            target: target.clone(),
             closest_set: ClosestSet::new(
-                b.target,
+                target,
                 constants::MAX_ENTRIES_PER_BUCKET
             ),
             closest_candidates: ClosestCandidates::new(
-                b.target,
+                target,
                 3 * constants::MAX_ENTRIES_PER_BUCKET
             ),
 
             bootstrap: false,
             want_token: false,
-            result_fn: b.result_fn.take().unwrap()
+            result_fn: Box::new(|_,_|{})
         }
+    }
+
+    pub(crate) fn set_result_fn<F>(&mut self, f: F)
+    where F: FnMut(&mut dyn Task, Option<Box<Node>>) + 'static {
+        self.result_fn = Box::new(f);
     }
 
     pub(crate) fn add_listener<F>(&mut self, f: F)
@@ -139,7 +120,10 @@ impl Task for NodeLookupTask {
     }
 
     fn name(&self) -> &str{
-        &self.name
+        self.name.as_str()
+    }
+    fn with_name(&mut self, name: &str) {
+        self.name = name.to_string()
     }
 
     fn state(&self) -> State{
@@ -151,11 +135,11 @@ impl Task for NodeLookupTask {
     }
 
     fn is_canceled(&self) -> bool{
-        self.state == State::CANCELED
+        self.state == State::Canceled
     }
 
     fn is_finished(&self) -> bool{
-        self.state == State::FINISHED
+        self.state == State::Finished
     }
 
     fn started_time(&self) -> &SystemTime{
@@ -176,8 +160,8 @@ impl Task for NodeLookupTask {
 
     fn start(&mut self){
         if match self.state {
-            State::INITIAL => { self.state = State::RUNNING; true },
-            State::QUEUED => { self.state = State::RUNNING; true },
+            State::Initial => { self.state = State::Running; true },
+            State::Queued => { self.state = State::Running; true },
             _ => {false}
         } {
             debug!("Task starting: {}", self);
@@ -190,9 +174,9 @@ impl Task for NodeLookupTask {
 
     fn cancel(&mut self){
         if match self.state {
-            State::INITIAL => { self.state = State::CANCELED; true },
-            State::QUEUED => { self.state = State::CANCELED; true },
-            State::RUNNING => { self.state = State::CANCELED; true },
+            State::Initial => { self.state = State::Canceled; true },
+            State::Queued => { self.state = State::Canceled; true },
+            State::Running => { self.state = State::Canceled; true },
             _ => {false}
         } {
             self.finished_time = SystemTime::now();
@@ -289,7 +273,7 @@ impl fmt::Display for NodeLookupTask {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "#{}[{}] DHT:{}, state:{}",
             self.taskid,
-            self.name(),
+            self.name.as_str(),
             "ipv4<TODO>",
             self.state
         )?;

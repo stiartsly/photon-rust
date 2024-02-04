@@ -368,12 +368,12 @@ impl Signature {
 
         let s = &mut self.state.0 as *mut _ as *mut crypto_sign_state;
         unsafe {
-            let result = crypto_sign_final_verify(
+            let rc = crypto_sign_final_verify(
                 s,
                 as_uchar_ptr!(sig),
                 as_uchar_ptr!(pk.as_bytes())
             );
-            result == 0
+            rc == 0
         }
     }
 }

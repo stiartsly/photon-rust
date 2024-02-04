@@ -1,5 +1,3 @@
-
-//use std::rc::Rc;
 use std::time::SystemTime;
 
 use crate::id::Id;
@@ -21,46 +19,20 @@ pub(crate) struct ValueLookupTask {
 }
 
 #[allow(dead_code)]
-pub(crate) struct ValueLookupTaskBuilder<'a> {
-    name: Option<&'a str>,
-    target: &'a Id,
-
-    result_fn: Option<Box<dyn FnMut(&mut Box<dyn Task>, Option<Box<Value>>)>>,
-}
-
-impl<'a> ValueLookupTaskBuilder<'a> {
-    pub(crate) fn new(target: &'a Id) -> Self {
-        ValueLookupTaskBuilder {
-            name: Some("task"),
-            target,
-            result_fn: None
-        }
-    }
-
-    pub(crate) fn with_name(&mut self, name: &'a str) {
-        self.name = Some(name);
-    }
-
-    pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(&mut Box<dyn Task>, Option<Box<Value>>) + 'static {
-        self.result_fn = Some(Box::new(f));
-    }
-
-    pub(crate) fn build(&mut self) -> ValueLookupTask {
-        ValueLookupTask::new(self)
-    }
-}
-
-#[allow(dead_code)]
 impl ValueLookupTask {
-    pub(crate) fn new(builder: &mut ValueLookupTaskBuilder) -> Self {
+    pub(crate) fn new(_: &Id) -> Self {
         ValueLookupTask {
             //dht,
             bootstrap: false,
             want_token: false,
-            result_fn: builder.result_fn.take().unwrap(),
+            result_fn: Box::new(|_,_|{}),
             listeners: Vec::new(),
         }
+    }
+
+    pub(crate) fn set_result_fn<F>(&mut self, f: F)
+    where F: FnMut(&mut Box<dyn Task>, Option<Box<Value>>) + 'static {
+        self.result_fn = Box::new(f);
     }
 
     pub(crate) fn add_listener<F>(&mut self, f: F)
@@ -79,6 +51,10 @@ impl Task for ValueLookupTask {
     }
 
     fn name(&self) -> &str{
+        unimplemented!()
+    }
+
+    fn with_name(&mut self, _:&str) {
         unimplemented!()
     }
 

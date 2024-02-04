@@ -7,21 +7,21 @@ use crate::msg::msg::Msg;
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum State {
-    INITIAL,
-    QUEUED,
-    RUNNING,
-    FINISHED,
-    CANCELED
+    Initial,
+    Queued,
+    Running,
+    Finished,
+    Canceled
 }
 
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
-            State::INITIAL => "INITIAL",
-            State::QUEUED => "QUEUED",
-            State::RUNNING => "RUNNING",
-            State::FINISHED => "FINISHED",
-            State::CANCELED => "CANCELED"
+            State::Initial => "INITIAL",
+            State::Queued => "QUEUED",
+            State::Running => "RUNNING",
+            State::Finished => "FINISHED",
+            State::Canceled => "CANCELED"
         };
         write!(f, "{}", str)?;
         Ok(())
@@ -31,6 +31,7 @@ impl fmt::Display for State {
 pub(crate) trait Task {
     fn taskid(&self) -> i32;
     fn name(&self) -> &str;
+    fn with_name(&mut self, _: &str);
     fn state(&self) -> State;
 
     fn nested(&self) -> &Box<dyn Task>;

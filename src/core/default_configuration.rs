@@ -1,8 +1,10 @@
 use std::net::SocketAddr;
-use crate::node::Node;
-use crate::config::Config;
 
-#[allow(dead_code)]
+use crate::{
+    node::Node,
+    config::Config
+};
+
 pub(crate) struct DefaultConfiguration {
     addr4: Option<SocketAddr>,
     addr6: Option<SocketAddr>,

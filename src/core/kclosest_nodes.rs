@@ -2,11 +2,13 @@ use std::rc::Rc;
 use std::vec::Vec;
 use std::collections::LinkedList;
 
-use crate::id::Id;
-use crate::node::Node;
-use crate::dht::DHT;
-use crate::kbucket_entry::KBucketEntry;
-use crate::kbucket::KBucket;
+use crate::{
+    id::Id,
+    node::Node,
+    dht::DHT,
+    kbucket::KBucket,
+    kbucket_entry::KBucketEntry
+};
 
 #[allow(dead_code)]
 pub(crate) struct KClosestNodes<'a> {

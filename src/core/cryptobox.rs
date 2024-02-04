@@ -57,12 +57,12 @@ impl PrivateKey {
     pub fn from_signature_key(sk: &signature::PrivateKey) -> Result<Self, Error> {
         let mut input = [0u8; Self::BYTES];
         unsafe {
-            let result = crypto_sign_ed25519_sk_to_curve25519(
+            let rc = crypto_sign_ed25519_sk_to_curve25519(
                 as_uchar_ptr_mut!(input),
                 as_uchar_ptr!(sk.as_bytes())
             );
 
-            if result != 0 {
+            if rc != 0 {
                 return Err(Error::Crypto(
                     format!("converts Ed25519 key to x25519 key failed.")
                 ));
@@ -118,12 +118,12 @@ impl PublicKey {
     pub fn from_signature_key(pk: &signature::PublicKey) -> Result<Self, Error> {
         let mut input = [0u8; Self::BYTES];
         unsafe { // Always success.
-            let result = crypto_sign_ed25519_pk_to_curve25519(
+            let rc = crypto_sign_ed25519_pk_to_curve25519(
                 as_uchar_ptr_mut!(input),
                 as_uchar_ptr!(pk.as_bytes())
             );
 
-            if result != 0 {
+            if rc != 0 {
                 return Err(Error::Crypto(
                     format!("converts Ed25519 key to x25519 key failed.")
                 ));
@@ -334,13 +334,13 @@ impl CryptoBox {
     pub fn try_from(pk: &PublicKey, sk: &PrivateKey) -> Result<Self, Error> {
         let mut k = vec!(0u8; Self::SYMMETRIC_KEY_BYTES);
         unsafe {
-            let result = crypto_box_beforenm(
+            let rc = crypto_box_beforenm(
                 as_uchar_ptr_mut!(k),
                 as_uchar_ptr!(pk.as_bytes()),
                 as_uchar_ptr!(sk.as_bytes())
             );
 
-            if result != 0 {
+            if rc != 0 {
                 return Err(Error::Crypto(
                     format!("Compute symmetric key failed, wrong pk or sk")
                 ));
@@ -369,14 +369,14 @@ impl CryptoBox {
         }
 
         unsafe {
-            let result = crypto_box_easy_afternm(
+            let rc = crypto_box_easy_afternm(
                 as_uchar_ptr_mut!(cipher),
                 as_uchar_ptr!(plain),
                 plain.len() as libc::c_ulonglong,
                 as_uchar_ptr!(nonce.as_bytes()),
                 as_uchar_ptr!(self.key)
             );
-            if result != 0 {
+            if rc != 0 {
                 return Err(Error::Crypto(format!("Encrypt data failed")));
             }
         }
@@ -395,14 +395,14 @@ impl CryptoBox {
         }
 
         unsafe {
-            let result = crypto_box_open_easy_afternm(
+            let rc = crypto_box_open_easy_afternm(
                 as_uchar_ptr_mut!(plain),
                 as_uchar_ptr!(cipher),
                 cipher.len() as libc::c_ulonglong,
                 as_uchar_ptr!(nonce.as_bytes()),
                 as_uchar_ptr!(self.key)
             );
-            if result != 0 {
+            if rc != 0 {
                 return Err(Error::Crypto(format!("Encrypt data failed")));
             }
         }
@@ -422,7 +422,7 @@ pub fn encrypt(cipher: &mut [u8], plain: &[u8], nonce: &Nonce, pk: &PublicKey, s
     }
 
     unsafe {
-        let result = crypto_box_easy(
+        let rc = crypto_box_easy(
             as_uchar_ptr_mut!(cipher),
             as_uchar_ptr!(plain),
             plain.len() as libc::c_ulonglong,
@@ -430,7 +430,7 @@ pub fn encrypt(cipher: &mut [u8], plain: &[u8], nonce: &Nonce, pk: &PublicKey, s
             as_uchar_ptr!(pk.as_bytes()),
             as_uchar_ptr!(sk.as_bytes())
         );
-        if result != 0 {
+        if rc != 0 {
             return Err(Error::Crypto(format!("Encrypt data failed")));
         }
     }
@@ -449,7 +449,7 @@ pub fn decrypt(plain: &mut [u8], cipher: &[u8], nonce: &Nonce, pk: &PublicKey, s
     }
 
     unsafe {
-        let result = crypto_box_open_easy(
+        let rc = crypto_box_open_easy(
             as_uchar_ptr_mut!(plain),
             as_uchar_ptr!(cipher),
             cipher.len() as libc::c_ulonglong,
@@ -458,7 +458,7 @@ pub fn decrypt(plain: &mut [u8], cipher: &[u8], nonce: &Nonce, pk: &PublicKey, s
             as_uchar_ptr!(sk.as_bytes())
         );
 
-        if result != 0 {
+        if rc != 0 {
             return Err(Error::Crypto(format!("Decrypt data failed")))
         }
     }

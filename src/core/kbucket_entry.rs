@@ -39,31 +39,31 @@ impl KBucketEntry {
         }
     }
 
-    pub(crate) const fn id(&self) -> &Id {
+    pub(crate) fn id(&self) -> &Id {
         &self.node.id()
     }
 
-    pub(crate) const fn node(&self) -> &Node {
+    pub(crate) fn node(&self) -> &Node {
         &self.node
     }
 
-    pub(crate) fn set_version(&mut self, ver: i32) -> &Self {
-        self.node.set_version(ver); self
+    pub(crate) fn set_version(&mut self, ver: i32)  {
+        self.node.set_version(ver)
     }
 
-    pub(crate) const fn ceated(&self) -> SystemTime {
+    pub(crate) fn ceated(&self) -> SystemTime {
         self.created
     }
 
-    pub(crate) const fn last_seen(&self) -> SystemTime {
+    pub(crate) fn last_seen(&self) -> SystemTime {
         self.last_seen
     }
 
-    pub(crate) const fn last_sent(&self) -> SystemTime {
+    pub(crate) fn last_sent(&self) -> SystemTime {
         self.last_sent
     }
 
-    pub(crate) const fn failed_requests(&self) -> i32 {
+    pub(crate) fn failed_requests(&self) -> i32 {
         self.failed_requests
     }
 
@@ -78,14 +78,15 @@ impl KBucketEntry {
     }
 
     pub(crate) const fn is_eligible_for_nodes_list(&self) -> bool {
-        // 1 timeout can occasionally happen. should be fine to hand it out as long as
-        // we've verified it at least once
+        // 1 timeout can occasionally happen. should be fine to hand it out
+        // as long as we've verified it at least once
         self.reachable && self.failed_requests < 3
     }
 
     pub(crate) const fn is_eligible_for_local_lookup(&self) -> bool {
         // allow implicit initial ping during lookups
-        // TODO: make this work now that we don't keep unverified entries in the main bucket
+        // TODO: make this work now that we don't keep unverified entries
+        // in the main bucket
         (self.reachable && self.failed_requests <= 3) || self.failed_requests <= 0
     }
 
@@ -93,9 +94,10 @@ impl KBucketEntry {
      * Should be called to signal that a request to this node has timed out;
      */
     pub(crate) fn signal_request_timeout(&mut self) {
-        match self.failed_requests <=0 {
-            true => self.failed_requests = 1,
-            false => self.failed_requests += 1
+        if self.failed_requests <=0 {
+            self.failed_requests = 1
+        } else {
+            self.failed_requests += 1
         }
     }
 

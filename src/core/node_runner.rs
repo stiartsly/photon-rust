@@ -138,7 +138,7 @@ impl NodeRunner {
 
         if let Some(addr4) = self.cfg.ipv4() {
             let dht4 = Rc::new(RefCell::new(DHT::new(addr4)));
-            dht4.borrow_mut().link_server(Rc::clone(&self.server));
+            dht4.borrow_mut().set_server(Rc::clone(&self.server));
             if self.persistent {
                 dht4.borrow_mut().enable_persistence(&format!("{}/dht4.cache", self.storage_path));
             }
