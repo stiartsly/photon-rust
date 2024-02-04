@@ -10,7 +10,7 @@ pub(crate) trait Reachable {
     fn set_reachable(&mut self, _: bool) {}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Node {
     id: Id,
     addr: SocketAddr,

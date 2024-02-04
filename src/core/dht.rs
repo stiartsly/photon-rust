@@ -15,7 +15,8 @@ use crate::{
     rpcserver::RpcServer,
     kclosest_nodes::KClosestNodes,
     token_man::TokenManager,
-    routing_table::RoutingTable
+    routing_table::RoutingTable,
+    node_runner::NodeRunner
 };
 
 use crate::msg::{
@@ -33,7 +34,8 @@ use crate::msg::{
     announce_peer_rsp
 };
 use crate::task::{
-    task::Task,
+    task::{Task, State},
+    lookup::LookupTask,
     task_manager::TaskManager,
     node_lookup::NodeLookupTask,
     value_lookup::ValueLookupTask,
@@ -51,6 +53,7 @@ pub(crate) struct DHT {
     routing_table: RoutingTable,
     task_man: TaskManager,
 
+    persistent: bool,
     persist_path: String,
     running: bool,
 }
@@ -68,19 +71,20 @@ impl DHT {
             task_man: TaskManager::new(),
             running: false,
 
+            persistent: false,
             persist_path: String::new(),
         }
     }
 
-    pub(crate) fn set_server(&mut self, server: Rc<RefCell<RpcServer>>) {
+    pub(crate) fn set_rpcserver(&mut self, server: Rc<RefCell<RpcServer>>) {
         self.server = Some(server)
     }
 
-    pub(crate) fn unset_server(&mut self) {
+    pub(crate) fn unset_rpcserver(&mut self) {
         _ = self.server.take()
     }
 
-    fn server(&self) -> &Rc<RefCell<RpcServer>> {
+    fn rpcserver(&self) -> &Rc<RefCell<RpcServer>> {
         self.server.as_ref().unwrap()
     }
 
@@ -96,132 +100,43 @@ impl DHT {
         self.token_man.as_ref().unwrap()
     }
 
-    pub(crate) fn enable_persistence(&mut self, path: &str) {
-        self.persist_path = path.to_string()
+    pub(crate) fn enable_persistence(&mut self, enabled: bool, path: &str) {
+        if enabled {
+            self.persistent = true;
+            self.persist_path = path.to_string()
+        }
     }
 
-    pub(crate) fn origin(&self) -> &SocketAddr {
+    pub(crate) fn addr(&self) -> &SocketAddr {
         &self.addr
     }
 
-    pub(crate)fn bootstrap() {
+    pub(crate) fn runner(&self) -> Rc<RefCell<NodeRunner>> {
         unimplemented!()
     }
 
-    pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where F: Fn(Option<Box<Node>>) + 'static {
-        let result = Rc::new(RefCell::new(
-            self.routing_table.bucket_entry(id).map(
-                |item| Box::new(item.node().clone())
-            )
-        ));
-        let result_shadow = Rc::clone(&result);
-
-        let mut task = Box::new(NodeLookupTask::new(id));
-        task.with_name("node-lookup");
-        task.set_result_fn(move|_task, _node| {
-            if _node.is_some() {
-                *(result.borrow_mut()) = Some(_node.unwrap());
-            }
-            if option == LookupOption::Conservative {
-                _task.cancel()
-            }
-        });
-        task.add_listener(move |_| {
-            complete_fn(result_shadow.borrow_mut().take());
-        });
-
-        self.task_man.add(task);
-    }
-
-    pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where F: Fn(Option<Box<Value>>) + 'static {
-        let result = Rc::new(RefCell::new(
-            Option::default() as Option<Box<Value>>
-        ));
-        let result_shadow = Rc::clone(&result);
-
-        let mut task = Box::new(ValueLookupTask::new(id));
-        task.with_name("value-lookup");
-        task.set_result_fn(move |_task, _value| {
-            let binding = result.borrow();
-            match binding.as_ref() {
-                Some(v) => {
-                    if let Some(_v) = _value.as_ref() {
-                        if _v.is_mutable() && _v.sequence_number() < v.sequence_number() {
-                            *(result.borrow_mut()) = Some(_v.clone());
-                        }
-                    }
-                },
-                None => {
-                    if let Some(_v) = _value.as_ref() {
-                        *(result.borrow_mut()) = Some(_v.clone())
-                    }
-                }
-            }
-            if option != LookupOption::Conservative {
-                if let Some(_v) = _value {
-                    if _v.is_mutable() {
-                        _task.cancel()
-                    }
-                }
-            }
-        });
-
-        task.add_listener(move |_| {
-            complete_fn(result_shadow.borrow_mut().take());
-        });
-        self.task_man.add(task);
-    }
-
-    pub(crate) fn store_value<F>(&self, _: &Value, _: F)
-    where F: Fn(Option<Vec<Box<Node>>>) + 'static {
+    fn bootstrap_internal() {
         unimplemented!()
     }
 
-    pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
-    where F: Fn(Option<Vec<Box<Peer>>>) + 'static {
-        let result = Rc::new(RefCell::new(
-            Option::default() as Option<Vec<Box<Peer>>>
-        ));
-        let result_shadow = Rc::clone(&result);
-
-        let mut task = Box::new(PeerLookupTask::new(id));
-        task.with_name("peer-lookup");
-        task.set_result_fn(move |_task, _| {
-            let found_borrowed = result.borrow_mut();
-            // peers->insert(peers->end(), listOfPeers.begin(), listOfPeers.end());
-            if option != LookupOption::Conservative && (*found_borrowed).as_ref().unwrap().len() >= expected {
-                _task.cancel();
-                return;
-            }
-        });
-
-        task.add_listener(move |_| {
-            complete_fn(result_shadow.borrow_mut().take())
-        });
-
-        self.task_man.add(task);
-    }
-
-    pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
-    where F: Fn(&[&Node]) {
+    pub(crate) fn bootstrap(&mut self, _: &[Node]) {
         unimplemented!()
     }
 
-    pub(crate) fn on_timeout(&self, call: &RpcCall) {
-        // ignore the timeout if the DHT is stopped or the RPC server is offline
-        if !self.running || !self.server().borrow().is_reachable() {
-            return;
-        }
-        self.routing_table.on_timeout(call.target_id());
+    fn fill_home_bucket(&mut self, _:&[Node]) {
+        unimplemented!()
     }
 
-    pub(crate) fn on_send(&self, id: &Id) {
-        if !self.running {
-            return;
-        }
-        self.routing_table.on_send(id)
+    fn update(&mut self) {
+        unimplemented!()
+    }
+
+    pub(crate) fn start(&mut self, _: &[Node]) {
+        unimplemented!()
+    }
+
+    pub(crate) fn stop(&mut self) {
+        unimplemented!()
     }
 
     fn on_message<T>(&mut self, msg: &Box<T> )
@@ -251,6 +166,7 @@ impl DHT {
     }
 
     fn on_response(&self, _: &dyn Msg) {}
+
     fn on_error<T>(&self, msg: &Box<T>) where T: Msg + error::ErrorResult{
         warn!("Error from {}/{} - {}:{}, txid {}",
             msg.addr(),
@@ -270,9 +186,8 @@ impl DHT {
         err.with_msg(str);
         err.with_code(code);
 
-        self.server().borrow().send_msg(err);
+        self.rpcserver().borrow().send_msg(err);
     }
-
 
     fn on_ping(&self, request: &dyn Msg) {
         let mut msg = Box::new(ping_req::Message::new());
@@ -281,7 +196,7 @@ impl DHT {
         msg.with_txid(request.txid());
         msg.with_addr(request.addr());
 
-        self.server().borrow().send_msg(msg);
+        self.rpcserver().borrow().send_msg(msg);
     }
 
     fn on_find_node<T>(&self, request: &Box<T>) where T: Msg + lookup::Condition {
@@ -316,7 +231,7 @@ impl DHT {
             }
         );
 
-        self.server().borrow().send_msg(resp)
+        self.rpcserver().borrow().send_msg(resp)
     }
 
     fn on_find_value<T>(&self, request: &Box<T>)
@@ -364,7 +279,7 @@ impl DHT {
             )
         });
 
-        self.server().borrow().send_msg(resp);
+        self.rpcserver().borrow().send_msg(resp);
     }
 
     fn on_store_value<T>(&mut self, request: &Box<T>)
@@ -389,7 +304,7 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.server().borrow().send_msg(resp);
+        self.rpcserver().borrow().send_msg(resp);
     }
 
     fn on_find_peers<T>(&self, request: &Box<T>)
@@ -434,7 +349,7 @@ impl DHT {
             )
         });
 
-        self.server().borrow().send_msg(resp);
+        self.rpcserver().borrow().send_msg(resp);
     }
 
     fn on_announce_peer<T>(&mut self, request: &Box<T>)
@@ -478,6 +393,137 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.server().borrow().send_msg(resp);
+        self.rpcserver().borrow().send_msg(resp);
+    }
+
+    pub(crate) fn on_timeout(&self, call: &RpcCall) {
+        // ignore the timeout if the DHT is stopped or the RPC server is offline
+        if !self.running || !self.rpcserver().borrow().is_reachable() {
+            return;
+        }
+        self.routing_table.on_timeout(call.target_id());
+    }
+
+    pub(crate) fn on_send(&self, id: &Id) {
+        if !self.running {
+            return;
+        }
+        self.routing_table.on_send(id)
+    }
+
+    pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
+    where F: Fn(Option<Box<Node>>) + 'static {
+        let result = Rc::new(RefCell::new(
+            self.routing_table.bucket_entry(id).map(
+                |item| Box::new(item.node().clone())
+            )
+        ));
+        let result_shadow = Rc::clone(&result);
+
+        let mut task = Box::new(NodeLookupTask::new(id));
+        task.with_name("node-lookup");
+        task.set_result_fn(move|_task, _node| {
+            if _node.is_some() {
+                *(result.borrow_mut()) = Some(_node.unwrap().clone());
+            }
+            if option == LookupOption::Conservative {
+                _task.cancel()
+            }
+        });
+        task.add_listener(move |_| {
+            complete_fn(result_shadow.borrow_mut().take());
+        });
+
+        self.task_man.add(task);
+    }
+
+    pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
+    where F: Fn(Option<Box<Value>>) + 'static {
+        let result = Rc::new(RefCell::new(
+            Option::default() as Option<Box<Value>>
+        ));
+        let result_shadow = Rc::clone(&result);
+
+        let mut task = Box::new(ValueLookupTask::new(id));
+        task.with_name("value-lookup");
+        task.set_result_fn(move |_task, _value| {
+            if let Some(_v) = _value.as_ref() {
+                match result.borrow().as_ref() {
+                    Some(v) => {
+                        if _v.is_mutable() && v.sequence_number() < _v.sequence_number() {
+                            *(result.borrow_mut()) = Some(_v.clone());
+                        }
+                    },
+                    None => {
+                         *(result.borrow_mut()) = Some(_v.clone())
+                    }
+                }
+            }
+            if option != LookupOption::Conservative {
+                if let Some(_v) = _value {
+                    if !_v.is_mutable() {
+                        _task.cancel()
+                    }
+                }
+            }
+        });
+
+        task.add_listener(move |_| {
+            complete_fn(result_shadow.borrow_mut().take());
+        });
+        self.task_man.add(task);
+    }
+
+    pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
+    where F: Fn(Option<Vec<Box<Node>>>) + 'static {
+        let mut task = Box::new(NodeLookupTask::new(&value.id()));
+        task.with_name("store-value");
+        task.set_want_token(true);
+        task.add_listener(move |_task| {
+            if _task.state() != State::Finished {
+                return;
+            }
+
+            if let Some(downcasted) = _task.as_any().downcast_ref::<NodeLookupTask>() {
+                let closest_set = downcasted.closest_set();
+                if closest_set.size() == 0 {
+                    // This hould never happen
+                    warn!("!!! Value announce task not started because the node lookup task got the empty closest nodes.");
+                    complete_fn(Option::default());
+                    return;
+                }
+                // TODO:
+            }
+        });
+        self.task_man.add(task);
+    }
+
+    pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
+    where F: Fn(Vec<Box<Peer>>) + 'static {
+        let result = Rc::new(RefCell::new(
+            Vec::new() as Vec<Box<Peer>>
+        ));
+        let result_shadow = Rc::clone(&result);
+
+        let mut task = Box::new(PeerLookupTask::new(id));
+        task.with_name("peer-lookup");
+        task.set_result_fn(move |_task, _peers| {
+            (*result.borrow_mut()).append(_peers);
+            if option != LookupOption::Conservative &&
+                result.borrow().len() >= expected {
+                _task.cancel()
+            }
+        });
+
+        task.add_listener(move |_| {
+            complete_fn(result_shadow.take())
+        });
+
+        self.task_man.add(task);
+    }
+
+    pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
+    where F: Fn(&[&Node]) {
+        unimplemented!()
     }
 }

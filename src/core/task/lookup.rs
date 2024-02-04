@@ -1,8 +1,12 @@
-use crate::id::Id;
-use crate::node::Node;
-use super::candidate_node::CandidateNode;
-use super::closest_set::ClosestSet;
-use super::task::Task;
+use crate::{
+    id::Id,
+    node::Node
+};
+use super::{
+    task::Task,
+    candidate_node::CandidateNode,
+    closest_set::ClosestSet
+};
 
 pub(crate) trait LookupTask: Task {
     fn target(&self) -> &Id;

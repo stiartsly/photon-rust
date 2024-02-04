@@ -10,10 +10,9 @@ use crate::error::Error;
 pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub struct Id {
-    bytes: [u8; ID_BYTES],
-}
+#[derive(Default, Clone, PartialEq, Eq, Debug, Hash)]
+
+pub struct Id([u8; ID_BYTES]);
 
 impl Id {
     pub fn random() -> Self {
@@ -24,14 +23,14 @@ impl Id {
                 ID_BYTES
             );
         }
-        Id { bytes }
+        Id(bytes)
     }
 
     pub fn from_signature_key(publick_key: &signature::PublicKey) -> Self {
         let mut bytes = [0u8; ID_BYTES];
 
         bytes.copy_from_slice(publick_key.as_bytes());
-        Id { bytes }
+        Id(bytes)
     }
 
     pub fn from_bytes(input: &[u8]) -> Self {
@@ -45,7 +44,7 @@ impl Id {
 
         let mut bytes = [0u8; ID_BYTES];
         bytes.copy_from_slice(input);
-        Id { bytes }
+        Id(bytes)
     }
 
     pub fn try_from_hex(input: &str) -> Result<Self, Error> {
@@ -68,7 +67,7 @@ impl Id {
                     )
                 }
         });
-        Ok(Id { bytes })
+        Ok(Id(bytes))
     }
 
     pub fn try_from_base58(input: &str) -> Result<Self, Error> {
@@ -93,23 +92,23 @@ impl Id {
                     )
                 }
         });
-        Ok(Id { bytes })
+        Ok(Id(bytes))
     }
 
     pub const fn min() -> Self {
-        Id { bytes: [0x0; ID_BYTES]}
+        Id([0x0; ID_BYTES])
     }
 
     pub const fn max() -> Self {
-        Id { bytes: [0xFF; ID_BYTES] }
+        Id([0xFF; ID_BYTES])
     }
 
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.bytes)
+        hex::encode(&self.0)
     }
 
     pub fn to_base58(&self) -> String {
-        bs58::encode(self.bytes)
+        bs58::encode(self.0)
             .with_alphabet(bs58::Alphabet::DEFAULT)
             .into_string()
     }
@@ -127,9 +126,9 @@ impl Id {
     pub fn distance(&self, other: &Id) -> Id {
         let mut bytes = [0u8; ID_BYTES];
         for i in 0..ID_BYTES {
-            bytes[i] = self.bytes[i] ^ other.bytes[i];
+            bytes[i] = self.0[i] ^ other.0[i];
         }
-        Id { bytes }
+        Id(bytes)
     }
 
     pub const fn size(&self) -> usize {
@@ -137,17 +136,17 @@ impl Id {
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.bytes.as_slice()
+        self.0.as_slice()
     }
 
     pub(crate) fn as_mut_bytes(&mut self) -> &mut [u8] {
-        self.bytes.as_mut_slice()
+        self.0.as_mut_slice()
     }
 
     pub fn three_way_compare(&self, id1: &Self, id2: &Self) -> Ordering {
         let mut mmi = usize::MAX;
         for i in 0..ID_BYTES {
-            if id1.bytes[i] != id2.bytes[i] {
+            if id1.0[i] != id2.0[i] {
                 mmi = i;
                 break;
             }
@@ -156,8 +155,8 @@ impl Id {
             return Ordering::Equal;
         }
 
-        let a = id1.bytes[mmi] ^ self.bytes[mmi];
-        let b = id2.bytes[mmi] ^ self.bytes[mmi];
+        let a = id1.0[mmi] ^ self.0[mmi];
+        let b = id2.0[mmi] ^ self.0[mmi];
         a.cmp(&b)
     }
 }
@@ -173,14 +172,14 @@ pub(crate) fn bits_equal(a: &Id, b: &Id, depth: i32) -> bool {
 
     let mut mmi = usize::MAX;
     for i in 0..ID_BYTES {
-        if a.bytes[i] != b.bytes[i] {
+        if a.0[i] != b.0[i] {
             mmi = i;
             break;
         }
     }
 
     let idx = (depth >> 3) as usize;
-    let diff: u8 = a.bytes[idx] ^ b.bytes[idx];
+    let diff: u8 = a.0[idx] ^ b.0[idx];
     // Create a bitmask with the lower n bits set
     let mask: u8 = (1 << (depth & 0x07)) - 1;
     // Use the bitmask to check if the lower bits are all zeros
@@ -199,12 +198,12 @@ pub(crate) fn bits_copy(src: &Id, dst: &mut Id, depth: i32) {
 
     let idx = (depth >> 3) as usize;
     if idx > 0 {
-        dst.bytes[..idx].copy_from_slice(&src.bytes[..idx]);
+        dst.0[..idx].copy_from_slice(&src.0[..idx]);
     }
 
     let mask: u8 = (1 << (depth & 0x07)) - 1;
-    dst.bytes[idx] &= !mask;
-    dst.bytes[idx] |= src.bytes[idx] & mask;
+    dst.0[idx] &= !mask;
+    dst.0[idx] |= src.0[idx] & mask;
 }
 
 impl fmt::Display for Id {

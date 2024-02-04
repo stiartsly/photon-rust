@@ -5,14 +5,16 @@ use std::time::SystemTime;
 use std::collections::LinkedList;
 
 use libsodium_sys::randombytes_uniform;
-use log::{info};
+use log::info;
 
-use crate::constants;
-use crate::as_millis;
-use crate::id::Id;
-use crate::node::Reachable;
-use crate::prefix::Prefix;
-use crate::kbucket_entry::KBucketEntry;
+use crate::{
+    as_millis,
+    constants,
+    id::Id,
+    prefix::Prefix,
+    node::Reachable,
+    kbucket_entry::KBucketEntry
+};
 
 /**
  * A KBucket is just a list of KBucketEntry objects.
@@ -141,7 +143,7 @@ impl KBucket {
         }
     }
 
-    fn _remove_if_bad(&mut self, to_remove: &Box<KBucketEntry>, force: bool) {
+    pub(crate) fn _remove_if_bad(&mut self, to_remove: &Box<KBucketEntry>, force: bool) {
         if (force || to_remove.needs_replacement()) &&
             self.exist(to_remove.id())  {
             self._update_with_remove_or_insert(Some(&to_remove), None)
@@ -157,7 +159,7 @@ impl KBucket {
         }
     }
 
-    fn _on_timeout(&mut self, _: &Id) {
+    pub(crate) fn on_timeout(&mut self, _: &Id) {
         unimplemented!();
         /* TODO:
         if let Some(item) = self.entries.iter_mut().find(|item| item.id() == id) {
@@ -167,7 +169,7 @@ impl KBucket {
         */
     }
 
-    fn _on_send(&mut self, id: &Id) {
+    pub(crate) fn on_send(&mut self, id: &Id) {
         self.entries.iter_mut().for_each(|item | {
             if item.id() == id {
                 item.signal_request();

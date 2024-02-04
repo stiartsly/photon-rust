@@ -27,17 +27,13 @@ const_assert!(KeyPair::SEED_BYTES == crypto_sign_SEEDBYTES as usize);
 const_assert!(Signature::BYTES == crypto_sign_BYTES as usize);
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct PrivateKey {
-    key: [u8; Self::BYTES]
-}
+pub struct PrivateKey([u8; Self::BYTES]);
 
 impl PrivateKey {
     pub const BYTES: usize = 64;
 
     pub fn default() -> Self {
-        PrivateKey {
-            key: [0u8; Self::BYTES]
-        }
+        PrivateKey([0u8; Self::BYTES])
     }
 
     pub fn from(input: &[u8]) -> Self {
@@ -49,9 +45,9 @@ impl PrivateKey {
             Self::BYTES
         );
 
-        PrivateKey {
-            key: input.try_into().unwrap()
-        }
+        PrivateKey(
+            input.try_into().unwrap()
+        )
     }
 
     pub const fn size(&self) -> usize {
@@ -59,11 +55,11 @@ impl PrivateKey {
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.key.as_slice()
+        self.0.as_slice()
     }
 
     pub fn clear(&mut self) {
-        self.key.fill(0);
+        self.0.fill(0);
     }
 
     pub fn sign(&self, data: &[u8], signature: &mut[u8]) {
@@ -81,7 +77,7 @@ impl PrivateKey {
                 std::ptr::null_mut(),
                 as_uchar_ptr!(data),
                 data.len() as libc::c_ulonglong,
-                as_uchar_ptr!(self.key)
+                as_uchar_ptr!(self.0)
             );
         }
     }
@@ -95,16 +91,14 @@ impl PrivateKey {
 
 impl fmt::Display for PrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let str = hex::encode(self.key);
+        let str = hex::encode(self.0);
         write!(f, "{}", str)?;
         Ok(())
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
-pub struct PublicKey {
-    key: [u8; Self::BYTES]
-}
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
+pub struct PublicKey([u8; Self::BYTES]);
 
 impl PublicKey {
     pub const BYTES: usize = 32;
@@ -118,9 +112,9 @@ impl PublicKey {
             Self::BYTES
         );
 
-        PublicKey {
-            key: input.try_into().unwrap()
-        }
+        PublicKey(
+            input.try_into().unwrap()
+        )
     }
 
     pub const fn size(&self) -> usize {
@@ -128,11 +122,11 @@ impl PublicKey {
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.key.as_slice()
+        self.0.as_slice()
     }
 
     pub fn clear(&mut self) {
-        self.key.fill(0);
+        self.0.fill(0);
     }
 
     pub fn verify(&self, data: &[u8], signature: &[u8]) -> bool {
@@ -149,7 +143,7 @@ impl PublicKey {
                 as_uchar_ptr!(signature),
                 as_uchar_ptr!(data),
                 data.len() as libc::c_ulonglong,
-                as_uchar_ptr!(self.key)
+                as_uchar_ptr!(self.0)
             );
 
             match rc {
@@ -162,17 +156,14 @@ impl PublicKey {
 
 impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let str = hex::encode(self.key);
+        let str = hex::encode(self.0);
         write!(f, "{}", str)?;
         Ok(())
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct KeyPair {
-    sk: PrivateKey,
-    pk: PublicKey
-}
+pub struct KeyPair(PrivateKey,PublicKey);
 
 impl KeyPair {
     pub const SEED_BYTES: usize = 32;
@@ -187,10 +178,10 @@ impl KeyPair {
                 as_uchar_ptr_mut!(sk)
             );
         }
-        KeyPair {
-            sk: PrivateKey::from(&sk),
-            pk: PublicKey::from(&pk),
-        }
+        KeyPair (
+            PrivateKey::from(&sk),
+            PublicKey::from(&pk),
+        )
     }
 
     pub fn from_private_key(input: &PrivateKey) -> Self {
@@ -203,10 +194,10 @@ impl KeyPair {
                 as_uchar_ptr!(input.as_bytes())
             );
         }
-        KeyPair {
+        KeyPair (
             sk,
-            pk: PublicKey::from(&pk)
-        }
+            PublicKey::from(&pk)
+        )
     }
 
     pub fn from_private_key_bytes(input: &[u8]) -> Self {
@@ -226,10 +217,10 @@ impl KeyPair {
             );
         }
 
-        KeyPair {
-            sk: PrivateKey::from(input),
-            pk: PublicKey::from(&pk)
-        }
+        KeyPair (
+            PrivateKey::from(input),
+            PublicKey::from(&pk)
+        )
     }
 
     pub fn from_seed<'a>(input: &[u8]) -> Self {
@@ -251,10 +242,10 @@ impl KeyPair {
                 as_uchar_ptr!(input)
             );
         }
-        KeyPair {
-            sk: PrivateKey::from(&sk),
-            pk: PublicKey::from(&pk)
-        }
+        KeyPair (
+            PrivateKey::from(&sk),
+            PublicKey::from(&pk)
+        )
     }
 
     pub fn random() -> Self {
@@ -276,33 +267,33 @@ impl KeyPair {
                 as_uchar_ptr!(seed)
             );
         }
-        KeyPair {
-            sk: PrivateKey::from(&sk),
-            pk: PublicKey::from(&pk)
-        }
+        KeyPair (
+            PrivateKey::from(&sk),
+            PublicKey::from(&pk)
+        )
     }
 
     pub const fn private_key(&self) -> &PrivateKey {
-        &self.sk
+        &self.0
     }
 
     pub const fn public_key(&self) -> &PublicKey {
-        &self.pk
+        &self.1
     }
 
     pub fn clear(&mut self) {
-        self.sk.clear();
-        self.pk.clear();
+        self.0.clear();
+        self.1.clear();
     }
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 struct SignState(
     [u8; std::mem::size_of::<crypto_sign_state>()]
 );
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Signature {
     state: SignState
 }

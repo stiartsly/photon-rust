@@ -6,6 +6,7 @@ use std::boxed::Box;
 use log::{info, warn, error};
 use std::fs;
 use crate::{
+    unwrap,
     error::Error,
     config::Config,
     signature::{self, KeyPair, PrivateKey},
@@ -42,7 +43,7 @@ pub struct NodeRunner {
     status: NodeStatus,
 
     cfg: Box<dyn Config>,
-    token_man: Rc<TokenManager>,
+    token_man: Rc<RefCell<TokenManager>>,
     storage: Rc<RefCell<dyn DataStorage>>,
     server: Rc<RefCell<RpcServer>>,
 }
@@ -76,7 +77,7 @@ impl NodeRunner {
 
         // Loading key from peristence.
         let keypath = rootpath.clone() + "key";
-        let mut keypair: Option<KeyPair> = None;
+        let mut keypair = Option::default() as Option<KeyPair>;
         if let Err(_) = fs::metadata(&keypath).map(|metadata| {
             match metadata.is_dir() {
                 true => {
@@ -97,7 +98,7 @@ impl NodeRunner {
             init_key(keypair.as_ref().unwrap(), &keypath)?;
         }
 
-        let id = Id::from_signature_key(keypair.as_ref().unwrap().public_key());
+        let id = Id::from_signature_key(unwrap!(keypair).public_key());
         if persistent {
             let idpath = rootpath.clone() + "id";
             write_id_file(&id, &idpath)?;
@@ -106,7 +107,7 @@ impl NodeRunner {
         info!("Boson kademlia node Id {}", id);
 
         Ok(NodeRunner {
-            sig_keypair: keypair.unwrap(),
+            sig_keypair: keypair.take().unwrap(),
             encryption_keypair: cryptobox::KeyPair::new(),
             id,
 
@@ -121,7 +122,7 @@ impl NodeRunner {
             status: NodeStatus::Stopped,
 
             cfg,
-            token_man: Rc::new(TokenManager::new()),
+            token_man: Rc::new(RefCell::new(TokenManager::new())),
             storage: Rc::new(RefCell::new(SqliteStorage::new())),
             //storage:
             server: Rc::new(RefCell::new(RpcServer::new()))
@@ -136,21 +137,24 @@ impl NodeRunner {
 
         info!("DHT node {} is starting...", self.id);
 
+        //let self_ref = Rc::new(RefCell::new(self));
+        //self.server.borrow_mut().attach(self_ref);
+
         if let Some(addr4) = self.cfg.ipv4() {
             let dht4 = Rc::new(RefCell::new(DHT::new(addr4)));
-            dht4.borrow_mut().set_server(Rc::clone(&self.server));
-            if self.persistent {
-                dht4.borrow_mut().enable_persistence(&format!("{}/dht4.cache", self.storage_path));
-            }
+            dht4.borrow_mut().set_rpcserver(Rc::clone(&self.server));
+            dht4.borrow_mut().set_token_manager(Rc::clone(&self.token_man));
+            dht4.borrow_mut().enable_persistence(self.persistent, &format!("{}/dht4.cache", self.storage_path));
             self.dht4 = Some(Rc::clone(&dht4));
             self.server.borrow_mut().enable_dht4(Rc::clone(&dht4))
         }
+
         if let Some(addr6) = self.cfg.ipv6() {
             let dht6 = Rc::new(RefCell::new(DHT::new(addr6)));
-            if self.persistent {
-                dht6.borrow_mut().enable_persistence(&format!("{}/dht4.cache", self.storage_path));
-                self.dht6 = Some(Rc::clone(&dht6));
-            }
+            dht6.borrow_mut().set_rpcserver(Rc::clone(&self.server));
+            dht6.borrow_mut().set_token_manager(Rc::clone(&self.token_man));
+            dht6.borrow_mut().enable_persistence(self.persistent, &format!("{}/dht6.cache", self.storage_path));
+            self.dht6 = Some(Rc::clone(&dht6));
             self.server.borrow_mut().enable_dht6(Rc::clone(&dht6));
         }
 
@@ -172,6 +176,19 @@ impl NodeRunner {
 
         self.server.borrow_mut().disable_dht4();
         self.server.borrow_mut().disable_dht6();
+        //self.server.stop();
+
+        if let Some(dht4) = self.dht4.as_ref() {
+            dht4.borrow_mut().unset_rpcserver();
+            dht4.borrow_mut().unset_token_manager();
+            dht4.borrow_mut().stop();
+        }
+
+        if let Some(dht6) = self.dht6.as_ref() {
+            dht6.borrow_mut().unset_rpcserver();
+            dht6.borrow_mut().unset_token_manager();
+            dht6.borrow_mut().stop();
+        }
 
         // self.server.stop();
 
@@ -249,7 +266,6 @@ impl NodeRunner {
     pub async fn announce_peer(&mut self, peer: &Peer) -> Result<(), Error> {
         self.announce_peer_with_persistence(peer, false).await
     }
-
 }
 
 fn load_key(keypath: &str) -> Result<KeyPair, Error> {

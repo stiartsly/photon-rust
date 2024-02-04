@@ -1,9 +1,12 @@
+use std::any::Any;
 use std::time::SystemTime;
 
-use crate::id::Id;
-use crate::value::Value;
-use crate::rpccall::RpcCall;
-use crate::msg::msg::Msg;
+use crate::{
+    id::Id,
+    value::Value,
+    rpccall::RpcCall,
+    msg::msg::Msg
+};
 use super::task::{Task, State};
 
 #[allow(dead_code)]
@@ -124,5 +127,9 @@ impl Task for ValueLookupTask {
 
     fn is_done(&self) -> bool{
         unimplemented!()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

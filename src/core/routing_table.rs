@@ -70,15 +70,15 @@ impl RoutingTable {
     }
 
     pub(crate) fn remove(&self, _: &Id) {
-        unimplemented!();
+        unimplemented!()
     }
 
-    pub(crate) fn on_send(&self, _: &Id) {
-        unimplemented!();
+    pub(crate) fn on_timeout(&self, id: &Id) {
+        self.bucket_mut(id).on_timeout(id)
     }
 
-    pub(crate) fn on_timeout(&self, _: &Id) {
-        unimplemented!();
+    pub(crate) fn on_send(&self, id: &Id) {
+        self.bucket_mut(id).on_send(id)
     }
 
     pub(crate) fn maintenance(&self) {

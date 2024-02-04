@@ -1,16 +1,19 @@
 use std::rc::Rc;
+use std::any::Any;
 use std::collections::LinkedList;
 use std::time::SystemTime;
 use std::boxed::Box;
+
+use crate::{
+    kbucket::KBucket,
+    kbucket_entry::KBucketEntry,
+    rpccall::RpcCall,
+    msg::msg::Msg
+};
 use super::task::{Task, State};
 
-use crate::kbucket::KBucket;
-use crate::kbucket_entry::KBucketEntry;
-use crate::rpccall::RpcCall;
-use crate::msg::msg::Msg;
-
 #[allow(dead_code)]
-pub(crate) struct PingRefreshTask<'a> {
+pub(crate) struct PingRefreshTask {
     bucket: Rc<KBucket>,
     todo: LinkedList<Box<KBucketEntry>>,
 
@@ -19,7 +22,7 @@ pub(crate) struct PingRefreshTask<'a> {
     remove_on_timeout: bool,
 }
 
-impl<'a> PingRefreshTask<'a> {
+impl Task for PingRefreshTask {
     fn taskid(&self) -> i32 {
         unimplemented!()
     }
@@ -28,11 +31,15 @@ impl<'a> PingRefreshTask<'a> {
         unimplemented!()
     }
 
-    fn state(&self) -> &State{
+    fn with_name(&mut self, _: &str) {
         unimplemented!()
     }
 
-    fn nested_task(&self) -> &Box<dyn Task>{
+    fn state(&self) -> State{
+        unimplemented!()
+    }
+
+    fn nested(&self) -> &Box<dyn Task> {
         unimplemented!()
     }
 
@@ -52,31 +59,19 @@ impl<'a> PingRefreshTask<'a> {
         unimplemented!()
     }
 
-    fn age(&self) -> u64{
+    fn age(&self) -> u128 {
         unimplemented!()
     }
 
-    fn with_name(&mut self, _: &'a str){
+    fn set_nested(&mut self, _: Box<dyn Task>) {
         unimplemented!()
     }
 
-    fn set_nested_task(&mut self, _: Box<dyn Task>){
+    fn start(&mut self){
         unimplemented!()
     }
 
-    fn add_listener<F>(&mut self, f: F) where F: FnMut(&Box<dyn Task>){
-        unimplemented!()
-    }
-
-    fn remove_listener<F>(&mut self, f: F) where F: FnMut(&Box<dyn Task>){
-        unimplemented!()
-    }
-
-    fn start(&self){
-        unimplemented!()
-    }
-
-    fn cancel(&self){
+    fn cancel(&mut self){
         unimplemented!()
     }
 
@@ -84,7 +79,7 @@ impl<'a> PingRefreshTask<'a> {
         unimplemented!()
     }
 
-    fn call_response(&mut self, _: &Box<RpcCall>, _: impl Msg){
+    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>){
         unimplemented!()
     }
 
@@ -106,5 +101,9 @@ impl<'a> PingRefreshTask<'a> {
 
     fn is_done(&self) -> bool{
         unimplemented!()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

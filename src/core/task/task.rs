@@ -1,8 +1,11 @@
 use std::fmt;
+use std::any::Any;
 use std::time::SystemTime;
 
-use crate::rpccall::RpcCall;
-use crate::msg::msg::Msg;
+use crate::{
+    rpccall::RpcCall,
+    msg::msg::Msg
+};
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -58,4 +61,6 @@ pub(crate) trait Task {
     fn update(&mut self);
 
     fn is_done(&self) -> bool;
+
+    fn as_any(&self) -> &dyn Any;
 }

@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::boxed::Box;
 use std::time::SystemTime;
-use log::{warn};
+use log::warn;
 
 use crate::{
     id::Id,

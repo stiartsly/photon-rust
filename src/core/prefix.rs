@@ -2,7 +2,7 @@ use std::fmt;
 use crate::id;
 use crate::id::Id;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Prefix {
     depth: i32,
     id: Id,

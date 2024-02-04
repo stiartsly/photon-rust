@@ -1,10 +1,13 @@
 
+use std::any::Any;
 use std::time::SystemTime;
 
-use crate::id::Id;
-use crate::peer::Peer;
-use crate::rpccall::RpcCall;
-use crate::msg::msg::Msg;
+use crate::{
+    id::Id,
+    peer::Peer,
+    rpccall::RpcCall,
+    msg::msg::Msg
+};
 use super::task::{Task, State};
 
 #[allow(dead_code)]
@@ -15,7 +18,7 @@ pub(crate) struct PeerLookupTask {
     bootstrap: bool,
     want_token: bool,
 
-    result_fn: Box<dyn FnMut(&mut Box<dyn Task>, Option<Vec<Box<Peer>>>)>,
+    result_fn: Box<dyn FnMut(&mut Box<dyn Task>, &mut Vec<Box<Peer>>)>,
     listeners: Vec<Box<dyn FnMut(&Box<dyn Task>)>>,
 }
 
@@ -33,7 +36,7 @@ impl PeerLookupTask {
     }
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(&mut Box<dyn Task>, Option<Vec<Box<Peer>>>) + 'static {
+    where F: FnMut(&mut Box<dyn Task>, &mut Vec<Box<Peer>>) + 'static {
         self.result_fn = Box::new(f);
     }
 
@@ -126,5 +129,9 @@ impl Task for PeerLookupTask {
 
     fn is_done(&self) -> bool{
         unimplemented!()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

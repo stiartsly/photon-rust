@@ -189,7 +189,7 @@ impl Value {
             pk: Some(Id::from_signature_key(kp.public_key())),
             sk: Some(kp.private_key().clone()),
             recipient: None,
-            nonce: Some(b.nonce.unwrap().clone()),
+            nonce: Some(unwrap!(b.nonce).clone()),
             sig: None,
             data: b.data.to_vec(),
             seq: b.seq,
@@ -211,7 +211,7 @@ impl Value {
             pk: Some(Id::from_signature_key(kp.public_key())),
             sk: Some(kp.private_key().clone()),
             recipient: Some(b.recipient.clone()),
-            nonce: Some(b.nonce.unwrap().clone()),
+            nonce: Some(unwrap!(b.nonce).clone()),
             sig: None,
             data: b.data.to_vec(),
             seq: b.seq

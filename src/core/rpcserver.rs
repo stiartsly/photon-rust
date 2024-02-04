@@ -4,13 +4,19 @@ use std::time::SystemTime;
 use tokio::io::{self};
 use tokio::net::UdpSocket;
 use tokio::runtime::{self};
-use log::{info};
+use log::info;
 
-use crate::as_millis;
-use crate::version;
-use crate::dht::DHT;
-use crate::rpccall::RpcCall;
-use crate::msg::msg::Msg;
+use crate::{
+    as_millis,
+    version,
+    dht::DHT,
+    rpccall::RpcCall,
+    node_runner::NodeRunner
+};
+
+use crate::msg::{
+    msg::Msg
+};
 
 const RPC_SERVER_REACHABILITY_TIMEOUT: u128 = 60 * 1000;
 
@@ -22,6 +28,8 @@ enum State {
 }
 
 pub(crate) struct RpcServer {
+    node_runner: Option<Rc<RefCell<NodeRunner>>>,
+
     dht4: Option<Rc<RefCell<DHT>>>,
     dht6: Option<Rc<RefCell<DHT>>>,
 
@@ -40,6 +48,7 @@ pub(crate) struct RpcServer {
 impl RpcServer {
     pub(crate) fn new() -> Self {
         RpcServer {
+            node_runner: None,
             dht4: None,
             dht6: None,
             state: State::Initial,
@@ -51,6 +60,18 @@ impl RpcServer {
 
             // next_txid: 0,
         }
+    }
+
+    pub(crate) fn attach(&mut self, node_runner: Rc<RefCell<NodeRunner>>) {
+        self.node_runner = Some(node_runner);
+    }
+
+    pub(crate) fn detach(&mut self) {
+        _ = self.node_runner.take()
+    }
+
+    fn node_runner(&self) -> &Rc<RefCell<NodeRunner>> {
+        self.node_runner.as_ref().unwrap()
     }
 
     pub(crate) fn enable_dht4(&mut self, dht4: Rc<RefCell<DHT>>) {
@@ -108,10 +129,10 @@ impl RpcServer {
         self.started = SystemTime::now();
 
         if let Some(dht4) = self.dht4.as_ref() {
-            info!("Started RPC server on ipv4 address: {}", dht4.borrow().origin());
+            info!("Started RPC server on ipv4 address: {}", dht4.borrow().addr());
         }
         if let Some(dht6) = self.dht6.as_ref() {
-            info!("Started RPC server on ipv6 address: {}", dht6.borrow().origin());
+            info!("Started RPC server on ipv6 address: {}", dht6.borrow().addr());
         }
     }
 
@@ -125,10 +146,10 @@ impl RpcServer {
         // TODO
 
         if let Some(dht4) = self.dht4.as_ref() {
-            info!("Stopped RPC server on ipv4: {}", dht4.borrow().origin());
+            info!("Stopped RPC server on ipv4: {}", dht4.borrow().addr());
         }
         if let Some(dht6) = self.dht6.as_ref() {
-            info!("Started RPC server on ipv6: {}", dht6.borrow().origin());
+            info!("Started RPC server on ipv6: {}", dht6.borrow().addr());
         }
     }
 
@@ -138,11 +159,11 @@ impl RpcServer {
         rt.block_on(async move {
             let mut sock4: Option<UdpSocket> = None;
             if let Some(dht4) = self.dht4.as_ref(){
-                sock4 = Some(UdpSocket::bind(dht4.borrow().origin()).await?);
+                sock4 = Some(UdpSocket::bind(dht4.borrow().addr()).await?);
             }
             let mut sock6: Option<UdpSocket> = None;
             if let Some(dht6) = self.dht6.as_ref(){
-                sock6 = Some(UdpSocket::bind(dht6.borrow().origin()).await?);
+                sock6 = Some(UdpSocket::bind(dht6.borrow().addr()).await?);
             }
 
             loop {

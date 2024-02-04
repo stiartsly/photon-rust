@@ -1,4 +1,5 @@
 use std::fmt;
+use std::any::Any;
 use std::collections::HashMap;
 use std::time::SystemTime;
 use log::debug;
@@ -112,6 +113,14 @@ impl NodeLookupTask {
     void addClosest(Sp<CandidateNode> candidateNode) {
         closestSet.add(candidateNode);
     }*/
+
+    pub(crate) fn set_bootstrap(&mut self, bootstrap: bool) {
+        self.bootstrap = bootstrap
+    }
+
+    pub(crate) fn set_want_token(&mut self, token: bool) {
+        self.want_token = token;
+    }
 }
 
 impl Task for NodeLookupTask {
@@ -236,6 +245,10 @@ impl Task for NodeLookupTask {
 
     fn is_done(&self) -> bool{
         self.inflights.is_empty() || self.is_finished()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

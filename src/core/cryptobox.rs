@@ -33,9 +33,7 @@ const_assert!(CryptoBox::SYMMETRIC_KEY_BYTES == crypto_box_BEFORENMBYTES as usiz
 const_assert!(CryptoBox::MAC_BYTES == crypto_box_MACBYTES as usize);
 
 #[derive(Default, Clone, PartialEq, Eq, Debug)]
-pub struct PrivateKey {
-    key: [u8; Self::BYTES]
-}
+pub struct PrivateKey([u8; Self::BYTES]);
 
 impl PrivateKey {
     pub const BYTES: usize = 32;
@@ -49,9 +47,9 @@ impl PrivateKey {
             Self::BYTES
         );
 
-        PrivateKey {
-            key: input.try_into().unwrap()
-        }
+        PrivateKey(
+            input.try_into().unwrap()
+        )
     }
 
     pub fn from_signature_key(sk: &signature::PrivateKey) -> Result<Self, Error> {
@@ -68,9 +66,7 @@ impl PrivateKey {
                 ));
             }
         }
-        Ok(PrivateKey {
-            key: input
-        })
+        Ok(PrivateKey(input))
     }
 
     pub const fn size(&self) -> usize {
@@ -78,25 +74,23 @@ impl PrivateKey {
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.key.as_slice()
+        self.0.as_slice()
     }
 
     pub fn clear(&mut self) {
-        self.key.fill(0);
+        self.0.fill(0);
     }
 }
 
 impl fmt::Display for PrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(self.key))?;
+        write!(f, "{}", hex::encode(self.0))?;
         Ok(())
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
-pub struct PublicKey {
-    key: [u8; Self::BYTES]
-}
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
+pub struct PublicKey([u8; Self::BYTES]);
 
 impl PublicKey {
     pub const BYTES: usize = 32;
@@ -110,9 +104,9 @@ impl PublicKey {
             Self::BYTES
         );
 
-        PublicKey {
-            key: input.try_into().unwrap()
-        }
+        PublicKey(
+            input.try_into().unwrap()
+        )
     }
 
     pub fn from_signature_key(pk: &signature::PublicKey) -> Result<Self, Error> {
@@ -129,9 +123,7 @@ impl PublicKey {
                 ));
             }
         }
-        Ok(PublicKey {
-            key: input
-        })
+        Ok(PublicKey(input))
     }
 
     pub const fn size(&self) -> usize {
@@ -139,44 +131,42 @@ impl PublicKey {
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.key.as_slice()
+        self.0.as_slice()
     }
 
     pub fn clear(&mut self) {
-        self.key.fill(0);
+        self.0.fill(0);
     }
 }
 
 impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(self.key))?;
+        write!(f, "{}", hex::encode(self.0))?;
         Ok(())
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Nonce {
-    nonce: [u8; Self::BYTES]
-}
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
+pub struct Nonce([u8; Self::BYTES]);
 
 impl Nonce {
     pub const BYTES: usize = 24;
 
     pub fn random() -> Self {
-        let mut nonce = [0u8; Self::BYTES];
+        let mut bytes = [0u8; Self::BYTES];
         unsafe { // Always success.
             randombytes_buf(
-                nonce.as_mut_ptr() as *mut libc::c_void,
+                bytes.as_mut_ptr() as *mut libc::c_void,
                 Self::BYTES
             );
         }
-        Nonce { nonce }
+        Nonce(bytes)
     }
 
     pub fn increment(&mut self) -> &Self {
         unsafe { // Always success.
             sodium_increment(
-                as_uchar_ptr_mut!(self.nonce),
+                as_uchar_ptr_mut!(self.0),
                 Self::BYTES
             )
         }
@@ -188,26 +178,23 @@ impl Nonce {
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.nonce.as_slice()
+        self.0.as_slice()
     }
 
     pub fn clear(&mut self) {
-        self.nonce.fill(0)
+        self.0.fill(0)
     }
 }
 
 impl std::fmt::Display for Nonce {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(self.nonce))?;
+        write!(f, "{}", hex::encode(self.0))?;
         Ok(())
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct KeyPair {
-    sk: PrivateKey,
-    pk: PublicKey
-}
+pub struct KeyPair(PrivateKey, PublicKey);
 
 impl KeyPair {
     pub const SEED_BYTES: usize = 32;
@@ -223,10 +210,10 @@ impl KeyPair {
             );
         }
 
-        KeyPair {
-            sk: PrivateKey::from(sk.as_slice()),
-            pk: PublicKey::from(pk.as_slice())
-        }
+        KeyPair(
+            PrivateKey::from(sk.as_slice()),
+            PublicKey::from(pk.as_slice())
+        )
     }
 
     pub fn from(sk: &[u8]) -> Self {
@@ -247,10 +234,10 @@ impl KeyPair {
             );
         }
 
-        KeyPair {
-            sk: PrivateKey::from(sk),
-            pk: PublicKey::from(pk.as_slice())
-        }
+        KeyPair(
+            PrivateKey::from(sk),
+            PublicKey::from(pk.as_slice())
+        )
     }
 
     pub fn from_private_key(sk: &PrivateKey) -> Self {
@@ -263,10 +250,10 @@ impl KeyPair {
             );
         }
 
-        KeyPair {
-            sk: sk.clone(),
-            pk: PublicKey::from(pk.as_slice())
-        }
+        KeyPair(
+            sk.clone(),
+            PublicKey::from(pk.as_slice())
+        )
     }
 
     pub fn from_seed(seed: &[u8]) -> Self {
@@ -289,10 +276,10 @@ impl KeyPair {
             );
         }
 
-        KeyPair {
-            sk: PrivateKey::from(sk.as_slice()),
-            pk: PublicKey::from(pk.as_slice())
-        }
+        KeyPair (
+            PrivateKey::from(sk.as_slice()),
+            PublicKey::from(pk.as_slice())
+        )
     }
 
     pub fn from_signature_keypair(keypair: &signature::KeyPair) -> Self {
@@ -309,23 +296,21 @@ impl KeyPair {
     }
 
     pub const fn private_key(&self) -> &PrivateKey {
-        &self.sk
+        &self.0
     }
 
     pub const fn public_key(&self) -> &PublicKey {
-        &self.pk
+        &self.1
     }
 
     pub fn clear(&mut self) {
-        self.sk.clear();
-        self.pk.clear();
+        self.0.clear();
+        self.1.clear();
     }
 }
 
 #[derive(Default, Debug)]
-pub struct CryptoBox {
-    key: [u8; Self::SYMMETRIC_KEY_BYTES]
-}
+pub struct CryptoBox([u8; Self::SYMMETRIC_KEY_BYTES]);
 
 impl CryptoBox {
     pub const SYMMETRIC_KEY_BYTES: usize = 32;
@@ -346,9 +331,9 @@ impl CryptoBox {
                 ));
             }
         }
-        Ok(CryptoBox {
-            key: k.try_into().unwrap()
-        })
+        Ok(CryptoBox(
+            k.try_into().unwrap()
+        ))
     }
 
     pub const fn size(&self) -> usize {
@@ -356,11 +341,11 @@ impl CryptoBox {
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.key.as_slice()
+        self.0.as_slice()
     }
 
     pub fn clear(&mut self) {
-        self.key.fill(0)
+        self.0.fill(0)
     }
 
     pub fn encrypt(&self, cipher: &mut [u8], plain: &[u8], nonce: &Nonce) -> Result<(), Error>{
@@ -374,7 +359,7 @@ impl CryptoBox {
                 as_uchar_ptr!(plain),
                 plain.len() as libc::c_ulonglong,
                 as_uchar_ptr!(nonce.as_bytes()),
-                as_uchar_ptr!(self.key)
+                as_uchar_ptr!(self.0)
             );
             if rc != 0 {
                 return Err(Error::Crypto(format!("Encrypt data failed")));
@@ -400,7 +385,7 @@ impl CryptoBox {
                 as_uchar_ptr!(cipher),
                 cipher.len() as libc::c_ulonglong,
                 as_uchar_ptr!(nonce.as_bytes()),
-                as_uchar_ptr!(self.key)
+                as_uchar_ptr!(self.0)
             );
             if rc != 0 {
                 return Err(Error::Crypto(format!("Encrypt data failed")));
