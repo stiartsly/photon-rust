@@ -49,7 +49,7 @@ pub(crate) struct DHT {
     addr: SocketAddr,
 
     routing_table: RoutingTable,
-    task_manager: TaskManager,
+    task_man: TaskManager,
 
     persist_path: String,
     running: bool,
@@ -65,7 +65,7 @@ impl DHT {
             addr: binding_addr.clone(),
 
             routing_table: RoutingTable::new(),
-            task_manager: TaskManager::new(),
+            task_man: TaskManager::new(),
             running: false,
 
             persist_path: String::new(),
@@ -110,62 +110,68 @@ impl DHT {
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
     where F: Fn(Option<Box<Node>>) + 'static {
-        let node = self.routing_table.bucket_entry(id).map(
-            |item| Box::new(item.node().clone())
-        );
-
-        let node_rc1 = Rc::new(RefCell::new(node));
-        let node_rc2 = Rc::clone(&node_rc1);
+        let result = Rc::new(RefCell::new(
+            self.routing_table.bucket_entry(id).map(
+                |item| Box::new(item.node().clone())
+            )
+        ));
+        let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(NodeLookupTask::new(id));
-        task.with_name("node lookup");
+        task.with_name("node-lookup");
         task.set_result_fn(move|_task, _node| {
             if _node.is_some() {
-                *(node_rc1.borrow_mut()) = Some(_node.unwrap());
+                *(result.borrow_mut()) = Some(_node.unwrap());
             }
             if option == LookupOption::Conservative {
                 _task.cancel()
             }
         });
         task.add_listener(move |_| {
-            complete_fn(node_rc2.borrow_mut().take());
+            complete_fn(result_shadow.borrow_mut().take());
         });
 
-        self.task_manager.add(task);
+        self.task_man.add(task);
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
     where F: Fn(Option<Box<Value>>) + 'static {
-        let mut empty: Option<Box<Value>> = None;
-        let result_ref = Rc::new(RefCell::new(empty.take()));
-        let result_shadow = Rc::clone(&result_ref);
+        let result = Rc::new(RefCell::new(
+            Option::default() as Option<Box<Value>>
+        ));
+        let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(ValueLookupTask::new(id));
-        task.with_name("value lookup");
-        task.set_result_fn(move | arg_task, arg_value| {
-            let mut found_borrowed = result_ref.borrow_mut();
-            let value_ref = arg_value.as_ref().unwrap();
-            match result_ref.borrow().as_ref() {
-                Some(value) => {
-                    if arg_value.as_ref().unwrap().is_mutable() &&
-                        value.sequence_number() < value_ref.sequence_number() {
-                        *found_borrowed = Some(value_ref.clone());
+        task.with_name("value-lookup");
+        task.set_result_fn(move |_task, _value| {
+            let binding = result.borrow();
+            match binding.as_ref() {
+                Some(v) => {
+                    if let Some(_v) = _value.as_ref() {
+                        if _v.is_mutable() && _v.sequence_number() < v.sequence_number() {
+                            *(result.borrow_mut()) = Some(_v.clone());
+                        }
                     }
                 },
                 None => {
-                    *found_borrowed = Some(value_ref.clone())
+                    if let Some(_v) = _value.as_ref() {
+                        *(result.borrow_mut()) = Some(_v.clone())
+                    }
                 }
             }
-            if option != LookupOption::Conservative || value_ref.is_mutable() {
-                arg_task.cancel()
+            if option != LookupOption::Conservative {
+                if let Some(_v) = _value {
+                    if _v.is_mutable() {
+                        _task.cancel()
+                    }
+                }
             }
         });
 
         task.add_listener(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         });
-
-        self.task_manager.add(task);
+        self.task_man.add(task);
     }
 
     pub(crate) fn store_value<F>(&self, _: &Value, _: F)
@@ -175,17 +181,18 @@ impl DHT {
 
     pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
     where F: Fn(Option<Vec<Box<Peer>>>) + 'static {
-        let mut empty: Option<Vec<Box<Peer>>> = None;
-        let result_rc = Rc::new(RefCell::new(empty.take()));
-        let result_shadow = Rc::clone(&result_rc);
+        let result = Rc::new(RefCell::new(
+            Option::default() as Option<Vec<Box<Peer>>>
+        ));
+        let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(PeerLookupTask::new(id));
         task.with_name("peer-lookup");
-        task.set_result_fn(move |arg_task, _| {
-            let found_borrowed = result_rc.borrow_mut();
+        task.set_result_fn(move |_task, _| {
+            let found_borrowed = result.borrow_mut();
             // peers->insert(peers->end(), listOfPeers.begin(), listOfPeers.end());
             if option != LookupOption::Conservative && (*found_borrowed).as_ref().unwrap().len() >= expected {
-                arg_task.cancel();
+                _task.cancel();
                 return;
             }
         });
@@ -194,7 +201,7 @@ impl DHT {
             complete_fn(result_shadow.borrow_mut().take())
         });
 
-        self.task_manager.add(task);
+        self.task_man.add(task);
     }
 
     pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
