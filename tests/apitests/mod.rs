@@ -11,6 +11,9 @@ pub mod peer;
 pub mod signature;
 
 # [cfg(test)]
+pub mod configuration;
+
+# [cfg(test)]
 pub mod node_runner;
 
 fn main() {}

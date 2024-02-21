@@ -9,7 +9,7 @@ use crate::{
     unwrap,
     error::Error,
     config::Config,
-    signature::{self, KeyPair, PrivateKey},
+    signature::{self, KeyPair},
     cryptobox::{self},
     id::Id,
     node_status::NodeStatus,
@@ -52,7 +52,7 @@ pub struct NodeRunner {
 #[allow(dead_code)]
 impl NodeRunner {
     pub fn new(cfg: Box<dyn Config>) -> Result<Self, Error> {
-        if cfg.ipv4().is_none() && cfg.ipv6().is_none() {
+        if cfg.addr4().is_none() && cfg.addr6().is_none() {
             return Err(Error::Generic(
                 format!("No valid IPv4 or IPv6 address was specified.")
             ))
@@ -141,7 +141,7 @@ impl NodeRunner {
         //let self_ref = Rc::new(RefCell::new(self));
         //self.server.borrow_mut().attach(self_ref);
 
-        if let Some(addr4) = self.cfg.ipv4() {
+        if let Some(addr4) = self.cfg.addr4() {
             let dht4 = Rc::new(RefCell::new(DHT::new(addr4)));
             dht4.borrow_mut().set_rpcserver(Rc::clone(&self.server));
             dht4.borrow_mut().set_token_manager(Rc::clone(&self.token_man));
@@ -150,7 +150,7 @@ impl NodeRunner {
             self.server.borrow_mut().enable_dht4(Rc::clone(&dht4))
         }
 
-        if let Some(addr6) = self.cfg.ipv6() {
+        if let Some(addr6) = self.cfg.addr6() {
             let dht6 = Rc::new(RefCell::new(DHT::new(addr6)));
             dht6.borrow_mut().set_rpcserver(Rc::clone(&self.server));
             dht6.borrow_mut().set_token_manager(Rc::clone(&self.token_man));
@@ -202,7 +202,7 @@ impl NodeRunner {
     }
 
     pub fn is_running(&self) -> bool {
-        unimplemented!()
+        self.status == NodeStatus::Running
     }
 
     pub fn id(&self) -> &Id {
@@ -279,12 +279,12 @@ fn load_key(keypath: &str) -> Result<KeyPair, Error> {
         Error::Io(err, format!("Reading key failed"))
     )?;
 
-    match buf.len() != PrivateKey::BYTES {
+    match buf.len() == signature::PrivateKey::BYTES {
         true => {
             Ok(KeyPair::from_private_key_bytes(buf.as_slice()))
         }
         false => {
-            Err(Error::State(format!("Incorrect key size")))
+            Err(Error::State(format!("Incorrect key size {}", buf.len())))
         }
     }
 }
