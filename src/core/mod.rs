@@ -7,7 +7,6 @@ mod task;
 mod rpccall;
 mod rpcserver;
 mod node_status;
-mod default_configuration;
 mod constants;
 mod routing_table;
 mod kbucket;
@@ -16,6 +15,7 @@ mod dht;
 mod msg;
 mod macros;
 
+pub mod default_configuration;
 pub mod signature;
 pub mod cryptobox;
 pub mod id;

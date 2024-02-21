@@ -26,11 +26,12 @@ use crate::{
 
 #[allow(dead_code)]
 pub struct NodeRunner {
-    sig_keypair: signature::KeyPair,
-    encryption_keypair: cryptobox::KeyPair,
     id: Id,
 
-    // store strategy.
+    signature_keypair: signature::KeyPair,
+    encryption_keypair: cryptobox::KeyPair,
+
+    // Storage strategy
     persistent: bool,
     storage_path: String,
 
@@ -107,7 +108,7 @@ impl NodeRunner {
         info!("Boson kademlia node Id {}", id);
 
         Ok(NodeRunner {
-            sig_keypair: keypair.take().unwrap(),
+            signature_keypair: keypair.take().unwrap(),
             encryption_keypair: cryptobox::KeyPair::new(),
             id,
 
@@ -313,5 +314,6 @@ fn write_id_file(id:&Id, keypath: &str) -> Result<(), Error> {
 }
 
 fn check_peristence(_: &str) -> Result<bool, Error> {
-    unimplemented!()
+    // TODO:
+    Ok(false)
 }
