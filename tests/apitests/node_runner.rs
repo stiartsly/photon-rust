@@ -1,5 +1,4 @@
 use std::fs;
-use std::rc::Rc;
 use boson::node_runner::NodeRunner;
 use std::env;
 
@@ -9,17 +8,14 @@ use boson::default_configuration;
 mod apitests {
     use super::*;
 
-    struct TestContext {
-        path1: String,
-        path2: String,
-        path3: String,
+    static mut PATH1: Option<String> = None;
+    static mut PATH2: Option<String> = None;
+    static mut PATH3: Option<String> = None;
 
-        node1: Rc<NodeRunner>,
-        node2: Rc<NodeRunner>,
-        node3: Rc<NodeRunner>
-    }
+    static mut RUNNER1: Option<NodeRunner> = None;
+    static mut RUNNER2: Option<NodeRunner> = None;
+    static mut RUNNER3: Option<NodeRunner> = None;
 
-    static mut CONTEXT: Option<TestContext> = None;
 
     fn get_storage_path(input: &str) -> String {
         let path = env::current_dir().unwrap().join(input);
@@ -48,49 +44,43 @@ mod apitests {
 
     fn setup() {
         unsafe {
-            let path1 = get_storage_path("node1");
-            let path2 = get_storage_path("node2");
-            let path3 = get_storage_path("node3");
+            PATH1 = Some(get_storage_path("node1"));
+            PATH2 = Some(get_storage_path("node2"));
+            PATH3 = Some(get_storage_path("node3"));
 
             let mut b1 = default_configuration::Builder::new();
             b1.with_listening_port(32222);
             b1.with_ipv4("192.168.1.102");
-            b1.with_storage_path(path1.as_str());
+            b1.with_storage_path(PATH1.as_ref().unwrap().as_str());
             let cfg1 = b1.build().unwrap();
 
             let mut b2 = default_configuration::Builder::new();
             b2.with_listening_port(32224);
             b2.with_ipv4("192.168.1.102");
-            b2.with_storage_path(path2.as_str());
+            b2.with_storage_path(PATH2.as_ref().unwrap().as_str());
             let cfg2 = b2.build().unwrap();
 
             let mut b3 = default_configuration::Builder::new();
             b3.with_listening_port(32226);
             b3.with_ipv4("192.168.1.102");
-            b2.with_storage_path(path3.as_str());
+            b2.with_storage_path(PATH3.as_ref().unwrap().as_str());
             let cfg3 = b3.build().unwrap();
 
-            CONTEXT = Some(TestContext {
-                path1,
-                path2,
-                path3,
-                node1: Rc::new(NodeRunner::new(cfg1).unwrap()),
-                node2: Rc::new(NodeRunner::new(cfg2).unwrap()),
-                node3: Rc::new(NodeRunner::new(cfg3).unwrap())
-            });
-
-            println!("Context is some(): {}", CONTEXT.is_some());
+            RUNNER1 = Some(NodeRunner::new(cfg1).unwrap());
+            RUNNER2 = Some(NodeRunner::new(cfg2).unwrap());
+            RUNNER3 = Some(NodeRunner::new(cfg3).unwrap());
         }
     }
 
     fn teardown() {
         unsafe {
-            let ctx = CONTEXT.as_ref().unwrap();
-            remove_storage(ctx.path1.as_str());
-            remove_storage(ctx.path2.as_str());
-            remove_storage(ctx.path3.as_str());
+            remove_storage(PATH1.as_ref().unwrap().as_str());
+            remove_storage(PATH2.as_ref().unwrap().as_str());
+            remove_storage(PATH3.as_ref().unwrap().as_str());
 
-            CONTEXT = None;
+            RUNNER1 = None;
+            RUNNER2 = None;
+            RUNNER3 = None;
         }
     }
 
@@ -98,9 +88,9 @@ mod apitests {
     fn test_find_node() {
         setup();
         unsafe {
-            CONTEXT.as_ref().unwrap().node1.is_running();
-            CONTEXT.as_ref().unwrap().node2.is_running();
-            CONTEXT.as_ref().unwrap().node3.is_running();
+            assert_eq!(RUNNER1.as_ref().unwrap().is_running(), false);
+            assert_eq!(RUNNER2.as_ref().unwrap().is_running(), false);
+            assert_eq!(RUNNER3.as_ref().unwrap().is_running(), false);
         }
         teardown()
     }
@@ -112,7 +102,4 @@ mod apitests {
     #[test]
     fn test_find_peer() {
     }
-
-
-
 }
