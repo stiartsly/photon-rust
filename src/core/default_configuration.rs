@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt;
 use std::net::{
     SocketAddr,
     IpAddr,
@@ -40,18 +41,6 @@ impl DefaultConfiguration {
             bootstrap_nodes: std::mem::take(&mut b.bootstrap_nodes),
         }
     }
-
-    pub fn addr4(&self) -> Option<&SocketAddr> {
-        self.addr4.as_ref()
-    }
-
-    pub fn addr6(&self) -> Option<&SocketAddr> {
-        self.addr6.as_ref()
-    }
-
-    pub fn storage_path(&self) -> &str {
-        &self.storage_path
-    }
 }
 
 impl Config for DefaultConfiguration {
@@ -69,6 +58,29 @@ impl Config for DefaultConfiguration {
 
     fn bootstrap_nodes(&self) -> &[Node] {
         &self.bootstrap_nodes
+    }
+
+    fn dump(&self) {
+        println!("config: {}", self);
+    }
+}
+
+impl fmt::Display for DefaultConfiguration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.addr4.is_some() {
+            write!(f, "ipv4:{},", self.addr4.unwrap())?;
+        }
+        if self.addr6.is_some() {
+            write!(f, "ipv6:{},", self.addr6.unwrap())?;
+        }
+
+        write!(f, "storage:{},", self.storage_path.as_str())?;
+        write!(f, "bootstraps: [")?;
+        for item in self.bootstrap_nodes.iter() {
+            write!(f, "{}, ", item)?;
+        }
+        write!(f, "]")?;
+        Ok(())
     }
 }
 
@@ -153,6 +165,11 @@ impl<'a> Builder<'a> {
                     return Err(Error::Argument(format!("error: {}", e)));
                 }
             };
+        }
+
+        if self.input_ipv4.is_none() && self.input_ipv6.is_none() {
+            return Err(Error::Argument(
+                format!("No valid IPv4 or IPv6 address was specified.")));
         }
 
         Ok(true)

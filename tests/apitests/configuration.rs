@@ -23,5 +23,7 @@ mod apitests {
         assert_eq!(cfg.addr4().unwrap().ip(), IpAddr::V4(ipv4_str.parse().unwrap()));
         assert_eq!(cfg.bootstrap_nodes().len(), 0);
         assert_eq!(cfg.storage_path(), "node");
+
+        cfg.dump();
     }
 }

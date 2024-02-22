@@ -52,13 +52,7 @@ pub struct NodeRunner {
 #[allow(dead_code)]
 impl NodeRunner {
     pub fn new(cfg: Box<dyn Config>) -> Result<Self, Error> {
-        if cfg.addr4().is_none() && cfg.addr6().is_none() {
-            return Err(Error::Generic(
-                format!("No valid IPv4 or IPv6 address was specified.")
-            ))
-        }
-
-        // TODO:
+        // cfg(DEVELOPMENT)
         info!("Photon node is running in development mode.");
 
         // Standardize storage root path.
@@ -105,7 +99,7 @@ impl NodeRunner {
             write_id_file(&id, &idpath)?;
         }
 
-        info!("Boson kademlia node Id {}", id);
+        info!("DHT node Id {}", id);
 
         Ok(NodeRunner {
             signature_keypair: keypair.take().unwrap(),
@@ -125,7 +119,6 @@ impl NodeRunner {
             cfg,
             token_man: Rc::new(RefCell::new(TokenManager::new())),
             storage: Rc::new(RefCell::new(SqliteStorage::new())),
-            //storage:
             server: Rc::new(RefCell::new(RpcServer::new()))
         })
     }

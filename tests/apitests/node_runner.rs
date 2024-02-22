@@ -1,6 +1,7 @@
 use std::fs;
-use boson::node_runner::NodeRunner;
 use std::env;
+use std::cell::RefCell;
+use boson::node_runner::NodeRunner;
 
 use boson::default_configuration;
 
@@ -12,9 +13,9 @@ mod apitests {
     static mut PATH2: Option<String> = None;
     static mut PATH3: Option<String> = None;
 
-    static mut RUNNER1: Option<NodeRunner> = None;
-    static mut RUNNER2: Option<NodeRunner> = None;
-    static mut RUNNER3: Option<NodeRunner> = None;
+    static mut RUNNER1: Option<RefCell<NodeRunner>> = None;
+    static mut RUNNER2: Option<RefCell<NodeRunner>> = None;
+    static mut RUNNER3: Option<RefCell<NodeRunner>> = None;
 
 
     fn get_storage_path(input: &str) -> String {
@@ -66,9 +67,9 @@ mod apitests {
             b2.with_storage_path(PATH3.as_ref().unwrap().as_str());
             let cfg3 = b3.build().unwrap();
 
-            RUNNER1 = Some(NodeRunner::new(cfg1).unwrap());
-            RUNNER2 = Some(NodeRunner::new(cfg2).unwrap());
-            RUNNER3 = Some(NodeRunner::new(cfg3).unwrap());
+            RUNNER1 = Some(RefCell::new(NodeRunner::new(cfg1).unwrap()));
+            RUNNER2 = Some(RefCell::new(NodeRunner::new(cfg2).unwrap()));
+            RUNNER3 = Some(RefCell::new(NodeRunner::new(cfg3).unwrap()));
         }
     }
 
@@ -88,9 +89,11 @@ mod apitests {
     fn test_find_node() {
         setup();
         unsafe {
-            assert_eq!(RUNNER1.as_ref().unwrap().is_running(), false);
-            assert_eq!(RUNNER2.as_ref().unwrap().is_running(), false);
-            assert_eq!(RUNNER3.as_ref().unwrap().is_running(), false);
+            assert_eq!(RUNNER1.as_ref().unwrap().borrow().is_running(), false);
+            assert_eq!(RUNNER2.as_ref().unwrap().borrow().is_running(), false);
+            assert_eq!(RUNNER3.as_ref().unwrap().borrow().is_running(), false);
+
+            //let _ = RUNNER1.as_ref().unwrap().borrow_mut().start();
         }
         teardown()
     }

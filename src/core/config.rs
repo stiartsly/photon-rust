@@ -7,4 +7,6 @@ pub trait Config {
 
     fn storage_path(&self) -> &str;
     fn bootstrap_nodes(&self) -> &[Node];
+
+    fn dump(&self);
 }
