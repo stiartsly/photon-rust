@@ -79,6 +79,14 @@ mod apitests {
             remove_storage(PATH2.as_ref().unwrap().as_str());
             remove_storage(PATH3.as_ref().unwrap().as_str());
 
+            PATH1 = None;
+            PATH2 = None;
+            PATH3 = None;
+
+            RUNNER1.as_ref().unwrap().borrow_mut().stop();
+            RUNNER2.as_ref().unwrap().borrow_mut().stop();
+            RUNNER3.as_ref().unwrap().borrow_mut().stop();
+
             RUNNER1 = None;
             RUNNER2 = None;
             RUNNER3 = None;
@@ -93,7 +101,13 @@ mod apitests {
             assert_eq!(RUNNER2.as_ref().unwrap().borrow().is_running(), false);
             assert_eq!(RUNNER3.as_ref().unwrap().borrow().is_running(), false);
 
-            //let _ = RUNNER1.as_ref().unwrap().borrow_mut().start();
+            let _ = RUNNER1.as_ref().unwrap().borrow_mut().start();
+            let _ = RUNNER2.as_ref().unwrap().borrow_mut().start();
+            let _ = RUNNER3.as_ref().unwrap().borrow_mut().start();
+
+            assert_eq!(RUNNER1.as_ref().unwrap().borrow().is_running(), true);
+            assert_eq!(RUNNER2.as_ref().unwrap().borrow().is_running(), true);
+            assert_eq!(RUNNER3.as_ref().unwrap().borrow().is_running(), true);
         }
         teardown()
     }

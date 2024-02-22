@@ -53,7 +53,7 @@ pub(crate) struct DHT {
     routing_table: RoutingTable,
     task_man: TaskManager,
 
-    persistent: bool,
+    persistence: bool,
     persist_path: String,
     running: bool,
 }
@@ -71,7 +71,7 @@ impl DHT {
             task_man: TaskManager::new(),
             running: false,
 
-            persistent: false,
+            persistence: false,
             persist_path: String::new(),
         }
     }
@@ -102,13 +102,17 @@ impl DHT {
 
     pub(crate) fn enable_persistence(&mut self, enabled: bool, path: &str) {
         if enabled {
-            self.persistent = true;
+            self.persistence = true;
             self.persist_path = path.to_string()
         }
     }
 
     pub(crate) fn addr(&self) -> &SocketAddr {
         &self.addr
+    }
+
+    pub(crate) fn is_ipv4(&self) -> bool {
+        self.addr.is_ipv4()
     }
 
     pub(crate) fn runner(&self) -> Rc<RefCell<NodeRunner>> {
@@ -136,7 +140,30 @@ impl DHT {
     }
 
     pub(crate) fn stop(&mut self) {
-        unimplemented!()
+        if !self.is_running() {
+            return;
+        }
+
+        let kind = match self.addr.is_ipv4() {
+            true => "IPv4",
+            false => "IPv6"
+        };
+
+        info!("{} initiated shutdown ...", kind);
+        info!("stopping servers ...");
+
+        self.running = false;
+
+        if self.persistence {
+            info!("Persisting routing table on shutdown ...");
+            self.routing_table.save(self.persist_path.as_str());
+        }
+
+        self.task_man.cancel_all();
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.running
     }
 
     fn on_message<T>(&mut self, msg: &Box<T> )

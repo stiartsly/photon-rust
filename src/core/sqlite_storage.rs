@@ -16,7 +16,8 @@ impl SqliteStorage {
 
 impl DataStorage for SqliteStorage {
     fn open(&mut self, _: &str) -> bool {
-        unimplemented!()
+        true
+        //unimplemented!()
     }
 
     fn get_value(&self, _: &Id) -> Box<Value> {

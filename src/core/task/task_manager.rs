@@ -14,4 +14,8 @@ impl TaskManager {
     pub(crate) fn add(&self, _: Box<dyn Task>) {
         unimplemented!()
     }
+
+    pub(crate) fn cancel_all(&mut self) {
+        unimplemented!()
+    }
 }
