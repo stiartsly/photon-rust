@@ -3,11 +3,15 @@ name = "rustPhoton"
 version = "0.1.0"
 edition = "2021"
 
+[profile.dev]
+opt-level = 0
+debug = true
+
 [lib]
 name = "boson"
-path = "src/core/mod.rs"
+path = "src/core/lib.rs"
 
-[[bin]]
+[[test]]
 name = "apitests"
 path = "tests/apitests/mod.rs"
 
