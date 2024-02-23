@@ -43,8 +43,6 @@ use crate::task::{
 };
 
 pub(crate) struct DHT {
-    // node: Rc<NodeRunner>,
-
     server: Option<Rc<RefCell<RpcServer>>>,
     token_man: Option<Rc<RefCell<TokenManager>>>,
 

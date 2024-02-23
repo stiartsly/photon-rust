@@ -1,6 +1,5 @@
 use std::fs;
 use std::env;
-use std::cell::RefCell;
 use boson::node_runner::NodeRunner;
 
 use boson::default_configuration;
@@ -13,9 +12,9 @@ mod apitests {
     static mut PATH2: Option<String> = None;
     static mut PATH3: Option<String> = None;
 
-    static mut RUNNER1: Option<RefCell<NodeRunner>> = None;
-    static mut RUNNER2: Option<RefCell<NodeRunner>> = None;
-    static mut RUNNER3: Option<RefCell<NodeRunner>> = None;
+    static mut RUNNER1: Option<NodeRunner> = None;
+    static mut RUNNER2: Option<NodeRunner> = None;
+    static mut RUNNER3: Option<NodeRunner> = None;
 
 
     fn get_storage_path(input: &str) -> String {
@@ -67,9 +66,13 @@ mod apitests {
             b2.with_storage_path(PATH3.as_ref().unwrap().as_str());
             let cfg3 = b3.build().unwrap();
 
-            RUNNER1 = Some(RefCell::new(NodeRunner::new(cfg1).unwrap()));
-            RUNNER2 = Some(RefCell::new(NodeRunner::new(cfg2).unwrap()));
-            RUNNER3 = Some(RefCell::new(NodeRunner::new(cfg3).unwrap()));
+            RUNNER1 = Some(NodeRunner::new(cfg1).unwrap());
+            RUNNER2 = Some(NodeRunner::new(cfg2).unwrap());
+            RUNNER3 = Some(NodeRunner::new(cfg3).unwrap());
+
+            let _ = RUNNER1.as_mut().unwrap().start();
+            let _ = RUNNER2.as_mut().unwrap().start();
+            let _ = RUNNER3.as_mut().unwrap().start();
         }
     }
 
@@ -83,9 +86,9 @@ mod apitests {
             PATH2 = None;
             PATH3 = None;
 
-            RUNNER1.as_ref().unwrap().borrow_mut().stop();
-            RUNNER2.as_ref().unwrap().borrow_mut().stop();
-            RUNNER3.as_ref().unwrap().borrow_mut().stop();
+            RUNNER1.as_mut().unwrap().stop();
+            RUNNER2.as_mut().unwrap().stop();
+            RUNNER3.as_mut().unwrap().stop();
 
             RUNNER1 = None;
             RUNNER2 = None;
@@ -97,17 +100,22 @@ mod apitests {
     fn test_find_node() {
         setup();
         unsafe {
-            assert_eq!(RUNNER1.as_ref().unwrap().borrow().is_running(), false);
-            assert_eq!(RUNNER2.as_ref().unwrap().borrow().is_running(), false);
-            assert_eq!(RUNNER3.as_ref().unwrap().borrow().is_running(), false);
+            let runner1 = RUNNER1.as_ref().unwrap();
+            let runner2 = RUNNER2.as_ref().unwrap();
+            let runner3 = RUNNER3.as_ref().unwrap();
 
-            let _ = RUNNER1.as_ref().unwrap().borrow_mut().start();
-            let _ = RUNNER2.as_ref().unwrap().borrow_mut().start();
-            let _ = RUNNER3.as_ref().unwrap().borrow_mut().start();
+            assert_eq!(runner1.is_running(), true);
+            assert_eq!(runner2.is_running(), true);
+            assert_eq!(runner3.is_running(), true);
 
-            assert_eq!(RUNNER1.as_ref().unwrap().borrow().is_running(), true);
-            assert_eq!(RUNNER2.as_ref().unwrap().borrow().is_running(), true);
-            assert_eq!(RUNNER3.as_ref().unwrap().borrow().is_running(), true);
+            println!("node1 id: {}", runner1.id());
+            println!("node2 id: {}", runner2.id());
+            println!("node3 id: {}", runner3.id());
+
+
+            let remoteid = runner2.id();
+            println!("Trying to find node {}", remoteid);
+            let _ = runner1.find_node(&remoteid);
         }
         teardown()
     }

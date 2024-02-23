@@ -1,19 +1,10 @@
-#[cfg(test)]
-pub mod id;
-
-# [cfg(test)]
-pub mod node;
-
-# [cfg(test)]
-pub mod peer;
-
-# [cfg(test)]
-pub mod signature;
-
-# [cfg(test)]
 pub mod configuration;
 
-# [cfg(test)]
+pub mod id;
+pub mod node;
+pub mod peer;
+pub mod signature;
+
 pub mod node_runner;
 
 fn main() {}

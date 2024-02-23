@@ -131,9 +131,6 @@ impl NodeRunner {
 
         info!("DHT node {} is starting...", self.id);
 
-        //let self_ref = Rc::new(RefCell::new(self));
-        //self.server.borrow_mut().attach(self_ref);
-
         if let Some(addr4) = self.cfg.addr4() {
             let dht4 = Rc::new(RefCell::new(DHT::new(addr4)));
             dht4.borrow_mut().set_rpcserver(Rc::clone(&self.server));
