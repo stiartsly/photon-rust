@@ -1,6 +1,7 @@
 mod sqlite_storage;
 mod data_storage;
 mod token_man;
+mod crypto_cache;
 mod version;
 mod kclosest_nodes;
 mod task;

@@ -22,6 +22,7 @@ use crate::{
     token_man::TokenManager,
     data_storage::DataStorage,
     sqlite_storage::SqliteStorage,
+    crypto_cache::CryptoCache,
 };
 
 #[allow(dead_code)]
@@ -47,6 +48,7 @@ pub struct NodeRunner {
     token_man: Rc<RefCell<TokenManager>>,
     storage: Rc<RefCell<dyn DataStorage>>,
     server: Rc<RefCell<RpcServer>>,
+    crypto_ctxts: Rc<RefCell<CryptoCache>>,
 }
 
 #[allow(dead_code)]
@@ -101,9 +103,11 @@ impl NodeRunner {
 
         info!("DHT node Id {}", id);
 
+        let encryption_keypair = cryptobox::KeyPair::from_signature_keypair(unwrap!(keypair));
+
         Ok(NodeRunner {
-            signature_keypair: keypair.take().unwrap(),
-            encryption_keypair: cryptobox::KeyPair::new(),
+            signature_keypair: unwrap!(keypair).clone(),
+            encryption_keypair: encryption_keypair.clone(),
             id,
 
             persistent,
@@ -119,7 +123,8 @@ impl NodeRunner {
             cfg,
             token_man: Rc::new(RefCell::new(TokenManager::new())),
             storage: Rc::new(RefCell::new(SqliteStorage::new())),
-            server: Rc::new(RefCell::new(RpcServer::new()))
+            server: Rc::new(RefCell::new(RpcServer::new())),
+            crypto_ctxts: Rc::new(RefCell::new(CryptoCache::new(&encryption_keypair))),
         })
     }
 
@@ -256,6 +261,30 @@ impl NodeRunner {
 
     pub async fn announce_peer(&mut self, peer: &Peer) -> Result<(), Error> {
         self.announce_peer_with_persistence(peer, false).await
+    }
+
+    pub fn encrypt_into(&self, recipient: &Id, plain: &[u8]) -> Vec<u8> {
+        self.crypto_ctxts.borrow().get(recipient).encrypt_into(plain)
+    }
+
+    pub fn decrypt_into(&self, sender: &Id, cipher: &[u8]) -> Vec<u8> {
+        self.crypto_ctxts.borrow().get(sender).decrypt_into(cipher)
+    }
+
+    pub fn encrypt(&self, recipient: &Id, plain: &[u8], cipher: &mut [u8]) {
+        _ = self.crypto_ctxts.borrow().get(recipient).encrypt(plain, cipher)
+    }
+
+    pub fn decrypt(&self, sender: &Id, cipher: &[u8], plain: &mut [u8]) {
+        _ = self.crypto_ctxts.borrow().get(sender).decrypt(cipher, plain)
+    }
+
+    pub fn sign(&self, data: &[u8]) -> Vec<u8> {
+        self.signature_keypair.private_key().sign_into(data)
+    }
+
+    pub fn verify(&self, data: &[u8], signature: &[u8]) -> bool {
+        self.signature_keypair.public_key().verify(data, signature)
     }
 }
 
