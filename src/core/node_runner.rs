@@ -7,7 +7,7 @@ use log::{info, warn, error};
 use std::fs;
 use crate::{
     unwrap,
-    logger::setup_logger,
+    logger,
     error::Error,
     config::Config,
     signature::{self, KeyPair},
@@ -55,7 +55,7 @@ pub struct NodeRunner {
 #[allow(dead_code)]
 impl NodeRunner {
     pub fn new(cfg: Box<dyn Config>) -> Result<Self, Error> {
-        setup_logger();
+        logger::setup();
 
         // cfg(DEVELOPMENT)
         info!("Photon node is running in development mode.");
@@ -195,6 +195,8 @@ impl NodeRunner {
 
         self.status = NodeStatus::Stopped;
         info!("DHT node {} stopped", self.id);
+
+        logger::teardown();
     }
 
     pub(crate) fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {

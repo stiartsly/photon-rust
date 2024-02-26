@@ -6,9 +6,7 @@ use log::{
 };
 
 static MY_LOGGER: MyLogger = MyLogger;
-
 struct MyLogger;
-
 impl log::Log for MyLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         metadata.level() <= Level::Info
@@ -24,7 +22,19 @@ impl log::Log for MyLogger {
     }
 }
 
-pub(crate) fn setup_logger() {
+static NULL_LOGGER: NullLogger = NullLogger;
+struct NullLogger;
+impl log::Log for NullLogger {
+    fn enabled(&self, _: &Metadata) -> bool { false }
+    fn log(&self, _: &Record) {}
+    fn flush(&self) {}
+}
+
+pub(crate) fn setup() {
     _ = log::set_logger(&MY_LOGGER);
     log::set_max_level(LevelFilter::Info);
+}
+
+pub(crate) fn teardown() {
+    _ = log::set_logger(&NULL_LOGGER)
 }
