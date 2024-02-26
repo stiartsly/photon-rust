@@ -212,6 +212,10 @@ impl NodeRunner {
         self.option = option;
     }
 
+    pub fn lookup_option(&self) -> LookupOption {
+        self.option
+    }
+
     pub async fn bootstrap(&self, _: &[Node]) -> Result<(), Error> {
         unimplemented!()
     }
