@@ -264,19 +264,19 @@ impl NodeRunner {
     }
 
     pub fn encrypt_into(&self, recipient: &Id, plain: &[u8]) -> Vec<u8> {
-        self.crypto_ctxts.borrow().get(recipient).encrypt_into(plain)
+        self.crypto_ctxts.borrow_mut().get(recipient).encrypt_into(plain)
     }
 
     pub fn decrypt_into(&self, sender: &Id, cipher: &[u8]) -> Vec<u8> {
-        self.crypto_ctxts.borrow().get(sender).decrypt_into(cipher)
+        self.crypto_ctxts.borrow_mut().get(sender).decrypt_into(cipher)
     }
 
     pub fn encrypt(&self, recipient: &Id, plain: &[u8], cipher: &mut [u8]) {
-        _ = self.crypto_ctxts.borrow().get(recipient).encrypt(plain, cipher)
+        _ = self.crypto_ctxts.borrow_mut().get(recipient).encrypt(plain, cipher)
     }
 
     pub fn decrypt(&self, sender: &Id, cipher: &[u8], plain: &mut [u8]) {
-        _ = self.crypto_ctxts.borrow().get(sender).decrypt(cipher, plain)
+        _ = self.crypto_ctxts.borrow_mut().get(sender).decrypt(cipher, plain)
     }
 
     pub fn sign(&self, data: &[u8]) -> Vec<u8> {

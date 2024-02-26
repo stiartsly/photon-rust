@@ -163,6 +163,20 @@ impl Nonce {
         Nonce(bytes)
     }
 
+    pub fn from(input: &[u8]) -> Self {
+            assert_eq!(
+            input.len(),
+            Self::BYTES,
+            "Incorrect nonce size {}, should be {}",
+            input.len(),
+            Self::BYTES
+        );
+
+        Nonce(
+            input.try_into().unwrap()
+        )
+    }
+
     pub fn increment(&mut self) -> &Self {
         unsafe { // Always success.
             sodium_increment(
@@ -348,7 +362,7 @@ impl CryptoBox {
         self.0.fill(0)
     }
 
-    pub fn encrypt(&self, cipher: &mut [u8], plain: &[u8], nonce: &Nonce) -> Result<(), Error>{
+    pub fn encrypt(&self, plain: &[u8], cipher: &mut [u8], nonce: &Nonce) -> Result<(), Error>{
         if cipher.len() < plain.len() + crypto_box_MACBYTES as usize {
             return Err(Error::Argument(format!("The cipher buffer is too small")));
         }
@@ -370,11 +384,11 @@ impl CryptoBox {
 
     pub fn encrypt_into(&self, plain: &[u8], nonce: &Nonce) -> Vec<u8> {
         let mut cipher = vec!(0u8; plain.len() + Self::MAC_BYTES);
-        self.encrypt(cipher.as_mut_slice(), plain, nonce).unwrap();
+        self.encrypt(plain, cipher.as_mut_slice(), nonce).unwrap();
         cipher
     }
 
-    pub fn decrypt(&self, plain: &mut[u8], cipher: &[u8], nonce: &Nonce) -> Result<(), Error> {
+    pub fn decrypt(&self, cipher: &[u8], plain: &mut[u8], nonce: &Nonce) -> Result<(), Error> {
         if plain.len() < cipher.len() - crypto_box_MACBYTES as usize {
             return Err(Error::Argument(format!("The plain buffer is too small")));
         }
@@ -396,7 +410,7 @@ impl CryptoBox {
 
     pub fn decrypt_into(&self, cipher: &[u8], nonce: &Nonce) -> Vec<u8> {
         let mut plain = vec!(0u8; cipher.len() - Self::MAC_BYTES);
-        self.decrypt(plain.as_mut_slice(), cipher, nonce).unwrap();
+        self.decrypt(cipher, plain.as_mut_slice(), nonce).unwrap();
         plain
     }
 }
