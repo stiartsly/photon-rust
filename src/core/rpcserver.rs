@@ -118,7 +118,7 @@ impl RpcServer {
         }
     }
 
-    fn start(&mut self) {
+    pub(crate) fn start(&mut self) {
         if self.state != State::Initial {
             return;
         }
@@ -144,7 +144,6 @@ impl RpcServer {
         self.state = State::Stopped;
 
         // TODO
-
         if let Some(dht4) = self.dht4.as_ref() {
             info!("Stopped RPC server on ipv4: {}", dht4.borrow().addr());
         }

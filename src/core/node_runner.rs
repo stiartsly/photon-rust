@@ -3,10 +3,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::io::Read;
 use std::boxed::Box;
-use log::{info, warn, error};
+use log::{info, warn, error, LevelFilter};
 use std::fs;
 use crate::{
     unwrap,
+    logger::MyLogger,
     error::Error,
     config::Config,
     signature::{self, KeyPair},
@@ -24,6 +25,8 @@ use crate::{
     sqlite_storage::SqliteStorage,
     crypto_cache::CryptoCache,
 };
+
+static MY_LOGGER: MyLogger = MyLogger;
 
 #[allow(dead_code)]
 pub struct NodeRunner {
@@ -54,6 +57,9 @@ pub struct NodeRunner {
 #[allow(dead_code)]
 impl NodeRunner {
     pub fn new(cfg: Box<dyn Config>) -> Result<Self, Error> {
+        _ = log::set_logger(&MY_LOGGER);
+        log::set_max_level(LevelFilter::Info);
+
         // cfg(DEVELOPMENT)
         info!("Photon node is running in development mode.");
 
@@ -157,6 +163,8 @@ impl NodeRunner {
         self.status = NodeStatus::Running;
         let dbpath = self.storage_path.clone() + "/node.db";
         self.storage.borrow_mut().open(dbpath.as_str());
+
+        self.server.borrow_mut().start();
 
         // TODO:
 
