@@ -123,8 +123,6 @@ impl RpcServer {
             return;
         }
 
-        // open sockets
-
         self.state = State::Running;
         self.started = SystemTime::now();
 
@@ -134,6 +132,8 @@ impl RpcServer {
         if let Some(dht6) = self.dht6.as_ref() {
             info!("Started RPC server on ipv6 address: {}", dht6.borrow().addr());
         }
+
+        _ = self.run_loop();
     }
 
     fn stop(&mut self) {
@@ -167,6 +167,8 @@ impl RpcServer {
 
             loop {
                 tokio::select! {
+                    biased;
+
                     rc1 = read_socket(sock4.as_ref()) => {
                         match rc1 {
                             Ok(data) => println!("Received data on socket1: {:?}", data),
@@ -181,13 +183,18 @@ impl RpcServer {
                         }
                     }
 
-                    // Writable event for either socket
-                    _ = write_socket(sock4.as_ref()) => {
-                        println!("Socket1 is writable");
+                    rc3 = write_socket(sock4.as_ref()) => {
+                        match rc3 {
+                           Ok(_) => println!("Written data on socket1 "),
+                           Err(err) => eprintln!("Error writing to socket1 {}", err),
+                        }
                     }
 
-                    _ = write_socket(sock6.as_ref()) => {
-                        println!("Socket2 is writable");
+                    rc4 = write_socket(sock6.as_ref()) => {
+                        match rc4 {
+                           Ok(_) => println!("Written data on socket2 "),
+                           Err(err) => eprintln!("Error writing to socket2 {}", err),
+                        }
                     }
                 }
             }
@@ -222,7 +229,11 @@ async fn read_socket(socket_option: Option<&UdpSocket>) -> Result<Vec<u8>, std::
             Ok(buffer)
         },
         None => {
-            Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
+            // Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
+            use std::time::Duration;
+            use tokio::time::sleep;
+            sleep(Duration::from_millis(68719476734)).await;
+            Ok(Vec::new())
         }
     }
 }
@@ -230,12 +241,21 @@ async fn read_socket(socket_option: Option<&UdpSocket>) -> Result<Vec<u8>, std::
 async fn write_socket(socket_option: Option<&UdpSocket>) -> Result<(), std::io::Error> {
     match socket_option.as_ref() {
         Some(socket) => {
+            use std::net::{Ipv4Addr, SocketAddr, IpAddr};
+            use std::time::Duration;
+            use tokio::time::sleep;
+            sleep(Duration::from_millis(5000)).await;
             let message = b"Hello, World!";
-            socket.send(message).await?;
+            let target = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+            socket.send_to(message, target).await?;
             Ok(())
         },
         None => {
-            Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
+            //Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
+            use std::time::Duration;
+            use tokio::time::sleep;
+            sleep(Duration::from_millis(68719476734)).await;
+            Ok(())
         }
     }
 }
