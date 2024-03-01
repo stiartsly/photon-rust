@@ -1,39 +1,36 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::time::SystemTime;
-use tokio::io::{self};
+use std::net::{Ipv4Addr, SocketAddr, IpAddr};
+
+use tokio::io;
+use tokio::runtime;
 use tokio::net::UdpSocket;
-use tokio::runtime::{self};
 use log::info;
 
 use crate::{
-    as_millis,
-    version,
+    error::Error,
+    id::Id,
+    node::Node,
     dht::DHT,
+    lookup_option::LookupOption,
+    token_man::TokenManager,
+    data_storage::DataStorage,
+    sqlite_storage::SqliteStorage,
+    version,
     rpccall::RpcCall,
-    node_runner::NodeRunner
 };
 
 use crate::msg::{
     msg::Msg
 };
 
-const RPC_SERVER_REACHABILITY_TIMEOUT: u128 = 60 * 1000;
+#[allow(dead_code)]
+pub(crate) struct NodeEngine {
+    id: Id,
+    storage_path: String,
 
-#[derive(Clone, PartialEq, Eq)]
-enum State {
-    Initial,
-    Running,
-    Stopped
-}
-
-pub(crate) struct RpcServer {
-    node_runner: Option<Rc<RefCell<NodeRunner>>>,
-
-    dht4: Option<Rc<RefCell<DHT>>>,
-    dht6: Option<Rc<RefCell<DHT>>>,
-
-    state: State,
+    running: bool,
     started: SystemTime,
 
     reachable: bool,
@@ -41,118 +38,59 @@ pub(crate) struct RpcServer {
     msgs_atleast_reachable_check: i32,
     last_reachable_check: SystemTime,
 
-    // next_txid: i32, // TODO atomic ?
+    pub(crate) dht4: Option<Rc<RefCell<DHT>>>,
+    pub(crate) dht6: Option<Rc<RefCell<DHT>>>,
+    dht_num: i32,
+    option: LookupOption,
+
+    pub(crate) token_man: Rc<RefCell<TokenManager>>,
+    pub(crate) storage: Rc<RefCell<dyn DataStorage>>,
+   // encryption_ctxts: CryptoCache,
 }
 
 #[allow(dead_code)]
-impl RpcServer {
-    pub(crate) fn new() -> Self {
-        RpcServer {
-            node_runner: None,
-            dht4: None,
-            dht6: None,
-            state: State::Initial,
+impl NodeEngine {
+    pub fn new(id: Id, storage_path: &str) -> Result<Self, Error> {
+        Ok(NodeEngine {
+            id: id.clone(),
+
+            storage_path: storage_path.to_string(),
             started: SystemTime::UNIX_EPOCH,
+            running: false,
+
             reachable: false,
             received_msgs: 0,
             msgs_atleast_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
-            // next_txid: 0,
-        }
+            dht4: None,
+            dht6: None,
+            dht_num: 0,
+            option: LookupOption::Conservative,
+
+            token_man: Rc::new(RefCell::new(TokenManager::new())),
+            storage: Rc::new(RefCell::new(SqliteStorage::new()))
+        })
     }
 
-    pub(crate) fn attach(&mut self, node_runner: Rc<RefCell<NodeRunner>>) {
-        self.node_runner = Some(node_runner);
-    }
-
-    pub(crate) fn detach(&mut self) {
-        _ = self.node_runner.take()
-    }
-
-    fn node_runner(&self) -> &Rc<RefCell<NodeRunner>> {
-        self.node_runner.as_ref().unwrap()
-    }
-
-    pub(crate) fn enable_dht4(&mut self, dht4: Rc<RefCell<DHT>>) {
-        self.dht4 = Some(dht4)
-    }
-
-    pub(crate) fn disable_dht4(&mut self) {
-        _ = self.dht4.take()
-    }
-
-    fn has_dht4(&self) -> bool {
-        self.dht4.is_some()
-    }
-
-    pub(crate) fn enable_dht6(&mut self, dht6: Rc<RefCell<DHT>>) {
-        self.dht6 = Some(dht6)
-    }
-
-    pub(crate) fn disable_dht6(&mut self) {
-        _ = self.dht6.take()
-    }
-
-    fn has_dht6(&self) -> bool {
-        self.dht6.is_some()
-    }
-
-    pub(crate) fn is_reachable(&self) -> bool {
-        self.reachable
-    }
-
-    pub(crate) fn update_reachability(&mut self) {
-        // don't do pings too often if we're not receiving anything
-        // (connection might be dead)
-
-        if self.received_msgs != self.msgs_atleast_reachable_check {
-            self.reachable = true;
-            self.last_reachable_check = SystemTime::now();
-            self.msgs_atleast_reachable_check = self.received_msgs;
-            return;
+    pub fn start(&mut self, dht4: Option<Rc<RefCell<DHT>>>, dht6: Option<Rc<RefCell<DHT>>>) {
+        if let Some(dht) = dht4 {
+            dht.borrow_mut().enable_persistence(&format!("{}/dht4.cache", self.storage_path));
+            self.dht4 = Some(Rc::clone(&dht));
+            info!("Started RPC server on ipv4 address: {}", dht.borrow().addr());
         }
 
-        if as_millis!(self.last_reachable_check) > RPC_SERVER_REACHABILITY_TIMEOUT {
-            self.reachable = false;
+        if let Some(dht) = dht6 {
+            dht.borrow_mut().enable_persistence(&format!("{}/dht6.cache", self.storage_path));
+            self.dht6 = Some(Rc::clone(&dht));
+            info!("Started RPC server on ipv6 address: {}", dht.borrow().addr());
         }
+
+        let dbpath = self.storage_path.clone() + "/node.db";
+        self.storage.borrow_mut().open(dbpath.as_str());
     }
 
-    pub(crate) fn start(&mut self) {
-        if self.state != State::Initial {
-            return;
-        }
-
-        self.state = State::Running;
-        self.started = SystemTime::now();
-
-        if let Some(dht4) = self.dht4.as_ref() {
-            info!("Started RPC server on ipv4 address: {}", dht4.borrow().addr());
-        }
-        if let Some(dht6) = self.dht6.as_ref() {
-            info!("Started RPC server on ipv6 address: {}", dht6.borrow().addr());
-        }
-
-        _ = self.run_loop();
-    }
-
-    fn stop(&mut self) {
-        if self.state == State::Stopped {
-            return;
-        }
-
-        self.state = State::Stopped;
-
-        // TODO
-        if let Some(dht4) = self.dht4.as_ref() {
-            info!("Stopped RPC server on ipv4: {}", dht4.borrow().addr());
-        }
-        if let Some(dht6) = self.dht6.as_ref() {
-            info!("Started RPC server on ipv6: {}", dht6.borrow().addr());
-        }
-    }
-
-    fn run_loop(&self) -> io::Result<()> {
+    pub(crate) fn run_loop(&mut self) -> io::Result<()> {
         let rt = runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
         rt.block_on(async move {
@@ -165,10 +103,8 @@ impl RpcServer {
                 sock6 = Some(UdpSocket::bind(dht6.borrow().addr()).await?);
             }
 
-            loop {
+            while self.running {
                 tokio::select! {
-                    biased;
-
                     rc1 = read_socket(sock4.as_ref()) => {
                         match rc1 {
                             Ok(data) => println!("Received data on socket1: {:?}", data),
@@ -197,8 +133,43 @@ impl RpcServer {
                         }
                     }
                 }
+                self.running = false;
             }
+
+            Ok(())
         })
+    }
+
+    pub fn stop(&mut self) {
+        if let Some(dht) = self.dht4.take() {
+            info!("Stopped RPC server on ipv4: {}", dht.borrow().addr());
+            dht.borrow_mut().stop();
+        }
+        if let Some(dht) = self.dht6.take() {
+            info!("Started RPC server on ipv6: {}", dht.borrow().addr());
+            dht.borrow_mut().stop();
+        }
+
+        _ = self.storage.borrow_mut().close();
+    }
+
+    pub(crate) fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
+        unimplemented!()
+    }
+
+    pub async fn bootstrap(&self, _: &[Node]) -> Result<(), Error> {
+        unimplemented!()
+    }
+
+    pub(crate) fn is_reachable(&self) -> bool {
+        self.reachable
+    }
+
+    fn persistent_announce(&mut self) {
+        info!("Reannounce the perisitent values and peers...");
+
+        // let mut timestamp = SystemTime::now();
+        unimplemented!()
     }
 
     pub(crate) fn send_msg(&self, mut msg: Box<dyn Msg>) {
@@ -218,6 +189,23 @@ impl RpcServer {
     pub(crate) fn send_call(&self, _: Box<RpcCall>) {
         unimplemented!()
     }
+}
+
+pub(crate) fn start_tweak(engine: &Rc<RefCell<NodeEngine>>, addr4: Option<SocketAddr>, addr6: Option<SocketAddr>) {
+    let mut dht4: Option<Rc<RefCell<DHT>>> = None;
+    let mut dht6: Option<Rc<RefCell<DHT>>> = None;
+
+    if let Some(addr) = addr4 {
+        dht4 = Some(Rc::new(RefCell::new(DHT::new(&engine, &addr))));
+    }
+    if let Some(addr) = addr6 {
+        dht6 = Some(Rc::new(RefCell::new(DHT::new(&engine, &addr))));
+    }
+    engine.borrow_mut().start(dht4, dht6);
+}
+
+pub(crate) fn stop_tweak(engine: &Rc<RefCell<NodeEngine>>) {
+    engine.borrow_mut().stop()
 }
 
 async fn read_socket(socket_option: Option<&UdpSocket>) -> Result<Vec<u8>, std::io::Error> {
@@ -241,7 +229,6 @@ async fn read_socket(socket_option: Option<&UdpSocket>) -> Result<Vec<u8>, std::
 async fn write_socket(socket_option: Option<&UdpSocket>) -> Result<(), std::io::Error> {
     match socket_option.as_ref() {
         Some(socket) => {
-            use std::net::{Ipv4Addr, SocketAddr, IpAddr};
             use std::time::Duration;
             use tokio::time::sleep;
             sleep(Duration::from_millis(5000)).await;

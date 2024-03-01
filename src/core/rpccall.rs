@@ -8,9 +8,9 @@ use crate::{
     id::Id,
     dht::DHT,
     node::Node,
+    engine::NodeEngine,
     msg::msg,
     msg::msg::Msg,
-    rpcserver::RpcServer
 };
 
 #[derive(Clone, PartialEq, PartialOrd, Hash)]
@@ -143,7 +143,7 @@ impl RpcCall {
         }
     }
 
-    pub(crate) fn send(&mut self, _: &RpcServer) {
+    pub(crate) fn send(&mut self, _: &NodeEngine) {
         self.sent = SystemTime::now();
         self.update_state(State::Sent);
 

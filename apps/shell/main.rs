@@ -3,7 +3,7 @@ use std::env;
 
 use boson::{
     default_configuration,
-    node_runner::NodeRunner
+    runner::NodeRunner
 };
 
 fn get_storage_path(input: &str) -> String {
@@ -25,7 +25,8 @@ fn main() {
 
     let mut b1 = default_configuration::Builder::new();
     b1.with_listening_port(32222);
-    b1.with_ipv4("192.168.1.102");
+    b1.with_ipv4("192.168.1.109");
+    //b1.with_ipv4("192.168.237.121");
     b1.with_storage_path(path.as_str());
     let cfg1 = b1.build().unwrap();
 
@@ -33,4 +34,5 @@ fn main() {
     println!("DHT node Id: {}", runner.id());
 
     let _ = runner.start();
+    runner.stop();
 }

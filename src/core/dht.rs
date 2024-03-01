@@ -12,11 +12,10 @@ use crate::{
     peer::Peer,
     value::Value,
     rpccall::RpcCall,
-    rpcserver::RpcServer,
     kclosest_nodes::KClosestNodes,
     token_man::TokenManager,
     routing_table::RoutingTable,
-    node_runner::NodeRunner
+    engine::NodeEngine
 };
 
 use crate::msg::{
@@ -43,8 +42,8 @@ use crate::task::{
 };
 
 pub(crate) struct DHT {
-    server: Option<Rc<RefCell<RpcServer>>>,
-    token_man: Option<Rc<RefCell<TokenManager>>>,
+    engine: Rc<RefCell<NodeEngine>>,
+    token_man: Rc<RefCell<TokenManager>>,
 
     addr: SocketAddr,
 
@@ -58,10 +57,10 @@ pub(crate) struct DHT {
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(binding_addr: &SocketAddr) -> Self {
+    pub(crate) fn new(engine: &Rc<RefCell<NodeEngine>>, binding_addr: &SocketAddr) -> Self {
         DHT {
-            server: None,
-            token_man: None,
+            engine: Rc::clone(engine),
+            token_man: Rc::clone(&engine.borrow().token_man),
 
             addr: binding_addr.clone(),
 
@@ -74,35 +73,9 @@ impl DHT {
         }
     }
 
-    pub(crate) fn set_rpcserver(&mut self, server: Rc<RefCell<RpcServer>>) {
-        self.server = Some(server)
-    }
-
-    pub(crate) fn unset_rpcserver(&mut self) {
-        _ = self.server.take()
-    }
-
-    fn rpcserver(&self) -> &Rc<RefCell<RpcServer>> {
-        self.server.as_ref().unwrap()
-    }
-
-    pub(crate) fn set_token_manager(&mut self, token_man: Rc<RefCell<TokenManager>>) {
-        self.token_man = Some(token_man)
-    }
-
-    pub(crate) fn unset_token_manager(&mut self) {
-        _ = self.token_man.take()
-    }
-
-    fn token_man(&self) -> &Rc<RefCell<TokenManager>> {
-        self.token_man.as_ref().unwrap()
-    }
-
-    pub(crate) fn enable_persistence(&mut self, enabled: bool, path: &str) {
-        if enabled {
-            self.persistence = true;
-            self.persist_path = path.to_string()
-        }
+    pub(crate) fn enable_persistence(&mut self, path: &str) {
+        self.persistence = true;
+        self.persist_path = path.to_string()
     }
 
     pub(crate) fn addr(&self) -> &SocketAddr {
@@ -112,11 +85,11 @@ impl DHT {
     pub(crate) fn is_ipv4(&self) -> bool {
         self.addr.is_ipv4()
     }
-
+/*
     pub(crate) fn runner(&self) -> Rc<RefCell<NodeRunner>> {
         unimplemented!()
     }
-
+*/
     fn bootstrap_internal() {
         unimplemented!()
     }
@@ -211,7 +184,7 @@ impl DHT {
         err.with_msg(str);
         err.with_code(code);
 
-        self.rpcserver().borrow().send_msg(err);
+        self.engine.borrow().send_msg(err);
     }
 
     fn on_ping(&self, request: &dyn Msg) {
@@ -221,7 +194,7 @@ impl DHT {
         msg.with_txid(request.txid());
         msg.with_addr(request.addr());
 
-        self.rpcserver().borrow().send_msg(msg);
+        self.engine.borrow().send_msg(msg);
     }
 
     fn on_find_node<T>(&self, request: &Box<T>) where T: Msg + lookup::Condition {
@@ -248,7 +221,7 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-                self.token_man().borrow().generate_token(
+                self.token_man.borrow().generate_token(
                     request.id(),
                     request.addr(),
                     request.target()
@@ -256,7 +229,7 @@ impl DHT {
             }
         );
 
-        self.rpcserver().borrow().send_msg(resp)
+        self.engine.borrow().send_msg(resp)
     }
 
     fn on_find_value<T>(&self, request: &Box<T>)
@@ -297,14 +270,14 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man().borrow().generate_token(
+            self.token_man.borrow().generate_token(
                 request.id(),
                 request.addr(),
                 request.target()
             )
         });
 
-        self.rpcserver().borrow().send_msg(resp);
+        self.engine.borrow().send_msg(resp);
     }
 
     fn on_store_value<T>(&mut self, request: &Box<T>)
@@ -312,7 +285,7 @@ impl DHT {
         let value = request.value();
         let value_id = value.id();
 
-        if !self.token_man().borrow_mut().verify_token(request.token(), request.id(), request.addr(), &value_id) {
+        if !self.token_man.borrow_mut().verify_token(request.token(), request.id(), request.addr(), &value_id) {
             warn!("Received a store value request with invalid token from {}", request.addr());
             self.send_err(request.as_ref(), 203, "Invalid token for STORE VALUE request");
             return;
@@ -329,7 +302,7 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.rpcserver().borrow().send_msg(resp);
+        self.engine.borrow().send_msg(resp);
     }
 
     fn on_find_peers<T>(&self, request: &Box<T>)
@@ -367,14 +340,14 @@ impl DHT {
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man().borrow().generate_token(
+            self.token_man.borrow().generate_token(
                 request.id(),
                 request.addr(),
                 request.target()
             )
         });
 
-        self.rpcserver().borrow().send_msg(resp);
+        self.engine.borrow().send_msg(resp);
     }
 
     fn on_announce_peer<T>(&mut self, request: &Box<T>)
@@ -387,7 +360,7 @@ impl DHT {
             );
         }
 
-        if !self.token_man().borrow_mut().verify_token(
+        if !self.token_man.borrow_mut().verify_token(
             request.token(),
             request.id(),
             request.addr(),
@@ -418,12 +391,12 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.rpcserver().borrow().send_msg(resp);
+        self.engine.borrow().send_msg(resp);
     }
 
     pub(crate) fn on_timeout(&self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
-        if !self.running || !self.rpcserver().borrow().is_reachable() {
+        if !self.running || !self.engine.borrow().is_reachable() {
             return;
         }
         self.routing_table.on_timeout(call.target_id());

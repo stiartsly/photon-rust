@@ -1,7 +1,7 @@
 use std::fs;
 use std::env;
 
-use boson::node_runner::NodeRunner;
+use boson::runner::NodeRunner;
 use boson::default_configuration;
 
 static mut PATH1: Option<String> = None;

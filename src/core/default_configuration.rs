@@ -44,12 +44,12 @@ impl DefaultConfiguration {
 }
 
 impl Config for DefaultConfiguration {
-    fn addr4(&self) -> Option<&SocketAddr> {
-        self.addr4.as_ref()
+    fn addr4(&self) -> &Option<SocketAddr> {
+        &self.addr4
     }
 
-    fn addr6(&self) -> Option<&SocketAddr> {
-        self.addr6.as_ref()
+    fn addr6(&self) -> &Option<SocketAddr> {
+        &self.addr6
     }
 
     fn storage_path(&self) -> &str {
