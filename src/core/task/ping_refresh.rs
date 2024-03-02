@@ -1,16 +1,11 @@
-use std::rc::Rc;
 use std::any::Any;
-use std::collections::LinkedList;
-use std::time::SystemTime;
 use std::boxed::Box;
+use std::collections::LinkedList;
+use std::rc::Rc;
+use std::time::SystemTime;
 
-use crate::{
-    kbucket::KBucket,
-    kbucket_entry::KBucketEntry,
-    rpccall::RpcCall,
-    msg::msg::Msg
-};
-use super::task::{Task, State};
+use super::task::{State, Task};
+use crate::{kbucket::KBucket, kbucket_entry::KBucketEntry, msg::msg::Msg, rpccall::RpcCall};
 
 #[allow(dead_code)]
 pub(crate) struct PingRefreshTask {
@@ -27,7 +22,7 @@ impl Task for PingRefreshTask {
         unimplemented!()
     }
 
-    fn name(&self) -> &str{
+    fn name(&self) -> &str {
         unimplemented!()
     }
 
@@ -35,7 +30,7 @@ impl Task for PingRefreshTask {
         unimplemented!()
     }
 
-    fn state(&self) -> State{
+    fn state(&self) -> State {
         unimplemented!()
     }
 
@@ -43,19 +38,19 @@ impl Task for PingRefreshTask {
         unimplemented!()
     }
 
-    fn is_canceled(&self) -> bool{
+    fn is_canceled(&self) -> bool {
         unimplemented!()
     }
 
-    fn is_finished(&self) -> bool{
+    fn is_finished(&self) -> bool {
         unimplemented!()
     }
 
-    fn started_time(&self) -> &SystemTime{
+    fn started_time(&self) -> &SystemTime {
         unimplemented!()
     }
 
-    fn finished_time(&self) -> &SystemTime{
+    fn finished_time(&self) -> &SystemTime {
         unimplemented!()
     }
 
@@ -67,39 +62,39 @@ impl Task for PingRefreshTask {
         unimplemented!()
     }
 
-    fn start(&mut self){
+    fn start(&mut self) {
         unimplemented!()
     }
 
-    fn cancel(&mut self){
+    fn cancel(&mut self) {
         unimplemented!()
     }
 
-    fn call_sent(&mut self, _: &Box<RpcCall>){
+    fn call_sent(&mut self, _: &Box<RpcCall>) {
         unimplemented!()
     }
 
-    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>){
+    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>) {
         unimplemented!()
     }
 
-    fn call_error(&mut self, _: &Box<RpcCall>){
+    fn call_error(&mut self, _: &Box<RpcCall>) {
         unimplemented!()
     }
 
-    fn call_timeout(&mut self, _: &Box<RpcCall>){
+    fn call_timeout(&mut self, _: &Box<RpcCall>) {
         unimplemented!()
     }
 
-    fn prepare(&mut self){
+    fn prepare(&mut self) {
         unimplemented!()
     }
 
-    fn update(&mut self){
+    fn update(&mut self) {
         unimplemented!()
     }
 
-    fn is_done(&self) -> bool{
+    fn is_done(&self) -> bool {
         unimplemented!()
     }
 

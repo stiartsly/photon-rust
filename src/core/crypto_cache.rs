@@ -2,17 +2,17 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 use crate::{
-    id::Id,
-    cryptobox::{KeyPair, CryptoBox, Nonce, PublicKey},
-    error::Error,
     as_millis,
+    cryptobox::{CryptoBox, KeyPair, Nonce, PublicKey},
+    error::Error,
+    id::Id,
 };
 
 const EXPIRED_CHECK_INTERVAL: u128 = 60 * 1000;
 
-pub(crate) struct CryptoCache{
+pub(crate) struct CryptoCache {
     keypair: KeyPair,
-    cache: HashMap<Id, Entry>
+    cache: HashMap<Id, Entry>,
 }
 
 #[allow(dead_code)]
@@ -20,7 +20,7 @@ impl CryptoCache {
     pub(crate) fn new(keypair: &KeyPair) -> CryptoCache {
         CryptoCache {
             keypair: keypair.clone(),
-            cache: HashMap::new()
+            cache: HashMap::new(),
         }
     }
 
@@ -39,10 +39,7 @@ impl CryptoCache {
     }
 
     fn load(&self, key: &Id) -> Box<CryptoContext> {
-        Box::new(CryptoContext::new(
-            &key.to_encryption_key(),
-            &self.keypair
-        ))
+        Box::new(CryptoContext::new(&key.to_encryption_key(), &self.keypair))
     }
 
     fn on_removal(&self, _: &Box<CryptoContext>) {
@@ -78,7 +75,7 @@ impl CryptoContext {
 
         CryptoContext {
             box_: CryptoBox::try_from(pk, keypair.private_key()).unwrap(),
-            nonce: Nonce::from(distance.as_bytes())
+            nonce: Nonce::from(distance.as_bytes()),
         }
     }
 

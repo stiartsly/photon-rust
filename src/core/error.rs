@@ -40,12 +40,12 @@ impl std::error::Error for BosonError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match &self.kind {
             Error::Generic(_) => None,
-            Error::Io(err,_) => Some(err),
+            Error::Io(err, _) => Some(err),
             Error::Network(err, _) => Some(err),
             Error::Argument(_) => None,
             Error::State(_) => None,
             Error::Protocol(_) => None,
-            Error::Crypto(_) => None
+            Error::Crypto(_) => None,
         }
     }
 }

@@ -1,12 +1,11 @@
 use std::time::SystemTime;
 
-use crate::id::Id;
-use crate::value::Value;
-use crate::peer::Peer;
 use crate::data_storage::DataStorage;
+use crate::id::Id;
+use crate::peer::Peer;
+use crate::value::Value;
 
-pub(crate) struct SqliteStorage {
-}
+pub(crate) struct SqliteStorage {}
 
 impl SqliteStorage {
     pub(crate) fn new() -> Self {
@@ -36,31 +35,31 @@ impl DataStorage for SqliteStorage {
         self.put_value_and_update(-1, persistent, true);
     }
 
-    fn update_value_last_announce(&mut self, _: &Id){
+    fn update_value_last_announce(&mut self, _: &Id) {
         unimplemented!()
     }
 
-    fn get_persistent_values(&self, _: &SystemTime) -> Vec<Box<Value>>{
+    fn get_persistent_values(&self, _: &SystemTime) -> Vec<Box<Value>> {
         unimplemented!()
     }
 
-    fn get_all_values(&self) -> Vec<Box<Value>>{
+    fn get_all_values(&self) -> Vec<Box<Value>> {
         unimplemented!()
     }
 
-    fn get_peers(&self, _: &Id, _: i32) -> Vec<Box<Peer>>{
+    fn get_peers(&self, _: &Id, _: i32) -> Vec<Box<Peer>> {
         unimplemented!()
     }
 
-    fn get_peer(&self, _: &Id, _: &Id) -> Box<Peer>{
+    fn get_peer(&self, _: &Id, _: &Id) -> Box<Peer> {
         unimplemented!()
     }
 
-    fn remove_peer(&mut self, _: &Id, _: &Id) -> bool{
+    fn remove_peer(&mut self, _: &Id, _: &Id) -> bool {
         unimplemented!()
     }
 
-    fn put_peers(&mut self, _: &[Box<Peer>]){
+    fn put_peers(&mut self, _: &[Box<Peer>]) {
         unimplemented!()
     }
 

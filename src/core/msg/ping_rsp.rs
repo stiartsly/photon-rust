@@ -1,14 +1,14 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
 //use ciborium::value::Integer;
 //use ciborium_io::Read;
 
+use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
-use crate::version;
 use crate::rpccall::RpcCall;
-use super::msg::{Msg, Kind, Method};
+use crate::version;
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -69,7 +69,7 @@ pub(crate) struct Message {
     addr: Option<SocketAddr>,
 
     txid: i32,
-    ver: i32
+    ver: i32,
 }
 
 #[allow(dead_code)]
@@ -79,14 +79,16 @@ impl Message {
             id: None,
             addr: None,
             txid: 0,
-            ver: 0
+            ver: 0,
         }
     }
 }
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "y:{},m:{},t:{},v:{}",
+        write!(
+            f,
+            "y:{},m:{},t:{},v:{}",
             self.kind(),
             self.method(),
             self.txid,

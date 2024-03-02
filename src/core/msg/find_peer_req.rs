@@ -1,12 +1,12 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
-use crate::id::Id;
-use crate::version;
-use crate::rpccall::RpcCall;
 use super::lookup;
-use super::msg::{Msg, Kind, Method };
+use super::msg::{Kind, Method, Msg};
+use crate::id::Id;
+use crate::rpccall::RpcCall;
+use crate::version;
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -107,7 +107,7 @@ pub(crate) struct Message {
     target: Option<Id>,
     want4: bool,
     want6: bool,
-    want_token: bool
+    want_token: bool,
 }
 
 #[allow(dead_code)]
@@ -121,16 +121,22 @@ impl Message {
             target: None,
             want4: false,
             want6: false,
-            want_token: false
+            want_token: false,
         }
     }
 
     fn want(&self) -> i32 {
         let mut want = 0;
 
-        if self.want4 { want |= 0x01 }
-        if self.want6 { want |= 0x02 }
-        if self.want_token { want |= 0x04 }
+        if self.want4 {
+            want |= 0x01
+        }
+        if self.want6 {
+            want |= 0x02
+        }
+        if self.want_token {
+            want |= 0x04
+        }
 
         want
     }
@@ -138,7 +144,9 @@ impl Message {
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "y:{},m:{},t:{},q:{{t:{},w:{}}},v:{}",
+        write!(
+            f,
+            "y:{},m:{},t:{},q:{{t:{},w:{}}},v:{}",
             self.kind(),
             self.method(),
             self.txid,

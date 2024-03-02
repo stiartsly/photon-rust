@@ -1,5 +1,5 @@
 use boson::id::Id;
-use boson::peer::{Builder};
+use boson::peer::Builder;
 
 #[test]
 fn test_new() {

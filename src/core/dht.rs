@@ -1,44 +1,33 @@
+
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::net::SocketAddr;
-use log::{info, warn, debug};
+use log::{debug, info, warn};
 
 use crate::{
-    constants,
-    version,
-    id::Id,
-    lookup_option::LookupOption,
-    node::Node,
-    peer::Peer,
-    value::Value,
-    rpccall::RpcCall,
-    kclosest_nodes::KClosestNodes,
-    token_man::TokenManager,
-    routing_table::RoutingTable,
-    engine::NodeEngine
+    constants, engine::NodeEngine, id::Id, kclosest_nodes::KClosestNodes,
+    lookup_option::LookupOption, node::Node, peer::Peer, routing_table::RoutingTable,
+    rpccall::RpcCall, token_man::TokenManager, value::Value, version,
 };
 
 use crate::msg::{
-    msg::{self, Msg},
-    lookup::{self, Result},
+    announce_peer_req, announce_peer_rsp,
     error::{self, ErrorResult},
-    ping_req,
     find_node_rsp,
+    find_peer_rsp::{self, PeerResult},
     find_value_req,
     find_value_rsp::{self, ValueResult},
-    find_peer_rsp::{self, PeerResult},
-    store_value_req,
-    store_value_rsp,
-    announce_peer_req,
-    announce_peer_rsp
+    lookup::{self, Result},
+    msg::{self, Msg},
+    ping_req, store_value_req, store_value_rsp,
 };
 use crate::task::{
-    task::{Task, State},
     lookup::LookupTask,
-    task_manager::TaskManager,
     node_lookup::NodeLookupTask,
+    peer_lookup::PeerLookupTask,
+    task::{State, Task},
+    task_manager::TaskManager,
     value_lookup::ValueLookupTask,
-    peer_lookup::PeerLookupTask
 };
 
 pub(crate) struct DHT {
@@ -85,11 +74,11 @@ impl DHT {
     pub(crate) fn is_ipv4(&self) -> bool {
         self.addr.is_ipv4()
     }
-/*
-    pub(crate) fn runner(&self) -> Rc<RefCell<NodeRunner>> {
-        unimplemented!()
-    }
-*/
+    /*
+        pub(crate) fn runner(&self) -> Rc<RefCell<NodeRunner>> {
+            unimplemented!()
+        }
+    */
     fn bootstrap_internal() {
         unimplemented!()
     }
@@ -98,7 +87,7 @@ impl DHT {
         unimplemented!()
     }
 
-    fn fill_home_bucket(&mut self, _:&[Node]) {
+    fn fill_home_bucket(&mut self, _: &[Node]) {
         unimplemented!()
     }
 
@@ -117,7 +106,7 @@ impl DHT {
 
         let kind = match self.addr.is_ipv4() {
             true => "IPv4",
-            false => "IPv6"
+            false => "IPv6",
         };
 
         info!("{} initiated shutdown ...", kind);
@@ -137,9 +126,15 @@ impl DHT {
         self.running
     }
 
-    fn on_message<T>(&mut self, msg: &Box<T> )
-    where T: Msg + lookup::Condition + find_value_req::ValueOption + store_value_req::StoreOption +
-        announce_peer_req::AnnounceOption + error::ErrorResult{
+    fn on_message<T>(&mut self, msg: &Box<T>)
+    where
+        T: Msg
+            + lookup::Condition
+            + find_value_req::ValueOption
+            + store_value_req::StoreOption
+            + announce_peer_req::AnnounceOption
+            + error::ErrorResult,
+    {
         match msg.kind() {
             msg::Kind::Error => self.on_error(msg),
             msg::Kind::Request => self.on_request(msg),
@@ -148,8 +143,13 @@ impl DHT {
     }
 
     fn on_request<T>(&mut self, msg: &Box<T>)
-    where T: Msg + lookup::Condition + find_value_req::ValueOption + store_value_req::StoreOption +
-        announce_peer_req::AnnounceOption {
+    where
+        T: Msg
+            + lookup::Condition
+            + find_value_req::ValueOption
+            + store_value_req::StoreOption
+            + announce_peer_req::AnnounceOption,
+    {
         match msg.method() {
             msg::Method::Ping => self.on_ping(msg.as_ref()),
             msg::Method::FindNode => self.on_find_node(msg),
@@ -165,8 +165,12 @@ impl DHT {
 
     fn on_response(&self, _: &dyn Msg) {}
 
-    fn on_error<T>(&self, msg: &Box<T>) where T: Msg + error::ErrorResult{
-        warn!("Error from {}/{} - {}:{}, txid {}",
+    fn on_error<T>(&self, msg: &Box<T>)
+    where
+        T: Msg + error::ErrorResult,
+    {
+        warn!(
+            "Error from {}/{} - {}:{}, txid {}",
             msg.addr(),
             version::formatted_version(msg.version()),
             msg.code(),
@@ -197,7 +201,10 @@ impl DHT {
         self.engine.borrow().send_msg(msg);
     }
 
-    fn on_find_node<T>(&self, request: &Box<T>) where T: Msg + lookup::Condition {
+    fn on_find_node<T>(&self, request: &Box<T>)
+    where
+        T: Msg + lookup::Condition,
+    {
         let mut resp = Box::new(find_node_rsp::Message::new());
 
         resp.with_id(request.id());
@@ -205,35 +212,42 @@ impl DHT {
         resp.with_addr(request.addr());
 
         resp.populate_closest_nodes4(request.want4(), || {
-            Some(KClosestNodes::new(
-                Rc::new(self),
-                request.target(),
-                constants::MAX_ENTRIES_PER_BUCKET
-            ).fill(true).as_nodes())
+            Some(
+                KClosestNodes::new(
+                    Rc::new(self),
+                    request.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                )
+                .fill(true)
+                .as_nodes(),
+            )
         });
 
         resp.populate_closest_nodes6(request.want6(), || {
-            Some(KClosestNodes::new(
-                Rc::new(self),
-                request.target(),
-                constants::MAX_ENTRIES_PER_BUCKET
-            ).fill(true).as_nodes())
+            Some(
+                KClosestNodes::new(
+                    Rc::new(self),
+                    request.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                )
+                .fill(true)
+                .as_nodes(),
+            )
         });
 
         resp.populate_token(request.want_token(), || {
-                self.token_man.borrow().generate_token(
-                    request.id(),
-                    request.addr(),
-                    request.target()
-                )
-            }
-        );
+            self.token_man
+                .borrow()
+                .generate_token(request.id(), request.addr(), request.target())
+        });
 
         self.engine.borrow().send_msg(resp)
     }
 
     fn on_find_value<T>(&self, request: &Box<T>)
-    where T: Msg + lookup::Condition + find_value_req::ValueOption {
+    where
+        T: Msg + lookup::Condition + find_value_req::ValueOption,
+    {
         let mut resp = Box::new(find_value_rsp::Message::new());
 
         resp.with_id(request.id());
@@ -245,8 +259,10 @@ impl DHT {
             // TODO;
             let value: Option<Box<Value>> = None;
             if value.is_some() {
-                if request.seq() < 0 || value.as_ref().unwrap().sequence_number() < 0
-                    || request.seq() <= value.as_ref().unwrap().sequence_number() {
+                if request.seq() < 0
+                    || value.as_ref().unwrap().sequence_number() < 0
+                    || request.seq() <= value.as_ref().unwrap().sequence_number()
+                {
                     has_value = true;
                 }
             }
@@ -254,40 +270,60 @@ impl DHT {
         });
 
         resp.populate_closest_nodes4(request.want4() && has_value, || {
-            Some(KClosestNodes::new(
-                Rc::new(&self),
-                request.target(),
-                constants::MAX_ENTRIES_PER_BUCKET
-            ).fill(true).as_nodes())
+            Some(
+                KClosestNodes::new(
+                    Rc::new(&self),
+                    request.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                )
+                .fill(true)
+                .as_nodes(),
+            )
         });
 
         resp.populate_closest_nodes6(request.want6() && has_value, || {
-            Some(KClosestNodes::new(
-                Rc::new(&self),
-                request.target(),
-                constants::MAX_ENTRIES_PER_BUCKET
-            ).fill(true).as_nodes())
+            Some(
+                KClosestNodes::new(
+                    Rc::new(&self),
+                    request.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                )
+                .fill(true)
+                .as_nodes(),
+            )
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man.borrow().generate_token(
-                request.id(),
-                request.addr(),
-                request.target()
-            )
+            self.token_man
+                .borrow()
+                .generate_token(request.id(), request.addr(), request.target())
         });
 
         self.engine.borrow().send_msg(resp);
     }
 
     fn on_store_value<T>(&mut self, request: &Box<T>)
-    where T: Msg + lookup::Condition + store_value_req::StoreOption {
+    where
+        T: Msg + lookup::Condition + store_value_req::StoreOption,
+    {
         let value = request.value();
         let value_id = value.id();
 
-        if !self.token_man.borrow_mut().verify_token(request.token(), request.id(), request.addr(), &value_id) {
-            warn!("Received a store value request with invalid token from {}", request.addr());
-            self.send_err(request.as_ref(), 203, "Invalid token for STORE VALUE request");
+        if !self.token_man.borrow_mut().verify_token(
+            request.token(),
+            request.id(),
+            request.addr(),
+            &value_id,
+        ) {
+            warn!(
+                "Received a store value request with invalid token from {}",
+                request.addr()
+            );
+            self.send_err(
+                request.as_ref(),
+                203,
+                "Invalid token for STORE VALUE request",
+            );
             return;
         }
 
@@ -306,7 +342,9 @@ impl DHT {
     }
 
     fn on_find_peers<T>(&self, request: &Box<T>)
-    where T: Msg + lookup::Condition + find_value_req::ValueOption  {
+    where
+        T: Msg + lookup::Condition + find_value_req::ValueOption,
+    {
         let mut resp = Box::new(find_peer_rsp::Message::new());
 
         resp.with_id(request.id());
@@ -324,38 +362,47 @@ impl DHT {
         });
 
         resp.populate_closest_nodes4(request.want4() && has_peers, || {
-            Some(KClosestNodes::new(
-                Rc::new(&self),
-                request.target(),
-                constants::MAX_ENTRIES_PER_BUCKET
-            ).fill(true).as_nodes())
+            Some(
+                KClosestNodes::new(
+                    Rc::new(&self),
+                    request.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                )
+                .fill(true)
+                .as_nodes(),
+            )
         });
 
         resp.populate_closest_nodes6(request.want6() && has_peers, || {
-            Some(KClosestNodes::new(
-                Rc::new(&self),
-                request.target(),
-                constants::MAX_ENTRIES_PER_BUCKET
-            ).fill(true).as_nodes())
+            Some(
+                KClosestNodes::new(
+                    Rc::new(&self),
+                    request.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                )
+                .fill(true)
+                .as_nodes(),
+            )
         });
 
         resp.populate_token(request.want_token(), || {
-            self.token_man.borrow().generate_token(
-                request.id(),
-                request.addr(),
-                request.target()
-            )
+            self.token_man
+                .borrow()
+                .generate_token(request.id(), request.addr(), request.target())
         });
 
         self.engine.borrow().send_msg(resp);
     }
 
     fn on_announce_peer<T>(&mut self, request: &Box<T>)
-    where T: Msg + lookup::Condition + announce_peer_req::AnnounceOption {
+    where
+        T: Msg + lookup::Condition + announce_peer_req::AnnounceOption,
+    {
         let bogon = false;
 
         if bogon {
-            info!("Received an announce peer request from bogon address {}, ignored ",
+            info!(
+                "Received an announce peer request from bogon address {}, ignored ",
                 request.addr()
             );
         }
@@ -364,10 +411,17 @@ impl DHT {
             request.token(),
             request.id(),
             request.addr(),
-            request.target()
+            request.target(),
         ) {
-            warn!("Received an announce peer request with invalid token from {}", request.addr());
-            self.send_err(request.as_ref(), 203, "Invalid token for ANNOUNCE PEER request");
+            warn!(
+                "Received an announce peer request with invalid token from {}",
+                request.addr()
+            );
+            self.send_err(
+                request.as_ref(),
+                203,
+                "Invalid token for ANNOUNCE PEER request",
+            );
             return;
         }
 
@@ -377,9 +431,10 @@ impl DHT {
                 self.send_err(request.as_ref(), 203, "One peer is invalid peer");
                 return;
             }
-        };
+        }
 
-        debug!("Received an announce peer request from {}, saving peer {}",
+        debug!(
+            "Received an announce peer request from {}, saving peer {}",
             request.addr(),
             request.target()
         );
@@ -410,17 +465,19 @@ impl DHT {
     }
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where F: Fn(Option<Box<Node>>) + 'static {
+    where
+        F: Fn(Option<Box<Node>>) + 'static,
+    {
         let result = Rc::new(RefCell::new(
-            self.routing_table.bucket_entry(id).map(
-                |item| Box::new(item.node().clone())
-            )
+            self.routing_table
+                .bucket_entry(id)
+                .map(|item| Box::new(item.node().clone())),
         ));
         let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(NodeLookupTask::new(id));
         task.with_name("node-lookup");
-        task.set_result_fn(move|_task, _node| {
+        task.set_result_fn(move |_task, _node| {
             if _node.is_some() {
                 *(result.borrow_mut()) = Some(_node.unwrap().clone());
             }
@@ -436,10 +493,10 @@ impl DHT {
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where F: Fn(Option<Box<Value>>) + 'static {
-        let result = Rc::new(RefCell::new(
-            Option::default() as Option<Box<Value>>
-        ));
+    where
+        F: Fn(Option<Box<Value>>) + 'static,
+    {
+        let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
         let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(ValueLookupTask::new(id));
@@ -451,10 +508,8 @@ impl DHT {
                         if _v.is_mutable() && v.sequence_number() < _v.sequence_number() {
                             *(result.borrow_mut()) = Some(_v.clone());
                         }
-                    },
-                    None => {
-                         *(result.borrow_mut()) = Some(_v.clone())
                     }
+                    None => *(result.borrow_mut()) = Some(_v.clone()),
                 }
             }
             if option != LookupOption::Conservative {
@@ -473,7 +528,9 @@ impl DHT {
     }
 
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
-    where F: Fn(Option<Vec<Box<Node>>>) + 'static {
+    where
+        F: Fn(Option<Vec<Box<Node>>>) + 'static,
+    {
         let mut task = Box::new(NodeLookupTask::new(&value.id()));
         task.with_name("store-value");
         task.set_want_token(true);
@@ -496,32 +553,36 @@ impl DHT {
         self.task_man.add(task);
     }
 
-    pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
-    where F: Fn(Vec<Box<Peer>>) + 'static {
-        let result = Rc::new(RefCell::new(
-            Vec::new() as Vec<Box<Peer>>
-        ));
+    pub(crate) fn find_peer<F>(
+        &self,
+        id: &Id,
+        expected: usize,
+        option: LookupOption,
+        complete_fn: F,
+    ) where
+        F: Fn(Vec<Box<Peer>>) + 'static,
+    {
+        let result = Rc::new(RefCell::new(Vec::new() as Vec<Box<Peer>>));
         let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(PeerLookupTask::new(id));
         task.with_name("peer-lookup");
         task.set_result_fn(move |_task, _peers| {
             (*result.borrow_mut()).append(_peers);
-            if option != LookupOption::Conservative &&
-                result.borrow().len() >= expected {
+            if option != LookupOption::Conservative && result.borrow().len() >= expected {
                 _task.cancel()
             }
         });
 
-        task.add_listener(move |_| {
-            complete_fn(result_shadow.take())
-        });
+        task.add_listener(move |_| complete_fn(result_shadow.take()));
 
         self.task_man.add(task);
     }
 
     pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
-    where F: Fn(&[&Node]) {
+    where
+        F: Fn(&[&Node]),
+    {
         unimplemented!()
     }
 }

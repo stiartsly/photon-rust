@@ -1,21 +1,19 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
+use super::lookup;
+use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::node::Node;
-use crate::value::Value;
 use crate::rpccall::RpcCall;
-use super::lookup;
-use super::msg::{
-    Msg,
-    Kind,
-    Method
-};
+use crate::value::Value;
 
 pub(crate) trait ValueResult {
     fn value(&self) -> &Option<Box<Value>>;
-    fn populate_value<F>(&mut self, f: F) where F: FnMut() -> Option<Box<Value>>;
+    fn populate_value<F>(&mut self, f: F)
+    where
+        F: FnMut() -> Option<Box<Value>>;
 }
 
 impl Msg for Message {
@@ -86,25 +84,31 @@ impl lookup::Result for Message {
     }
 
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F)
-    where F: FnOnce() -> Option<Vec<Node>> {
+    where
+        F: FnOnce() -> Option<Vec<Node>>,
+    {
         match want4 {
-            true => {self.nodes4 = f()},
+            true => self.nodes4 = f(),
             false => {}
         }
     }
 
     fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F)
-    where F: FnOnce() -> Option<Vec<Node>> {
+    where
+        F: FnOnce() -> Option<Vec<Node>>,
+    {
         match want6 {
-            true => {self.nodes6 = f()},
+            true => self.nodes6 = f(),
             false => {}
         }
     }
 
     fn populate_token<F>(&mut self, want_token: bool, f: F)
-    where F: FnOnce() -> i32 {
+    where
+        F: FnOnce() -> i32,
+    {
         match want_token {
-            true => {self.token = f()},
+            true => self.token = f(),
             false => {}
         }
     }
@@ -116,7 +120,9 @@ impl ValueResult for Message {
     }
 
     fn populate_value<F>(&mut self, mut f: F)
-    where F: FnMut() -> Option<Box<Value>> {
+    where
+        F: FnMut() -> Option<Box<Value>>,
+    {
         self.value = f()
     }
 }
@@ -132,7 +138,7 @@ pub(crate) struct Message {
     nodes6: Option<Vec<Node>>,
     token: i32,
 
-    value: Option<Box<Value>>
+    value: Option<Box<Value>>,
 }
 
 impl Message {
@@ -145,7 +151,7 @@ impl Message {
             nodes4: None,
             nodes6: None,
             token: 0,
-            value: None
+            value: None,
         }
     }
 }

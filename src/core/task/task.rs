@@ -1,11 +1,8 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::time::SystemTime;
 
-use crate::{
-    rpccall::RpcCall,
-    msg::msg::Msg
-};
+use crate::{msg::msg::Msg, rpccall::RpcCall};
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -14,7 +11,7 @@ pub(crate) enum State {
     Queued,
     Running,
     Finished,
-    Canceled
+    Canceled,
 }
 
 impl fmt::Display for State {
@@ -24,7 +21,7 @@ impl fmt::Display for State {
             State::Queued => "QUEUED",
             State::Running => "RUNNING",
             State::Finished => "FINISHED",
-            State::Canceled => "CANCELED"
+            State::Canceled => "CANCELED",
         };
         write!(f, "{}", str)?;
         Ok(())

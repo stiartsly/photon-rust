@@ -1,18 +1,12 @@
-use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::LinkedList;
+use std::rc::Rc;
 
-use crate::{
-    id::Id,
-    node::Node,
-    dht::DHT,
-    kbucket::KBucket,
-    kbucket_entry::KBucketEntry
-};
+use crate::{dht::DHT, id::Id, kbucket::KBucket, kbucket_entry::KBucketEntry, node::Node};
 
 pub(crate) struct RoutingTable {
     dht: Option<Rc<RefCell<DHT>>>,
-    buckets: LinkedList<Box<KBucket>>
+    buckets: LinkedList<Box<KBucket>>,
 }
 
 #[allow(dead_code)]
@@ -51,9 +45,7 @@ impl RoutingTable {
 
     pub(crate) fn size(&self) -> usize {
         let mut len: usize = 0;
-        self.buckets.iter().for_each (|item| {
-            len += item.size()
-        });
+        self.buckets.iter().for_each(|item| len += item.size());
         len
     }
 

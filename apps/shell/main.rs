@@ -1,17 +1,14 @@
-use std::fs;
 use std::env;
+use std::fs;
 
-use boson::{
-    default_configuration,
-    runner::NodeRunner
-};
+use boson::{default_configuration, runner::NodeRunner};
 
 fn get_storage_path(input: &str) -> String {
     let path = env::current_dir().unwrap().join(input);
 
     if !fs::metadata(&path).is_ok() {
         match fs::create_dir(&path) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 panic!("Failed to create directory: {}", e);
             }

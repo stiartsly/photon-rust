@@ -1,17 +1,10 @@
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::boxed::Box;
-use std::time::SystemTime;
 use log::warn;
+use std::boxed::Box;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::SystemTime;
 
-use crate::{
-    id::Id,
-    dht::DHT,
-    node::Node,
-    engine::NodeEngine,
-    msg::msg,
-    msg::msg::Msg,
-};
+use crate::{dht::DHT, engine::NodeEngine, id::Id, msg::msg, msg::msg::Msg, node::Node};
 
 #[derive(Clone, PartialEq, PartialOrd, Hash)]
 pub(crate) enum State {
@@ -21,7 +14,7 @@ pub(crate) enum State {
     Timeout,
     Canceled,
     Err,
-    Responsed
+    Responsed,
 }
 
 pub(crate) struct RpcCall {
@@ -39,7 +32,7 @@ pub(crate) struct RpcCall {
     state_changed_fn: Box<dyn Fn(&Self, &State, &State)>,
     responsed_fn: Box<dyn Fn(&Self, &Box<dyn Msg>)>,
     stalled_fn: Box<dyn Fn(&Self)>,
-    timeout_fn: Box<dyn Fn(&Self)>
+    timeout_fn: Box<dyn Fn(&Self)>,
 }
 
 #[allow(dead_code)]
@@ -48,16 +41,17 @@ impl RpcCall {
         RpcCall {
             //dht: None,
             target: node.clone(),
-            req, rsp: None,
+            req,
+            rsp: None,
 
             sent: SystemTime::UNIX_EPOCH,
             responsed: SystemTime::UNIX_EPOCH,
             state: State::Unsent,
 
-            state_changed_fn: Box::new(|_, _,_| {}),
-            responsed_fn: Box::new(|_,_| {}),
+            state_changed_fn: Box::new(|_, _, _| {}),
+            responsed_fn: Box::new(|_, _| {}),
             stalled_fn: Box::new(|_| {}),
-            timeout_fn: Box::new(|_|{})
+            timeout_fn: Box::new(|_| {}),
         }
     }
 
@@ -110,22 +104,30 @@ impl RpcCall {
     }
 
     pub(crate) fn set_state_changed_fn<F>(&mut self, f: F)
-    where F: Fn(&Self, &State, &State) + 'static {
+    where
+        F: Fn(&Self, &State, &State) + 'static,
+    {
         self.state_changed_fn = Box::new(f)
     }
 
     pub(crate) fn set_responsed_fn<F>(&mut self, f: F)
-    where F: Fn(&Self, &Box<dyn Msg>) + 'static {
+    where
+        F: Fn(&Self, &Box<dyn Msg>) + 'static,
+    {
         self.responsed_fn = Box::new(f)
     }
 
     pub(crate) fn set_stalled_fn<F>(&mut self, f: F)
-    where F: Fn(&Self) + 'static {
+    where
+        F: Fn(&Self) + 'static,
+    {
         self.stalled_fn = Box::new(f)
     }
 
     pub(crate) fn set_timeout_fn<F>(&mut self, f: F)
-    where F: Fn(&Self) + 'static {
+    where
+        F: Fn(&Self) + 'static,
+    {
         self.timeout_fn = Box::new(f)
     }
 
@@ -151,8 +153,7 @@ impl RpcCall {
     }
 
     pub(crate) fn responsed(&mut self, response: Box<dyn Msg>) {
-        assert!(response.kind() == msg::Kind::Response ||
-                response.kind() == msg::Kind::Error);
+        assert!(response.kind() == msg::Kind::Response || response.kind() == msg::Kind::Error);
 
         /*
         TODO check timer.

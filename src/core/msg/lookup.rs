@@ -1,8 +1,7 @@
-
 use crate::id::Id;
 use crate::node::Node;
 
- pub(crate) trait Condition {
+pub(crate) trait Condition {
     fn target(&self) -> &Id;
     fn want4(&self) -> bool;
     fn want6(&self) -> bool;
@@ -12,14 +11,20 @@ use crate::node::Node;
     fn with_want4(&mut self);
     fn with_want6(&mut self);
     fn with_token(&mut self);
- }
+}
 
- pub(crate) trait Result {
+pub(crate) trait Result {
     fn nodes4(&self) -> &[Node];
     fn nodes6(&self) -> &[Node];
     fn token(&self) -> i32;
 
-    fn populate_closest_nodes4<F>(&mut self, _:bool, f: F) where F: FnOnce() -> Option<Vec<Node>>;
-    fn populate_closest_nodes6<F>(&mut self, _:bool, f: F) where F: FnOnce() -> Option<Vec<Node>>;
-    fn populate_token<F>(&mut self, _: bool, f: F) where F: FnOnce() -> i32;
- }
+    fn populate_closest_nodes4<F>(&mut self, _: bool, f: F)
+    where
+        F: FnOnce() -> Option<Vec<Node>>;
+    fn populate_closest_nodes6<F>(&mut self, _: bool, f: F)
+    where
+        F: FnOnce() -> Option<Vec<Node>>;
+    fn populate_token<F>(&mut self, _: bool, f: F)
+    where
+        F: FnOnce() -> i32;
+}

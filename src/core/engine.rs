@@ -1,29 +1,19 @@
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::rc::Rc;
 use std::time::SystemTime;
-use std::net::{Ipv4Addr, SocketAddr, IpAddr};
 
-use tokio::io;
-use tokio::runtime;
-use tokio::net::UdpSocket;
 use log::info;
+use tokio::io;
+use tokio::net::UdpSocket;
+use tokio::runtime;
 
 use crate::{
-    error::Error,
-    id::Id,
-    node::Node,
-    dht::DHT,
-    lookup_option::LookupOption,
-    token_man::TokenManager,
-    data_storage::DataStorage,
-    sqlite_storage::SqliteStorage,
-    version,
-    rpccall::RpcCall,
+    data_storage::DataStorage, dht::DHT, error::Error, id::Id, lookup_option::LookupOption,
+    node::Node, rpccall::RpcCall, sqlite_storage::SqliteStorage, token_man::TokenManager, version,
 };
 
-use crate::msg::{
-    msg::Msg
-};
+use crate::msg::msg::Msg;
 
 #[allow(dead_code)]
 pub(crate) struct NodeEngine {
@@ -45,7 +35,7 @@ pub(crate) struct NodeEngine {
 
     pub(crate) token_man: Rc<RefCell<TokenManager>>,
     pub(crate) storage: Rc<RefCell<dyn DataStorage>>,
-   // encryption_ctxts: CryptoCache,
+    // encryption_ctxts: CryptoCache,
 }
 
 #[allow(dead_code)]
@@ -69,21 +59,29 @@ impl NodeEngine {
             option: LookupOption::Conservative,
 
             token_man: Rc::new(RefCell::new(TokenManager::new())),
-            storage: Rc::new(RefCell::new(SqliteStorage::new()))
+            storage: Rc::new(RefCell::new(SqliteStorage::new())),
         })
     }
 
     pub fn start(&mut self, dht4: Option<Rc<RefCell<DHT>>>, dht6: Option<Rc<RefCell<DHT>>>) {
         if let Some(dht) = dht4 {
-            dht.borrow_mut().enable_persistence(&format!("{}/dht4.cache", self.storage_path));
+            dht.borrow_mut()
+                .enable_persistence(&format!("{}/dht4.cache", self.storage_path));
             self.dht4 = Some(Rc::clone(&dht));
-            info!("Started RPC server on ipv4 address: {}", dht.borrow().addr());
+            info!(
+                "Started RPC server on ipv4 address: {}",
+                dht.borrow().addr()
+            );
         }
 
         if let Some(dht) = dht6 {
-            dht.borrow_mut().enable_persistence(&format!("{}/dht6.cache", self.storage_path));
+            dht.borrow_mut()
+                .enable_persistence(&format!("{}/dht6.cache", self.storage_path));
             self.dht6 = Some(Rc::clone(&dht));
-            info!("Started RPC server on ipv6 address: {}", dht.borrow().addr());
+            info!(
+                "Started RPC server on ipv6 address: {}",
+                dht.borrow().addr()
+            );
         }
 
         let dbpath = self.storage_path.clone() + "/node.db";
@@ -91,15 +89,18 @@ impl NodeEngine {
     }
 
     pub(crate) fn run_loop(&mut self) -> io::Result<()> {
-        let rt = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
         rt.block_on(async move {
             let mut sock4: Option<UdpSocket> = None;
-            if let Some(dht4) = self.dht4.as_ref(){
+            if let Some(dht4) = self.dht4.as_ref() {
                 sock4 = Some(UdpSocket::bind(dht4.borrow().addr()).await?);
             }
             let mut sock6: Option<UdpSocket> = None;
-            if let Some(dht6) = self.dht6.as_ref(){
+            if let Some(dht6) = self.dht6.as_ref() {
                 sock6 = Some(UdpSocket::bind(dht6.borrow().addr()).await?);
             }
 
@@ -175,7 +176,7 @@ impl NodeEngine {
     pub(crate) fn send_msg(&self, mut msg: Box<dyn Msg>) {
         msg.with_ver(version::build(
             version::NODE_SHORT_NAME,
-            version::NODE_VERSION
+            version::NODE_VERSION,
         ));
 
         if let Some(mut call) = msg.associated_call() {
@@ -191,7 +192,11 @@ impl NodeEngine {
     }
 }
 
-pub(crate) fn start_tweak(engine: &Rc<RefCell<NodeEngine>>, addr4: Option<SocketAddr>, addr6: Option<SocketAddr>) {
+pub(crate) fn start_tweak(
+    engine: &Rc<RefCell<NodeEngine>>,
+    addr4: Option<SocketAddr>,
+    addr6: Option<SocketAddr>,
+) {
     let mut dht4: Option<Rc<RefCell<DHT>>> = None;
     let mut dht6: Option<Rc<RefCell<DHT>>> = None;
 
@@ -238,6 +243,7 @@ async fn write_socket(socket_option: Option<&UdpSocket>) -> Result<(), std::io::
             Ok(())
         },
         None => {
+            // Do nothing when socket is None
             //Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
             use std::time::Duration;
             use tokio::time::sleep;

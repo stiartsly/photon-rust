@@ -13,7 +13,7 @@ pub(crate) struct CandidateNode {
     // acked: bool, // TODO: CHECK
     pinged: i32,
 
-    token: i32
+    token: i32,
 }
 
 #[allow(dead_code)]
@@ -26,7 +26,7 @@ impl CandidateNode {
             reachable,
             // acked: false,
             pinged: 0,
-            token: 0
+            token: 0,
         }
     }
 

@@ -1,29 +1,29 @@
-use std::{fs, fs::File, io::Write};
-use std::thread::{self, JoinHandle};
+use log::{error, info};
+use std::cell::RefCell;
 use std::io::Read;
 use std::rc::Rc;
-use std::cell::RefCell;
-use log::{info, error};
+use std::thread::{self, JoinHandle};
+use std::{fs, fs::File, io::Write};
 
-use crate::logger;
-use crate::unwrap;
+use crate::config::Config;
+use crate::crypto_cache::CryptoCache;
 use crate::cryptobox;
+use crate::engine::{self, NodeEngine};
+use crate::error::Error;
+use crate::id::Id;
+use crate::logger;
+use crate::lookup_option::LookupOption;
+use crate::node::Node;
+use crate::node_status::NodeStatus;
+use crate::peer::Peer;
 use crate::signature;
 use crate::signature::KeyPair;
-use crate::id::Id;
-use crate::node::Node;
-use crate::peer::Peer;
+use crate::unwrap;
 use crate::value::Value;
-use crate::config::Config;
-use crate::error::Error;
-use crate::lookup_option::LookupOption;
-use crate::node_status::NodeStatus;
-use crate::crypto_cache::CryptoCache;
-use crate::engine::{self, NodeEngine};
 
 pub struct NodeRunner {
     id: Id,
-    cfg: Box<dyn Config>,  //config for this node.
+    cfg: Box<dyn Config>, //config for this node.
 
     keypair: signature::KeyPair, // signature keypair
     encryption_ctxts: RefCell<CryptoCache>,
@@ -32,7 +32,7 @@ pub struct NodeRunner {
     status: NodeStatus,
     storage_path: String,
 
-    worker: Option<JoinHandle<()>>
+    worker: Option<JoinHandle<()>>,
 }
 
 impl NodeRunner {
@@ -64,15 +64,23 @@ impl NodeRunner {
         match fs::metadata(&keypath) {
             Ok(metadata) => {
                 if metadata.is_dir() {
-                    error!("Key file path {} is an existing directory. DHT node
-                        will not be able to persist node key there.", keypath);
-                    return Err(Error::State(format!("Bad ey file path {}, untable to persist node key", keypath)));
+                    error!(
+                        "Key file path {} is an existing directory. DHT node
+                        will not be able to persist node key there.",
+                        keypath
+                    );
+                    return Err(Error::State(format!(
+                        "Bad ey file path {}, untable to persist node key",
+                        keypath
+                    )));
                 };
-                keypair = load_key(&keypath).map_err(|err| {
-                    error!("Loading key data error {}", err);
-                    return err;
-                }).ok();
-            },
+                keypair = load_key(&keypath)
+                    .map_err(|err| {
+                        error!("Loading key data error {}", err);
+                        return err;
+                    })
+                    .ok();
+            }
             Err(_) => {
                 _ = keypair.insert(KeyPair::random());
                 _ = persist_key(keypair.as_ref().unwrap(), &keypath).map_err(|err| {
@@ -112,27 +120,16 @@ impl NodeRunner {
         self.status = NodeStatus::Initializing;
         info!("DHT node {} is starting...", self.id);
 
-        let params = (
-            self.id.clone(),
-            self.storage_path.clone()
-        );
+        let params = (self.id.clone(), self.storage_path.clone());
 
-        let dht_params = (
-            self.cfg.addr4().clone(),
-            self.cfg.addr6().clone(),
-        );
+        let dht_params = (self.cfg.addr4().clone(), self.cfg.addr6().clone());
 
         self.worker = Some(thread::spawn(move || {
-            let engine = Rc::new(RefCell::new(NodeEngine::new(
-                params.0,
-                params.1.as_str(),
-            ).unwrap()));
+            let engine = Rc::new(RefCell::new(
+                NodeEngine::new(params.0, params.1.as_str()).unwrap(),
+            ));
 
-            engine::start_tweak(
-                &engine,
-                dht_params.0,
-                dht_params.1
-            );
+            engine::start_tweak(&engine, dht_params.0, dht_params.1);
 
             _ = engine.borrow_mut().run_loop();
             engine::stop_tweak(&engine);
@@ -175,7 +172,11 @@ impl NodeRunner {
         self.option
     }
 
-    pub async fn find_node_with_option(&self, _: &Id, _: LookupOption) -> Result<Option<Node>, Error> {
+    pub async fn find_node_with_option(
+        &self,
+        _: &Id,
+        _: LookupOption,
+    ) -> Result<Option<Node>, Error> {
         unimplemented!()
     }
 
@@ -183,7 +184,11 @@ impl NodeRunner {
         self.find_node_with_option(node_id, self.option).await
     }
 
-    pub async fn find_value_with_option(&self, _: &Id, _: LookupOption) -> Result<Option<Value>, Error> {
+    pub async fn find_value_with_option(
+        &self,
+        _: &Id,
+        _: LookupOption,
+    ) -> Result<Option<Value>, Error> {
         unimplemented!()
     }
 
@@ -191,12 +196,18 @@ impl NodeRunner {
         self.find_value_with_option(value_id, self.option).await
     }
 
-    pub async fn find_peer_with_option(&self, _: &Id, _: i32, _: LookupOption) -> Result<Vec<Peer>, Error> {
+    pub async fn find_peer_with_option(
+        &self,
+        _: &Id,
+        _: i32,
+        _: LookupOption,
+    ) -> Result<Vec<Peer>, Error> {
         unimplemented!()
     }
 
     pub async fn find_peer(&self, peer_id: &Id, expected_num: i32) -> Result<Vec<Peer>, Error> {
-        self.find_peer_with_option(peer_id, expected_num, self.option).await
+        self.find_peer_with_option(peer_id, expected_num, self.option)
+            .await
     }
 
     pub async fn store_value_with_persistence(&mut self, _: &Value, _: bool) -> Result<(), Error> {
@@ -216,19 +227,33 @@ impl NodeRunner {
     }
 
     pub fn encrypt_into(&self, recipient: &Id, plain: &[u8]) -> Vec<u8> {
-        self.encryption_ctxts.borrow_mut().get(recipient).encrypt_into(plain)
+        self.encryption_ctxts
+            .borrow_mut()
+            .get(recipient)
+            .encrypt_into(plain)
     }
 
     pub fn decrypt_into(&self, sender: &Id, cipher: &[u8]) -> Vec<u8> {
-        self.encryption_ctxts.borrow_mut().get(sender).decrypt_into(cipher)
+        self.encryption_ctxts
+            .borrow_mut()
+            .get(sender)
+            .decrypt_into(cipher)
     }
 
     pub fn encrypt(&self, recipient: &Id, plain: &[u8], cipher: &mut [u8]) {
-        _ = self.encryption_ctxts.borrow_mut().get(recipient).encrypt(plain, cipher)
+        _ = self
+            .encryption_ctxts
+            .borrow_mut()
+            .get(recipient)
+            .encrypt(plain, cipher)
     }
 
     pub fn decrypt(&self, sender: &Id, cipher: &[u8], plain: &mut [u8]) {
-        _ = self.encryption_ctxts.borrow_mut().get(sender).decrypt(cipher, plain)
+        _ = self
+            .encryption_ctxts
+            .borrow_mut()
+            .get(sender)
+            .decrypt(cipher, plain)
     }
 
     pub fn sign(&self, data: &[u8]) -> Vec<u8> {
@@ -241,45 +266,35 @@ impl NodeRunner {
 }
 
 fn load_key(keypath: &str) -> Result<KeyPair, Error> {
-    let mut file = File::open(keypath).map_err(|err|
-        Error::Io(err, format!("Opening key file failed"))
-    )?;
+    let mut file =
+        File::open(keypath).map_err(|err| Error::Io(err, format!("Opening key file failed")))?;
 
     let mut buf = Vec::new();
-    file.read_to_end(&mut buf).map_err(|err|
-        Error::Io(err, format!("Reading key failed"))
-    )?;
+    file.read_to_end(&mut buf)
+        .map_err(|err| Error::Io(err, format!("Reading key failed")))?;
 
     match buf.len() == signature::PrivateKey::BYTES {
-        true => {
-            Ok(KeyPair::from_private_key_bytes(buf.as_slice()))
-        }
-        false => {
-            Err(Error::State(format!("Incorrect key size {}", buf.len())))
-        }
+        true => Ok(KeyPair::from_private_key_bytes(buf.as_slice())),
+        false => Err(Error::State(format!("Incorrect key size {}", buf.len()))),
     }
 }
 
 fn persist_key(keypair: &KeyPair, keypath: &str) -> Result<(), Error> {
-    let mut file = File::create(keypath).map_err(|err|
-        Error::Io(err, format!("Creating key file failed"))
-    )?;
+    let mut file =
+        File::create(keypath).map_err(|err| Error::Io(err, format!("Creating key file failed")))?;
 
-    file.write_all(keypair.private_key().as_bytes()).map_err(|err|
-        Error::Io(err, format!("Writing key failed."))
-    )?;
+    file.write_all(keypair.private_key().as_bytes())
+        .map_err(|err| Error::Io(err, format!("Writing key failed.")))?;
 
     Ok(())
 }
 
-fn persist_nodeid(id:&Id, keypath: &str) -> Result<(), Error> {
-    let mut file = File::create(keypath).map_err(|err|
-        Error::Io(err, format!("Creating Id file failed"))
-    )?;
+fn persist_nodeid(id: &Id, keypath: &str) -> Result<(), Error> {
+    let mut file =
+        File::create(keypath).map_err(|err| Error::Io(err, format!("Creating Id file failed")))?;
 
-    file.write_all(id.as_bytes()).map_err(|err|
-        Error::Io(err, format!("Writing ID failed"))
-    )?;
+    file.write_all(id.as_bytes())
+        .map_err(|err| Error::Io(err, format!("Writing ID failed")))?;
 
     Ok(())
 }

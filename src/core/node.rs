@@ -5,8 +5,12 @@ use crate::id::Id;
 use crate::version;
 
 pub(crate) trait Reachable {
-    fn reachable(&self) -> bool { false }
-    fn unreachable(&self) -> bool { false }
+    fn reachable(&self) -> bool {
+        false
+    }
+    fn unreachable(&self) -> bool {
+        false
+    }
     fn set_reachable(&mut self, _: bool) {}
 }
 
@@ -22,7 +26,7 @@ impl Node {
         Node {
             id: id.clone(),
             addr: addr.clone(),
-            ver: 0
+            ver: 0,
         }
     }
 
@@ -50,14 +54,14 @@ impl Node {
         self.ver = version
     }
 
-    pub fn is_ipv4(&self) -> bool{
+    pub fn is_ipv4(&self) -> bool {
         match self.addr.ip() {
             IpAddr::V4(_) => true,
             _ => false,
         }
     }
 
-    pub fn is_ipv6(&self) -> bool{
+    pub fn is_ipv6(&self) -> bool {
         match self.addr.ip() {
             IpAddr::V6(_) => true,
             _ => false,
@@ -77,7 +81,9 @@ impl Reachable for Node {}
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{},{},{}",
+        write!(
+            f,
+            "{},{},{}",
             self.id,
             self.addr,
             version::formatted_version(self.ver)

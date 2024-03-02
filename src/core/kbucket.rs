@@ -1,8 +1,7 @@
-
+use std::collections::LinkedList;
 use std::fmt;
 use std::net::SocketAddr;
 use std::time::SystemTime;
-use std::collections::LinkedList;
 
 use libsodium_sys::randombytes_uniform;
 use log::info;
@@ -11,9 +10,9 @@ use crate::{
     as_millis,
     constants,
     id::Id,
-    prefix::Prefix,
     node::Reachable,
-    kbucket_entry::KBucketEntry
+    prefix::Prefix,
+    kbucket_entry::KBucketEntry,
 };
 
 /**
@@ -46,7 +45,7 @@ impl KBucket {
             prefix: prefix.clone(),
             home_bucket: is_home,
             entries: LinkedList::new(),
-            last_refresh: SystemTime::UNIX_EPOCH
+            last_refresh: SystemTime::UNIX_EPOCH,
         }
     }
 
@@ -90,7 +89,7 @@ impl KBucket {
         self.find_any(|item| item.id() == id)
     }
 
-    pub(crate) fn find(&self, id: &Id, addr: &SocketAddr ) -> Option<&Box<KBucketEntry>> {
+    pub(crate) fn find(&self, id: &Id, addr: &SocketAddr) -> Option<&Box<KBucketEntry>> {
         self.find_any(|item| item.id() == id || item.node().socket_addr() == addr)
     }
 
@@ -144,8 +143,7 @@ impl KBucket {
     }
 
     pub(crate) fn _remove_if_bad(&mut self, to_remove: &Box<KBucketEntry>, force: bool) {
-        if (force || to_remove.needs_replacement()) &&
-            self.exist(to_remove.id())  {
+        if (force || to_remove.needs_replacement()) && self.exist(to_remove.id()) {
             self._update_with_remove_or_insert(Some(&to_remove), None)
         }
     }
@@ -170,7 +168,7 @@ impl KBucket {
     }
 
     pub(crate) fn on_send(&mut self, id: &Id) {
-        self.entries.iter_mut().for_each(|item | {
+        self.entries.iter_mut().for_each(|item| {
             if item.id() == id {
                 item.signal_request();
                 return;
@@ -188,15 +186,18 @@ impl KBucket {
         false
     }
 
-    fn _update_with_remove_or_insert(&mut self,
+    fn _update_with_remove_or_insert(
+        &mut self,
         _: Option<&Box<KBucketEntry>>,
-        _: Option<&Box<KBucketEntry>>) {
-
+        _: Option<&Box<KBucketEntry>>,
+    ) {
         unimplemented!()
     }
 
     fn find_any<P>(&self, predicate: P) -> Option<&Box<KBucketEntry>>
-    where P: Fn(&KBucketEntry) -> bool {
+    where
+        P: Fn(&KBucketEntry) -> bool,
+    {
         self.entries.iter().find(|item| predicate(&item))
     }
 }

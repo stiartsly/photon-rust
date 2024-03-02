@@ -1,9 +1,8 @@
-
 use std::time::SystemTime;
 
 use crate::id::Id;
-use crate::value::Value;
 use crate::peer::Peer;
+use crate::value::Value;
 
 pub(crate) trait DataStorage {
     fn open(&mut self, _: &str) -> bool;
@@ -11,7 +10,12 @@ pub(crate) trait DataStorage {
     fn get_value(&self, _: &Id) -> Box<Value>;
     fn remove_value(&mut self, _: &Id) -> bool;
 
-    fn put_value_and_update(&mut self, expected_seq: i32, persistent: bool, update_last_announce: bool);
+    fn put_value_and_update(
+        &mut self,
+        expected_seq: i32,
+        persistent: bool,
+        update_last_announce: bool,
+    );
     fn put_value(&mut self, _: Box<Value>, persistent: bool) {
         self.put_value_and_update(-1, persistent, true);
     }

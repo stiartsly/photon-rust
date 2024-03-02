@@ -1,14 +1,10 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
+use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
-use super::msg::{
-    Msg,
-    Kind,
-    Method
-};
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -68,7 +64,7 @@ pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
     txid: i32,
-    ver: i32
+    ver: i32,
 }
 
 impl Message {
@@ -77,7 +73,7 @@ impl Message {
             id: None,
             addr: None,
             txid: 0,
-            ver: 0
+            ver: 0,
         }
     }
 }

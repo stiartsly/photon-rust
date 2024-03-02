@@ -1,14 +1,9 @@
+use crate::id::{Id, ID_BYTES};
+use crate::signature::{self, KeyPair, PrivateKey, Signature};
+use crate::unwrap;
 use std::fmt;
 use std::mem;
 use unicode_normalization::UnicodeNormalization;
-use crate::unwrap;
-use crate::id::{Id, ID_BYTES};
-use crate::signature::{
-    self,
-    PrivateKey,
-    KeyPair,
-    Signature
-};
 
 #[derive(Clone, Debug)]
 pub struct Peer {
@@ -26,7 +21,7 @@ pub struct Builder<'a> {
     id: &'a Id,
     origin: Option<&'a Id>,
     port: u16,
-    url: Option<&'a str>
+    url: Option<&'a str>,
 }
 
 impl<'a> Builder<'a> {
@@ -36,23 +31,27 @@ impl<'a> Builder<'a> {
             id: node_id,
             origin: None,
             port: 0,
-            url: None
+            url: None,
         }
     }
     pub fn with_keypair(&mut self, keypair: &'a KeyPair) -> &mut Self {
-        self.keypair = Some(keypair.clone()); self
+        self.keypair = Some(keypair.clone());
+        self
     }
 
     pub fn with_origin(&mut self, origin: &'a Id) -> &mut Self {
-        self.origin = Some(origin); self
+        self.origin = Some(origin);
+        self
     }
 
     pub fn with_port(&mut self, port: u16) -> &mut Self {
-        self.port = port; self
+        self.port = port;
+        self
     }
 
     pub fn with_alternative_url(&mut self, alternative_url: &'a str) -> &mut Self {
-        self.url = Some(alternative_url); self
+        self.url = Some(alternative_url);
+        self
     }
 
     pub fn build(&mut self) -> Peer {
@@ -72,20 +71,17 @@ impl Peer {
             id: b.id.clone(),
             origin: match b.origin {
                 Some(origin) => origin.clone(),
-                None => b.id.clone()
+                None => b.id.clone(),
             },
             port: b.port,
             url: match b.url {
-                Some(url) => {Some(url.nfc().collect::<String>())},
+                Some(url) => Some(url.nfc().collect::<String>()),
                 None => None,
             },
-            sig: Vec::new()
+            sig: Vec::new(),
         };
 
-        let sig = signature::sign(
-            peer.serialize_signature_data().as_slice(),
-            unwrap!(peer.sk)
-        );
+        let sig = signature::sign(peer.serialize_signature_data().as_slice(), unwrap!(peer.sk));
         peer.sig = sig;
         peer
     }

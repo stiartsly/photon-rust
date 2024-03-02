@@ -3,11 +3,10 @@ use std::net::SocketAddr;
 use std::time::SystemTime;
 
 use crate::{
-    as_millis,
-    constants,
-    version,
+    as_millis, constants,
     id::Id,
-    node::{Node, Reachable}
+    node::{Node, Reachable},
+    version,
 };
 
 /**
@@ -23,7 +22,7 @@ pub(crate) struct KBucketEntry {
     last_sent: SystemTime,
 
     reachable: bool,
-    failed_requests: i32
+    failed_requests: i32,
 }
 
 #[allow(dead_code)]
@@ -35,7 +34,7 @@ impl KBucketEntry {
             last_seen: SystemTime::UNIX_EPOCH,
             last_sent: SystemTime::UNIX_EPOCH,
             reachable: false,
-            failed_requests: 0
+            failed_requests: 0,
         }
     }
 
@@ -47,7 +46,7 @@ impl KBucketEntry {
         &self.node
     }
 
-    pub(crate) fn set_version(&mut self, ver: i32)  {
+    pub(crate) fn set_version(&mut self, ver: i32) {
         self.node.set_version(ver)
     }
 
@@ -94,7 +93,7 @@ impl KBucketEntry {
      * Should be called to signal that a request to this node has timed out;
      */
     pub(crate) fn signal_request_timeout(&mut self) {
-        if self.failed_requests <=0 {
+        if self.failed_requests <= 0 {
             self.failed_requests = 1
         } else {
             self.failed_requests += 1
@@ -102,26 +101,25 @@ impl KBucketEntry {
     }
 
     pub(crate) fn needs_replacement(&self) -> bool {
-        (self.failed_requests > 1 && !self.reachable()) ||
-            (self.failed_requests > constants::KBUCKET_MAX_TIMEOUTS && self.old_and_stale())
+        (self.failed_requests > 1 && !self.reachable())
+            || (self.failed_requests > constants::KBUCKET_MAX_TIMEOUTS && self.old_and_stale())
     }
 
     pub(crate) fn needs_ping(&self) -> bool {
         // don't ping if recently seen to allow NAT entries to time out
         // see https://arxiv.org/pdf/1605.05606v1.pdf for numbers
         // and do exponential backoff after failures to reduce traffic
-        if as_millis!(&self.last_seen) < 30 * 1000
-            || self.within_backoff_window(&self.last_seen) {
+        if as_millis!(&self.last_seen) < 30 * 1000 || self.within_backoff_window(&self.last_seen) {
             return false;
         }
 
-        self.failed_requests != 0 ||
-            as_millis!(&self.last_seen) > constants::KBUCKET_OLD_AND_STALE_TIME
+        self.failed_requests != 0
+            || as_millis!(&self.last_seen) > constants::KBUCKET_OLD_AND_STALE_TIME
     }
 
     pub(crate) fn merge(&mut self, other: &Box<Self>) {
         if !self.equals(other) {
-            return
+            return;
         }
 
         self.created = self.created.max(other.created);
@@ -137,19 +135,17 @@ impl KBucketEntry {
     }
 
     fn within_backoff_window(&self, _: &SystemTime) -> bool {
-        let backoff = constants::KBUCKET_PING_BACKOFF_BASE_INTERVAL <<
-            std::cmp::max(
+        let backoff = constants::KBUCKET_PING_BACKOFF_BASE_INTERVAL
+            << std::cmp::max(
                 constants::KBUCKET_MAX_TIMEOUTS,
-                std::cmp::min(0, self.failed_requests -1)
+                std::cmp::min(0, self.failed_requests - 1),
             );
-        self.failed_requests != 0 &&
-        as_millis!(&self.last_sent) < backoff
+        self.failed_requests != 0 && as_millis!(&self.last_sent) < backoff
     }
 
     fn old_and_stale(&self) -> bool {
-        self.failed_requests > constants::KBUCKET_OLD_AND_STALE_TIMEOUT &&
-            as_millis!(&self.last_seen) >
-                constants::KBUCKET_OLD_AND_STALE_TIME
+        self.failed_requests > constants::KBUCKET_OLD_AND_STALE_TIMEOUT
+            && as_millis!(&self.last_seen) > constants::KBUCKET_OLD_AND_STALE_TIME
     }
 
     pub(crate) fn equals(&self, other: &Self) -> bool {
@@ -187,7 +183,9 @@ impl PartialEq for KBucketEntry {
 
 impl fmt::Display for KBucketEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@{};seen:{}; age:{}",
+        write!(
+            f,
+            "{}@{};seen:{}; age:{}",
             self.node.id(),
             self.node.socket_addr().ip(),
             as_millis!(&self.last_seen),
@@ -204,7 +202,9 @@ impl fmt::Display for KBucketEntry {
             write!(f, "; reachable")?;
         }
         if self.node.version() != 0 {
-            write!(f, "; ver: {}",
+            write!(
+                f,
+                "; ver: {}",
                 version::formatted_version(self.node.version())
             )?;
         }

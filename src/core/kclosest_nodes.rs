@@ -1,11 +1,11 @@
+use std::collections::LinkedList;
 use std::rc::Rc;
 use std::vec::Vec;
-use std::collections::LinkedList;
 
 use crate::{
+    dht::DHT,
     id::Id,
     node::Node,
-    dht::DHT,
     kbucket::KBucket,
     kbucket_entry::KBucketEntry
 };
@@ -18,36 +18,36 @@ pub(crate) struct KClosestNodes<'a> {
     entries: LinkedList<Box<KBucketEntry>>,
     max_entries: usize,
 
-    filter: Box<dyn Fn(&Box<KBucketEntry>) -> bool>
+    filter: Box<dyn Fn(&Box<KBucketEntry>) -> bool>,
 }
 
 #[allow(dead_code)]
 impl<'a> KClosestNodes<'a> {
-    pub(crate) fn new(dht: Rc<&'a DHT>,
-        target: &'a Id,
-        max_entries: usize
-    ) -> Self {
+    pub(crate) fn new(dht: Rc<&'a DHT>, target: &'a Id, max_entries: usize) -> Self {
         KClosestNodes {
             dht,
             target,
             entries: LinkedList::new(),
             max_entries,
-            filter: Box::new(|_| true)
+            filter: Box::new(|_| true),
         }
     }
 
-    pub(crate) fn with_filter<F>(dht: Rc<&'a DHT>,
+    pub(crate) fn with_filter<F>(
+        dht: Rc<&'a DHT>,
         target: &'a Id,
         max_entries: usize,
-        filter: F
+        filter: F,
     ) -> Self
-    where F: Fn(&Box<KBucketEntry>) -> bool + 'static{
+    where
+        F: Fn(&Box<KBucketEntry>) -> bool + 'static,
+    {
         KClosestNodes {
             dht,
             target,
             entries: LinkedList::new(),
             max_entries,
-            filter: Box::new(filter)
+            filter: Box::new(filter),
         }
     }
 
@@ -68,7 +68,7 @@ impl<'a> KClosestNodes<'a> {
     }
 
     fn insert_entries(&mut self, bucket: &Box<KBucket>) {
-        bucket.entries().iter().for_each(|item|  {
+        bucket.entries().iter().for_each(|item| {
             if (self.filter)(item) {
                 self.entries.push_back(item.clone())
             }
@@ -89,8 +89,6 @@ impl<'a> KClosestNodes<'a> {
     }
 
     pub(crate) fn as_nodes(&self) -> Vec<Node> {
-        self.entries.iter()
-            .map(|x| x.node().clone())
-            .collect()
+        self.entries.iter().map(|x| x.node().clone()).collect()
     }
 }

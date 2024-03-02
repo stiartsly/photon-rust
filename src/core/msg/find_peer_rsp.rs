@@ -1,24 +1,22 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
+use super::lookup;
+use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
-use crate::version;
 use crate::node::Node;
 use crate::peer::Peer;
 use crate::rpccall::RpcCall;
-use super::lookup;
-use super::msg::{
-    Msg,
-    Kind,
-    Method
-};
+use crate::version;
 
 pub(crate) trait PeerResult {
     fn has_peers(&self) -> bool;
     fn peers(&self) -> &[Box<Peer>];
 
-    fn populate_peers<F>(&mut self, f: F) where F: FnMut() -> Option<Vec<Box<Peer>>>;
+    fn populate_peers<F>(&mut self, f: F)
+    where
+        F: FnMut() -> Option<Vec<Box<Peer>>>;
 }
 
 impl Msg for Message {
@@ -89,25 +87,31 @@ impl lookup::Result for Message {
     }
 
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F)
-    where F: FnOnce() -> Option<Vec<Node>> {
+    where
+        F: FnOnce() -> Option<Vec<Node>>,
+    {
         match want4 {
-            true => {self.nodes4 = f()},
+            true => self.nodes4 = f(),
             false => {}
         }
     }
 
     fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F)
-    where F: FnOnce() -> Option<Vec<Node>> {
+    where
+        F: FnOnce() -> Option<Vec<Node>>,
+    {
         match want6 {
-            true => {self.nodes6 = f()},
+            true => self.nodes6 = f(),
             false => {}
         }
     }
 
     fn populate_token<F>(&mut self, want_token: bool, f: F)
-    where F: FnOnce() -> i32 {
+    where
+        F: FnOnce() -> i32,
+    {
         match want_token {
-            true => {self.token = f()},
+            true => self.token = f(),
             false => {}
         }
     }
@@ -123,7 +127,9 @@ impl PeerResult for Message {
     }
 
     fn populate_peers<F>(&mut self, mut f: F)
-    where F: FnMut() -> Option<Vec<Box<Peer>>> {
+    where
+        F: FnMut() -> Option<Vec<Box<Peer>>>,
+    {
         self.peers = f()
     }
 }
@@ -139,7 +145,7 @@ pub(crate) struct Message {
     nodes6: Option<Vec<Node>>,
     token: i32,
 
-    peers: Option<Vec<Box<Peer>>>
+    peers: Option<Vec<Box<Peer>>>,
 }
 
 impl Message {
@@ -152,14 +158,16 @@ impl Message {
             nodes4: None,
             nodes6: None,
             token: 0,
-            peers: None
+            peers: None,
         }
     }
 }
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "y:{},m:{},t:{},r: {{",
+        write!(
+            f,
+            "y:{},m:{},t:{},r: {{",
             self.kind(),
             self.method(),
             self.txid
@@ -176,9 +184,9 @@ impl fmt::Display for Message {
                             write!(f, ",")?;
                         }
                         write!(f, "[{}]", item)?;
-                    };
+                    }
                 }
-            },
+            }
             None => {}
         }
 
@@ -193,9 +201,9 @@ impl fmt::Display for Message {
                             write!(f, ",")?;
                         }
                         write!(f, "[{}]", item)?;
-                    };
+                    }
                 }
-            },
+            }
             None => {}
         }
 
@@ -216,9 +224,8 @@ impl fmt::Display for Message {
                         write!(f, "[{}]", item)?;
                     }
                 }
-            },
+            }
             None => {}
-
         }
 
         write!(f, "}},v:{}", version::formatted_version(self.ver))?;

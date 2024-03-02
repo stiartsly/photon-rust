@@ -1,10 +1,10 @@
-use std::fmt;
-use std::cmp::Ordering;
-use hex::FromHexError;
 use bs58::decode;
+use hex::FromHexError;
+use std::cmp::Ordering;
+use std::fmt;
 
-use crate::signature;
 use crate::cryptobox;
+use crate::signature;
 use crate::error::Error;
 
 pub const ID_BYTES: usize = 32;
@@ -18,10 +18,7 @@ impl Id {
     pub fn random() -> Self {
         let mut bytes = [0u8; ID_BYTES];
         unsafe {
-            libsodium_sys::randombytes_buf(
-                bytes.as_mut_ptr() as *mut libc::c_void,
-                ID_BYTES
-            );
+            libsodium_sys::randombytes_buf(bytes.as_mut_ptr() as *mut libc::c_void, ID_BYTES);
         }
         Id(bytes)
     }
@@ -49,23 +46,14 @@ impl Id {
 
     pub fn try_from_hex(input: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
-        let _ = hex::decode_to_slice(input, &mut bytes[..])
-            .map_err(|e| match e {
-                FromHexError::InvalidHexCharacter { c, index } => {
-                    Error::Argument(
-                        format!("Invalid hex character '{}' at index {}", c, index)
-                    )
-                }
-                FromHexError::OddLength => {
-                    Error::Argument(
-                        format!("Odd length hex string")
-                    )
-                },
-                FromHexError::InvalidStringLength => {
-                    Error::Argument(
-                        format!("Invalid hex string length {}", input.len())
-                    )
-                }
+        let _ = hex::decode_to_slice(input, &mut bytes[..]).map_err(|e| match e {
+            FromHexError::InvalidHexCharacter { c, index } => {
+                Error::Argument(format!("Invalid hex character '{}' at index {}", c, index))
+            }
+            FromHexError::OddLength => Error::Argument(format!("Odd length hex string")),
+            FromHexError::InvalidStringLength => {
+                Error::Argument(format!("Invalid hex string length {}", input.len()))
+            }
         });
         Ok(Id(bytes))
     }
@@ -77,21 +65,14 @@ impl Id {
             .onto(&mut bytes)
             .map_err(|e| match e {
                 decode::Error::BufferTooSmall => {
-                    Error::Argument(
-                        format!("Invalid base58 string length {}", input.len())
-                    )
+                    Error::Argument(format!("Invalid base58 string length {}", input.len()))
                 }
-                decode::Error::InvalidCharacter {character, index} => {
-                    Error::Argument(
-                        format!("Invalid base58 character '{}' at index {}", character, index)
-                    )
-                }
-                _ => {
-                    Error::Argument(
-                        format!("Invalid base58 string with unknown error")
-                    )
-                }
-        });
+                decode::Error::InvalidCharacter { character, index } => Error::Argument(format!(
+                    "Invalid base58 character '{}' at index {}",
+                    character, index
+                )),
+                _ => Error::Argument(format!("Invalid base58 string with unknown error")),
+            });
         Ok(Id(bytes))
     }
 
@@ -118,9 +99,7 @@ impl Id {
     }
 
     pub fn to_encryption_key(&self) -> cryptobox::PublicKey {
-        cryptobox::PublicKey::from_signature_key(
-            &self.to_signature_key()
-        ).unwrap()
+        cryptobox::PublicKey::from_signature_key(&self.to_signature_key()).unwrap()
     }
 
     pub fn distance(&self, other: &Id) -> Id {
@@ -187,7 +166,7 @@ pub(crate) fn bits_equal(a: &Id, b: &Id, depth: i32) -> bool {
 
     match mmi == idx {
         true => is_diff,
-        false => mmi > idx
+        false => mmi > idx,
     }
 }
 

@@ -1,15 +1,11 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
+use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
-use crate::value::Value;
 use crate::rpccall::RpcCall;
-use super::msg::{
-    Msg,
-    Kind,
-    Method
-};
+use crate::value::Value;
 
 pub(crate) trait StoreOption {
     fn token(&self) -> i32;
@@ -84,7 +80,6 @@ impl StoreOption for Message {
 
     fn with_token(&mut self, token: i32) {
         self.token = token
-
     }
     fn with_value(&mut self, value: Box<Value>) {
         self.value = Some(value)

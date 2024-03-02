@@ -2,8 +2,7 @@ use std::boxed::Box;
 
 use crate::task::task::Task;
 
-pub(crate) struct TaskManager {
-}
+pub(crate) struct TaskManager {}
 
 #[allow(dead_code)]
 impl TaskManager {

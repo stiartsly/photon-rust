@@ -1,11 +1,11 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
+use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
-use crate::version;
 use crate::rpccall::RpcCall;
-use super::msg::{Msg, Kind, Method};
+use crate::version;
 
 pub(crate) trait ErrorResult {
     fn msg(&self) -> &str;
@@ -23,7 +23,7 @@ pub(crate) struct Message {
     ver: i32,
 
     msg: Option<String>,
-    code: i32
+    code: i32,
 }
 
 impl Msg for Message {
@@ -106,14 +106,16 @@ impl Message {
             txid: 0,
             ver: 0,
             code: 0,
-            msg: None
+            msg: None,
         }
     }
 }
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "y:{},m:{},t:{},e:{{c:{}.m:{}}}v:{}",
+        write!(
+            f,
+            "y:{},m:{},t:{},e:{{c:{}.m:{}}}v:{}",
             self.kind(),
             self.method(),
             self.txid,

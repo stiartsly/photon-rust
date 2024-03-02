@@ -1,6 +1,6 @@
-use std::fmt;
 use crate::id;
 use crate::id::Id;
+use std::fmt;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Prefix {
@@ -12,7 +12,7 @@ impl Prefix {
     pub fn new() -> Self {
         Prefix {
             id: Id::default(),
-            depth: -1
+            depth: -1,
         }
     }
 
@@ -35,7 +35,7 @@ impl Prefix {
     pub fn last(&self) -> Id {
         let p = Prefix {
             id: Id::max(),
-            depth: self.depth
+            depth: self.depth,
         };
         let d = p.id.distance(&Id::max());
         self.id.distance(&d)
@@ -69,8 +69,7 @@ impl Prefix {
     }
 
     pub fn is_sibling_of(&self, other: &Prefix) -> bool {
-        self.depth == other.depth &&
-            id::bits_equal(&self.id, &other.id, self.depth-1)
+        self.depth == other.depth && id::bits_equal(&self.id, &other.id, self.depth - 1)
     }
 
     pub fn create_random_id(&self) -> Id {
@@ -95,11 +94,7 @@ impl fmt::Display for Prefix {
         let end_index = ((self.depth + 8) >> 3) as usize;
         let slice = self.id.as_bytes()[..end_index].to_vec();
 
-        write!(f,
-            "{}/{}",
-            hex::encode(slice),
-            self.depth
-        )?;
+        write!(f, "{}/{}", hex::encode(slice), self.depth)?;
 
         Ok(())
     }

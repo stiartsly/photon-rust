@@ -1,10 +1,10 @@
-use std::fmt;
 use sha2::{Digest, Sha256};
+use std::fmt;
 
-use crate::id::{Id, ID_BYTES};
-use crate::unwrap;
-use crate::signature;
 use crate::cryptobox;
+use crate::id::{Id, ID_BYTES};
+use crate::signature;
+use crate::unwrap;
 
 #[derive(Clone, Debug)]
 pub struct Value {
@@ -14,11 +14,11 @@ pub struct Value {
     nonce: Option<cryptobox::Nonce>,
     sig: Option<Vec<u8>>,
     data: Vec<u8>,
-    seq: i32
+    seq: i32,
 }
 
 pub struct ValueBuilder<'a> {
-    data:&'a [u8]
+    data: &'a [u8],
 }
 
 pub struct SignedBuidler<'a> {
@@ -26,7 +26,7 @@ pub struct SignedBuidler<'a> {
     nonce: Option<cryptobox::Nonce>,
 
     data: &'a [u8],
-    seq: i32
+    seq: i32,
 }
 
 pub struct EncryptedBuilder<'a> {
@@ -35,7 +35,7 @@ pub struct EncryptedBuilder<'a> {
 
     recipient: &'a Id,
     data: &'a [u8],
-    seq: i32
+    seq: i32,
 }
 
 pub(crate) struct PackBuilder<'a> {
@@ -44,7 +44,7 @@ pub(crate) struct PackBuilder<'a> {
     nonce: Option<&'a cryptobox::Nonce>,
     sig: Option<&'a [u8]>,
     data: &'a [u8],
-    seq: i32
+    seq: i32,
 }
 
 impl<'a> ValueBuilder<'a> {
@@ -65,20 +65,23 @@ impl<'a> SignedBuidler<'a> {
             data: value,
             keypair: None,
             nonce: None,
-            seq: 0
+            seq: 0,
         }
     }
 
     pub fn with_keypair(&mut self, keypair: &signature::KeyPair) -> &mut Self {
-        self.keypair = Some(keypair.clone()); self
+        self.keypair = Some(keypair.clone());
+        self
     }
 
     pub fn with_nonce(&mut self, nonce: &cryptobox::Nonce) -> &mut Self {
-        self.nonce = Some(nonce.clone()); self
+        self.nonce = Some(nonce.clone());
+        self
     }
 
     pub fn with_sequence_number(&mut self, sequence_number: i32) -> &mut Self {
-        self.seq = sequence_number; self
+        self.seq = sequence_number;
+        self
     }
 
     pub fn buld(&mut self) -> Value {
@@ -101,20 +104,23 @@ impl<'a> EncryptedBuilder<'a> {
             keypair: None,
             nonce: None,
             seq: 0,
-            recipient
+            recipient,
         }
     }
 
     pub fn with_keypair(&mut self, keypair: &signature::KeyPair) -> &mut Self {
-        self.keypair = Some(keypair.clone()); self
+        self.keypair = Some(keypair.clone());
+        self
     }
 
     pub fn with_nonce(&mut self, nonce: &cryptobox::Nonce) -> &mut Self {
-        self.nonce = Some(nonce.clone()); self
+        self.nonce = Some(nonce.clone());
+        self
     }
 
     pub fn with_sequence_number(&mut self, sequence_number: i32) -> &mut Self {
-        self.seq = sequence_number; self
+        self.seq = sequence_number;
+        self
     }
 
     pub fn buld(&mut self) -> Value {
@@ -138,28 +144,33 @@ impl<'a> PackBuilder<'a> {
             nonce: None,
             sig: None,
             data: value,
-            seq: -1
+            seq: -1,
         }
     }
 
     pub(crate) fn with_pk(&mut self, pk: &'a Id) -> &mut Self {
-        self.pk = Some(pk); self
+        self.pk = Some(pk);
+        self
     }
 
     pub(crate) fn with_recipient(&mut self, recipient: &'a Id) -> &mut Self {
-        self.recipient = Some(recipient); self
+        self.recipient = Some(recipient);
+        self
     }
 
     pub(crate) fn with_nonce(&mut self, nonce: &'a cryptobox::Nonce) -> &mut Self {
-        self.nonce = Some(nonce); self
+        self.nonce = Some(nonce);
+        self
     }
 
     pub(crate) fn with_sig(&mut self, sig: &'a [u8]) -> &mut Self {
-        self.sig = Some(sig); self
+        self.sig = Some(sig);
+        self
     }
 
     pub(crate) fn with_seq(&mut self, seq: i32) -> &mut Self {
-        self.seq = seq; self
+        self.seq = seq;
+        self
     }
 
     pub(crate) fn build(&self) -> Value {
@@ -176,7 +187,7 @@ impl Value {
             nonce: None,
             sig: None,
             data: b.data.to_vec(),
-            seq: -1
+            seq: -1,
         }
     }
 
@@ -196,7 +207,7 @@ impl Value {
         };
         let sig = signature::sign(
             value.serialize_signature_data().as_slice(),
-            unwrap!(value.sk)
+            unwrap!(value.sk),
         );
         value.sig = Some(sig);
         value
@@ -214,18 +225,17 @@ impl Value {
             nonce: Some(unwrap!(b.nonce).clone()),
             sig: None,
             data: b.data.to_vec(),
-            seq: b.seq
+            seq: b.seq,
         };
 
-        let owner_sk = cryptobox::PrivateKey::from_signature_key(
-            kp.private_key()
-        );
+        let owner_sk = cryptobox::PrivateKey::from_signature_key(kp.private_key());
 
         value.data = cryptobox::encrypt_into(
             b.data,
             unwrap!(b.nonce),
             &b.recipient.to_encryption_key(),
-            &owner_sk.unwrap());
+            &owner_sk.unwrap(),
+        );
 
         let sig = signature::sign(
             value.serialize_signature_data().as_slice(),
@@ -253,10 +263,8 @@ impl Value {
             Some(pk) => {
                 input.extend_from_slice(pk.as_bytes());
                 input.extend_from_slice(unwrap!(self.nonce).as_bytes());
-            },
-            None => {
-                input.extend_from_slice(self.data.as_slice())
             }
+            None => input.extend_from_slice(self.data.as_slice()),
         }
 
         let mut sha256 = Sha256::new();
@@ -291,7 +299,7 @@ impl Value {
     pub fn signature(&self) -> Option<&[u8]> {
         match self.sig.as_ref() {
             Some(s) => Some(s.as_slice()),
-            None => None
+            None => None,
         }
     }
 
@@ -333,7 +341,7 @@ impl Value {
         signature::verify(
             self.serialize_signature_data().as_slice(),
             unwrap!(self.sig).as_slice(),
-            &unwrap!(self.pk).to_signature_key()
+            &unwrap!(self.pk).to_signature_key(),
         )
     }
 
@@ -341,14 +349,14 @@ impl Value {
         let mut len = 0;
 
         len += match self.is_encrypted() {
-            true => { ID_BYTES },
-            false => { 0 }
+            true => ID_BYTES,
+            false => 0,
         };
         len += cryptobox::Nonce::BYTES;
         len += std::mem::size_of::<i32>();
         len += self.data.len();
 
-        let mut input:Vec<u8> = Vec::with_capacity(len);
+        let mut input: Vec<u8> = Vec::with_capacity(len);
         if self.is_encrypted() {
             input.extend_from_slice(unwrap!(self.recipient).as_bytes());
         }
@@ -364,25 +372,21 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "id:{}", self.id())?;
         if self.is_mutable() {
-            write!(f,
+            write!(
+                f,
                 ",publicKey:{}, nonce:{}",
                 unwrap!(self.pk),
                 unwrap!(self.nonce)
             )?;
         }
         if self.is_encrypted() {
-            write!(f,
-                ",recipient:{}",
-                unwrap!(self.recipient)
-            )?;
+            write!(f, ",recipient:{}", unwrap!(self.recipient))?;
         }
         if self.is_signed() {
-            write!(f,
-                ",sig:{}",
-                hex::encode(unwrap!(self.sig))
-            )?;
+            write!(f, ",sig:{}", hex::encode(unwrap!(self.sig)))?;
         }
-        write!(f,
+        write!(
+            f,
             "seq:{}, data:{}",
             self.seq,
             hex::encode(self.data.as_slice())

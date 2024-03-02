@@ -1,5 +1,5 @@
-use std::net::IpAddr;
 use boson::default_configuration;
+use std::net::IpAddr;
 
 #[test]
 fn test_config() {
@@ -16,7 +16,10 @@ fn test_config() {
     assert_eq!(cfg.addr6().is_none(), true);
     assert_eq!(cfg.addr4().unwrap().is_ipv4(), true);
     assert_eq!(cfg.addr4().unwrap().port(), 32222);
-    assert_eq!(cfg.addr4().unwrap().ip(), IpAddr::V4(ipv4_str.parse().expect("invalid ipv4 address")));
+    assert_eq!(
+        cfg.addr4().unwrap().ip(),
+        IpAddr::V4(ipv4_str.parse().expect("invalid ipv4 address"))
+    );
     assert_eq!(cfg.bootstrap_nodes().len(), 0);
     assert_eq!(cfg.storage_path(), "node");
 

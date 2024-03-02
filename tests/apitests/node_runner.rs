@@ -1,8 +1,8 @@
-use std::fs;
 use std::env;
+use std::fs;
 
-use boson::runner::NodeRunner;
 use boson::default_configuration;
+use boson::runner::NodeRunner;
 
 static mut PATH1: Option<String> = None;
 static mut PATH2: Option<String> = None;
@@ -12,13 +12,12 @@ static mut RUNNER1: Option<NodeRunner> = None;
 static mut RUNNER2: Option<NodeRunner> = None;
 static mut RUNNER3: Option<NodeRunner> = None;
 
-
 fn get_storage_path(input: &str) -> String {
     let path = env::current_dir().unwrap().join(input);
 
     if !fs::metadata(&path).is_ok() {
         match fs::create_dir(&path) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 panic!("Failed to create directory: {}", e);
             }
@@ -30,7 +29,7 @@ fn get_storage_path(input: &str) -> String {
 fn remove_storage(input: &str) {
     if fs::metadata(&input).is_ok() {
         match fs::remove_dir_all(&input) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 panic!("Failed to remove directory: {}", e);
             }
@@ -108,7 +107,6 @@ fn test_find_node() {
         println!("node2 id: {}", runner2.id());
         println!("node3 id: {}", runner3.id());
 
-
         let remoteid = runner2.id();
         println!("Trying to find node {}", remoteid);
         let _ = runner1.find_node(&remoteid);
@@ -117,9 +115,7 @@ fn test_find_node() {
 }
 
 #[test]
-fn test_find_value() {
-}
+fn test_find_value() {}
 
 #[test]
-fn test_find_peer() {
-}
+fn test_find_peer() {}

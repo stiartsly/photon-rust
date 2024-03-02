@@ -1,16 +1,11 @@
 use std::env;
 use std::fmt;
-use std::net::{
-    SocketAddr,
-    IpAddr,
-    Ipv4Addr,
-    Ipv6Addr
-};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use crate::{
+    config::Config,
     error::Error,
-    node::Node,
-    config::Config
+    node::Node
 };
 
 pub struct DefaultConfiguration {
@@ -18,7 +13,7 @@ pub struct DefaultConfiguration {
     addr6: Option<SocketAddr>,
 
     storage_path: String,
-    bootstrap_nodes: Vec<Node>
+    bootstrap_nodes: Vec<Node>,
 }
 
 pub struct Builder<'a> {
@@ -89,7 +84,7 @@ impl<'a> Builder<'a> {
     pub fn new() -> Builder<'a> {
         let def_path = match env::var("HOME") {
             Ok(value) => value,
-            Err(_) => ".".to_string()
+            Err(_) => ".".to_string(),
         };
 
         Builder {
@@ -106,15 +101,18 @@ impl<'a> Builder<'a> {
     }
 
     pub fn with_ipv4(&mut self, input: &'a str) -> &mut Self {
-        self.input_ipv4 = Some(input); self
+        self.input_ipv4 = Some(input);
+        self
     }
 
     pub fn with_ipv6(&mut self, input: &'a str) -> &mut Self {
-        self.input_ipv6 = Some(input); self
+        self.input_ipv6 = Some(input);
+        self
     }
 
     pub fn with_listening_port(&mut self, port: u16) -> &mut Self {
-        self.port = port; self
+        self.port = port;
+        self
     }
 
     pub fn with_storage_path(&mut self, input: &'a str) -> &mut Self {
@@ -131,7 +129,8 @@ impl<'a> Builder<'a> {
     }
 
     pub fn add_bootstrap(&mut self, node: &Node) -> &mut Self {
-        self.bootstrap_nodes.push(node.clone()); self
+        self.bootstrap_nodes.push(node.clone());
+        self
     }
 
     pub fn add_bootstraps(&mut self, nodes: &[Node]) -> &mut Self {
@@ -152,7 +151,7 @@ impl<'a> Builder<'a> {
 
         if self.input_ipv4.is_some() {
             match self.input_ipv4.unwrap().parse::<Ipv4Addr>() {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     return Err(Error::Argument(format!("error: {}", e)));
                 }
@@ -160,7 +159,7 @@ impl<'a> Builder<'a> {
         }
         if self.input_ipv6.is_some() {
             match self.input_ipv6.unwrap().parse::<Ipv6Addr>() {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     return Err(Error::Argument(format!("error: {}", e)));
                 }
@@ -168,8 +167,9 @@ impl<'a> Builder<'a> {
         }
 
         if self.input_ipv4.is_none() && self.input_ipv6.is_none() {
-            return Err(Error::Argument(
-                format!("No valid IPv4 or IPv6 address was specified.")));
+            return Err(Error::Argument(format!(
+                "No valid IPv4 or IPv6 address was specified."
+            )));
         }
 
         Ok(true)
@@ -177,8 +177,8 @@ impl<'a> Builder<'a> {
 
     pub fn build(&mut self) -> Result<Box<dyn Config>, Error> {
         match self.check_valid() {
-            Ok(_) => {},
-            Err(e) => { return Err(e) }
+            Ok(_) => {}
+            Err(e) => return Err(e),
         }
 
         if self.input_ipv4.is_some() {
@@ -191,8 +191,6 @@ impl<'a> Builder<'a> {
             self.addr6 = Some(SocketAddr::new(IpAddr::V6(addr), self.port));
         }
 
-        Ok(
-            Box::new(DefaultConfiguration::new(self)) as Box<dyn Config>
-        )
+        Ok(Box::new(DefaultConfiguration::new(self)) as Box<dyn Config>)
     }
 }

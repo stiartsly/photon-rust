@@ -1,14 +1,10 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
+use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::peer::Peer;
-use super::msg::{
-    Msg,
-    Kind,
-    Method
-};
 use crate::rpccall::RpcCall;
 
 pub(crate) trait AnnounceOption {
@@ -99,7 +95,7 @@ pub(crate) struct Message {
     ver: i32,
 
     token: i32,
-    peers: Vec<Box<Peer>>
+    peers: Vec<Box<Peer>>,
 }
 
 #[allow(dead_code)]
@@ -111,7 +107,7 @@ impl Message {
             txid: 0,
             ver: 0,
             token: 0,
-            peers: Vec::new()
+            peers: Vec::new(),
         }
     }
 }

@@ -1,16 +1,12 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
-use crate::id::Id;
-use crate::version;
-use crate::rpccall::RpcCall;
 use super::lookup;
-use super::msg::{
-    Msg,
-    Kind,
-    Method
-};
+use super::msg::{Kind, Method, Msg};
+use crate::id::Id;
+use crate::rpccall::RpcCall;
+use crate::version;
 
 pub(crate) trait ValueOption {
     fn seq(&self) -> i32;
@@ -127,7 +123,7 @@ pub(crate) struct Message {
     want6: bool,
     want_token: bool,
 
-    seq: i32
+    seq: i32,
 }
 
 #[allow(dead_code)]
@@ -142,16 +138,22 @@ impl Message {
             want4: false,
             want6: false,
             want_token: false,
-            seq: -1
+            seq: -1,
         }
     }
 
     fn want(&self) -> i32 {
         let mut want = 0;
 
-        if self.want4 { want |= 0x01 }
-        if self.want6 { want |= 0x02 }
-        if self.want_token { want |= 0x04 }
+        if self.want4 {
+            want |= 0x01
+        }
+        if self.want6 {
+            want |= 0x02
+        }
+        if self.want_token {
+            want |= 0x04
+        }
 
         want
     }
@@ -159,14 +161,16 @@ impl Message {
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "y:{},m:{},t:{},q:{{t:{},w:{}}}",
+        write!(
+            f,
+            "y:{},m:{},t:{},q:{{t:{},w:{}}}",
             self.kind(),
             self.method(),
             self.txid,
             self.target.as_ref().unwrap(),
             self.want()
         )?;
-        if self.seq >=0 {
+        if self.seq >= 0 {
             write!(f, ",seq:{}", self.seq)?;
         }
 

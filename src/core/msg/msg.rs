@@ -1,11 +1,11 @@
-use std::fmt;
 use std::any::Any;
+use std::fmt;
 use std::net::SocketAddr;
 
 //use ciborium::{de::from_reader, Value};
 use ciborium_io::Read;
 use core::result::Result;
-use std::io::{Error};
+use std::io::Error;
 
 use crate::id::Id;
 use crate::rpccall::RpcCall;
@@ -25,7 +25,9 @@ impl Kind {
             0x00 => Kind::Error,
             0x20 => Kind::Request,
             0x40 => Kind::Response,
-            _ => {panic!("invalid msg kind: {}", kind)}
+            _ => {
+                panic!("invalid msg kind: {}", kind)
+            }
         }
     }
 }
@@ -35,7 +37,7 @@ impl fmt::Display for Kind {
         let str = match self {
             Kind::Error => "e",
             Kind::Request => "q",
-            Kind::Response => "r"
+            Kind::Response => "r",
         };
         write!(f, "{}", str)?;
         Ok(())
@@ -50,7 +52,7 @@ pub(crate) enum Method {
     AnnouncePeer = 0x03,
     FindPeer = 0x04,
     StoreValue = 0x05,
-    FindValue = 0x6
+    FindValue = 0x6,
 }
 
 impl Method {
@@ -65,7 +67,9 @@ impl Method {
             0x04 => Method::FindPeer,
             0x05 => Method::StoreValue,
             0x06 => Method::FindValue,
-            _ => {panic!("invalid msg method: {}", method)}
+            _ => {
+                panic!("invalid msg method: {}", method)
+            }
         }
     }
 }
@@ -79,13 +83,12 @@ impl fmt::Display for Method {
             Method::AnnouncePeer => "announce_peer",
             Method::FindPeer => "find_peer",
             Method::StoreValue => "store_value",
-            Method::FindValue => "find_value"
+            Method::FindValue => "find_value",
         };
         write!(f, "{}", str)?;
         Ok(())
     }
 }
-
 
 pub(crate) trait Msg {
     fn kind(&self) -> Kind;
@@ -118,29 +121,55 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Box<dyn Msg> {
     //let value: Value = from_reader(reader).unwrap();
 
     match Kind::from(mtype) {
-        Kind::Error => { panic!("TODO") },
-        Kind::Request => {
-            match Method::from(mtype) {
-                Method::Unknown => { panic!("TODO") },
-                Method::Ping => { panic!("TODO") },
-                Method::FindNode => { panic!("TODO") },
-                Method::AnnouncePeer => { panic!("TODO") },
-                Method::FindPeer => { panic!("TODO") },
-                Method::StoreValue => { panic!("TODO") },
-                Method::FindValue => { panic!("TODO") }
+        Kind::Error => {
+            panic!("TODO")
+        }
+        Kind::Request => match Method::from(mtype) {
+            Method::Unknown => {
+                panic!("TODO")
+            }
+            Method::Ping => {
+                panic!("TODO")
+            }
+            Method::FindNode => {
+                panic!("TODO")
+            }
+            Method::AnnouncePeer => {
+                panic!("TODO")
+            }
+            Method::FindPeer => {
+                panic!("TODO")
+            }
+            Method::StoreValue => {
+                panic!("TODO")
+            }
+            Method::FindValue => {
+                panic!("TODO")
             }
         },
-        Kind::Response => {
-            match Method::from(mtype) {
-                Method::Unknown => { panic!("TODO") },
-                Method::Ping => { panic!("TODO") },
-                Method::FindNode => { panic!("TODO") },
-                Method::AnnouncePeer => { panic!("TODO") },
-                Method::FindPeer => { panic!("TODO") },
-                Method::StoreValue => { panic!("TODO") },
-                Method::FindValue => { panic!("TODO") }
+        Kind::Response => match Method::from(mtype) {
+            Method::Unknown => {
+                panic!("TODO")
             }
-        }
+            Method::Ping => {
+                panic!("TODO")
+            }
+            Method::FindNode => {
+                panic!("TODO")
+            }
+            Method::AnnouncePeer => {
+                panic!("TODO")
+            }
+            Method::FindPeer => {
+                panic!("TODO")
+            }
+            Method::StoreValue => {
+                panic!("TODO")
+            }
+            Method::FindValue => {
+                panic!("TODO")
+            }
+        },
     }
 }
 
