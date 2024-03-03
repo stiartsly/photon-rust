@@ -4,7 +4,12 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::SystemTime;
 
-use crate::{constants, id::Id, node::Node, rpccall::RpcCall};
+use crate::{
+    constants,
+    id::Id,
+    node_info::NodeInfo,
+    rpccall::RpcCall
+};
 
 use crate::msg::{
     find_node_rsp::{self},
@@ -42,7 +47,7 @@ pub(crate) struct NodeLookupTask {
     // NodeLookup
     bootstrap: bool,
     want_token: bool,
-    result_fn: Box<dyn FnMut(&mut dyn Task, Option<Box<Node>>)>,
+    result_fn: Box<dyn FnMut(&mut dyn Task, Option<Box<NodeInfo>>)>,
 }
 
 #[allow(dead_code)]
@@ -73,7 +78,7 @@ impl NodeLookupTask {
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
     where
-        F: FnMut(&mut dyn Task, Option<Box<Node>>) + 'static,
+        F: FnMut(&mut dyn Task, Option<Box<NodeInfo>>) + 'static,
     {
         self.result_fn = Box::new(f);
     }
@@ -277,7 +282,7 @@ impl LookupTask for NodeLookupTask {
         unimplemented!()
     }
 
-    fn add_candidates(&mut self, _: &[Node]) {
+    fn add_candidates(&mut self, _: &[NodeInfo]) {
         unimplemented!()
     }
 

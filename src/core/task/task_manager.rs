@@ -2,7 +2,8 @@ use std::boxed::Box;
 
 use crate::task::task::Task;
 
-pub(crate) struct TaskManager {}
+pub(crate) struct TaskManager {
+}
 
 #[allow(dead_code)]
 impl TaskManager {
@@ -15,6 +16,11 @@ impl TaskManager {
     }
 
     pub(crate) fn cancel_all(&mut self) {
-        unimplemented!()
+        // unimplemented!()
+    }
+
+    pub(crate) fn dequeue(&mut self) {
+        println!("Task manager: dequeue a task");
+        // unimplemented!()
     }
 }

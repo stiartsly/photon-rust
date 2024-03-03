@@ -3,11 +3,12 @@ use std::time::SystemTime;
 use crate::id::Id;
 use crate::peer::Peer;
 use crate::value::Value;
+use crate::error::Error;
 
 pub(crate) trait DataStorage {
-    fn open(&mut self, _: &str) -> bool;
+    fn open(&mut self, _: &str) -> Result<(), Error>;
 
-    fn get_value(&self, _: &Id) -> Box<Value>;
+    fn get_value(&self, _: &Id) -> Option<Box<Value>>;
     fn remove_value(&mut self, _: &Id) -> bool;
 
     fn put_value_and_update(

@@ -2,7 +2,13 @@ use std::cell::RefCell;
 use std::collections::LinkedList;
 use std::rc::Rc;
 
-use crate::{dht::DHT, id::Id, kbucket::KBucket, kbucket_entry::KBucketEntry, node::Node};
+use crate::{
+    id::Id,
+    node_info::NodeInfo,
+    dht::DHT,
+    kbucket::KBucket,
+    kbucket_entry::KBucketEntry
+};
 
 pub(crate) struct RoutingTable {
     dht: Option<Rc<RefCell<DHT>>>,
@@ -49,11 +55,11 @@ impl RoutingTable {
         len
     }
 
-    pub(crate) fn random_entry(&self) -> Node {
+    pub(crate) fn random_entry(&self) -> NodeInfo {
         unimplemented!()
     }
 
-    pub(crate) fn random_entries(&self, _: i32) -> Vec<Node> {
+    pub(crate) fn random_entries(&self, _: i32) -> Vec<NodeInfo> {
         unimplemented!();
     }
 
@@ -74,15 +80,15 @@ impl RoutingTable {
     }
 
     pub(crate) fn maintenance(&self) {
-        unimplemented!();
+        //unimplemented!();
     }
 
     pub(crate) fn load(&self, _: &str) {
-        unimplemented!();
+        // unimplemented!();
     }
 
     pub(crate) fn save(&self, _: &str) {
-        unimplemented!();
+        // unimplemented!();
     }
 
     fn _put(&mut self, entry: &Box<KBucketEntry>) {

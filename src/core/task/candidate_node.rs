@@ -1,10 +1,10 @@
 use std::time::SystemTime;
 
-use crate::node::{Node, Reachable};
+use crate::node_info::{NodeInfo, Reachable};
 
 #[derive(Clone)]
 pub(crate) struct CandidateNode {
-    node: Node,
+    node: NodeInfo,
 
     last_sent: SystemTime,
     last_reply: SystemTime,
@@ -18,7 +18,7 @@ pub(crate) struct CandidateNode {
 
 #[allow(dead_code)]
 impl CandidateNode {
-    pub(crate) fn new(node: &Node, reachable: bool) -> Self {
+    pub(crate) fn new(node: &NodeInfo, reachable: bool) -> Self {
         CandidateNode {
             node: node.clone(),
             last_sent: SystemTime::UNIX_EPOCH,
@@ -30,7 +30,7 @@ impl CandidateNode {
         }
     }
 
-    pub(crate) fn node(&self) -> &Node {
+    pub(crate) fn node(&self) -> &NodeInfo {
         &self.node
     }
 

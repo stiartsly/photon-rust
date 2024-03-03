@@ -8,8 +8,7 @@ use crate::{
     id::Id,
 };
 
-const EXPIRED_CHECK_INTERVAL: u128 = 60 * 1000;
-
+pub(crate) const EXPIRED_CHECK_INTERVAL: u64 = 60 * 1000;
 pub(crate) struct CryptoCache {
     keypair: KeyPair,
     cache: HashMap<Id, Entry>,
@@ -35,7 +34,8 @@ impl CryptoCache {
     }
 
     pub(crate) fn handle_expiration(&self) {
-        unimplemented!()
+        //unimplemented!()
+        // TODO;
     }
 
     fn load(&self, key: &Id) -> Box<CryptoContext> {
@@ -57,7 +57,7 @@ impl Entry {
     }
 
     fn expired(&self) -> bool {
-        as_millis!(&self.1) >= EXPIRED_CHECK_INTERVAL
+        as_millis!(&self.1) >= EXPIRED_CHECK_INTERVAL as u128
     }
 }
 

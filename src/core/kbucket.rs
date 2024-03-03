@@ -7,11 +7,10 @@ use libsodium_sys::randombytes_uniform;
 use log::info;
 
 use crate::{
-    as_millis,
-    constants,
+    as_millis, constants,
     id::Id,
-    node::Reachable,
     prefix::Prefix,
+    node_info::Reachable,
     kbucket_entry::KBucketEntry,
 };
 
@@ -117,7 +116,7 @@ impl KBucket {
                 return;
             }
 
-            // Node id and address conflict
+            // NodeInfo id and address conflict
             // Log the conflict and keep the existing entry
             if entry.matches(item) {
                 info!("New node {} claims same ID or IP as  {}, might be impersonation attack or IP change.

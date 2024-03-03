@@ -1,5 +1,7 @@
 use std::env;
 use std::fs;
+use std::thread;
+use std::time::Duration;
 
 use boson::{default_configuration, runner::NodeRunner};
 
@@ -22,14 +24,13 @@ fn main() {
 
     let mut b1 = default_configuration::Builder::new();
     b1.with_listening_port(32222);
-    b1.with_ipv4("192.168.1.109");
-    //b1.with_ipv4("192.168.237.121");
+    b1.with_ipv4("192.168.1.107");
     b1.with_storage_path(path.as_str());
     let cfg1 = b1.build().unwrap();
 
     let mut runner = NodeRunner::new(cfg1).unwrap();
-    println!("DHT node Id: {}", runner.id());
-
     let _ = runner.start();
+
+    thread::sleep(Duration::from_secs(100));
     runner.stop();
 }

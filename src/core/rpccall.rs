@@ -4,7 +4,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::SystemTime;
 
-use crate::{dht::DHT, engine::NodeEngine, id::Id, msg::msg, msg::msg::Msg, node::Node};
+use crate::{
+    id::Id,
+    node_info::NodeInfo,
+    dht::DHT,
+    server::Server,
+    msg::msg::{self, Msg}
+};
 
 #[derive(Clone, PartialEq, PartialOrd, Hash)]
 pub(crate) enum State {
@@ -19,7 +25,7 @@ pub(crate) enum State {
 
 pub(crate) struct RpcCall {
     //dht: Option<Rc<RefCell<DHT>>>,
-    target: Node,
+    target: NodeInfo,
 
     req: Box<dyn Msg>,
     rsp: Option<Box<dyn Msg>>,
@@ -37,7 +43,7 @@ pub(crate) struct RpcCall {
 
 #[allow(dead_code)]
 impl RpcCall {
-    pub(crate) fn new(node: &Node, req: Box<dyn Msg>) -> Self {
+    pub(crate) fn new(node: &NodeInfo, req: Box<dyn Msg>) -> Self {
         RpcCall {
             //dht: None,
             target: node.clone(),
@@ -63,7 +69,7 @@ impl RpcCall {
         self.target.id()
     }
 
-    pub(crate) fn target(&self) -> &Node {
+    pub(crate) fn target(&self) -> &NodeInfo {
         &self.target
     }
 
@@ -145,21 +151,21 @@ impl RpcCall {
         }
     }
 
-    pub(crate) fn send(&mut self, _: &NodeEngine) {
+    pub(crate) fn send(&mut self, _: &Server) {
         self.sent = SystemTime::now();
         self.update_state(State::Sent);
 
         // Timer
     }
 
-    pub(crate) fn responsed(&mut self, response: Box<dyn Msg>) {
+    pub(crate) fn responsed(&mut self, response: &Box<dyn Msg>) {
         assert!(response.kind() == msg::Kind::Response || response.kind() == msg::Kind::Error);
 
         /*
         TODO check timer.
         */
 
-        self.rsp = Some(response);
+        // self.rsp = Some(response);
         self.responsed = SystemTime::now();
 
         match self.rsp.as_ref().unwrap().kind() {
@@ -175,13 +181,15 @@ impl RpcCall {
         self.update_state(State::Timeout)
     }
 
+    pub(crate) fn response_socket_mismatch(&self) {}
+
     fn cancel(&mut self) {
         // TOOD: timeout Timer.
 
         self.update_state(State::Canceled);
     }
 
-    fn stall(&mut self) {
+    pub(crate) fn stall(&mut self) {
         if self.state == State::Sent {
             self.update_state(State::Stalled)
         }

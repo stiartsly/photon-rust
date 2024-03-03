@@ -115,7 +115,7 @@ pub(crate) trait Msg {
 }
 
 #[allow(dead_code)]
-pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Box<dyn Msg> {
+pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Result<Box<dyn Msg>, Error> {
     let mtype: i32 = 0;
     //let reader = Reader::new(cbor);
     //let value: Value = from_reader(reader).unwrap();
@@ -174,7 +174,7 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Box<dyn Msg> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn serilize(_: Box<dyn Msg>) -> Vec<u8> {
+pub(crate) fn serialize(_: &Box<dyn Msg>) -> Vec<u8> {
     unimplemented!()
 }
 

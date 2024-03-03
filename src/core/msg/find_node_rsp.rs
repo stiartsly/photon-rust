@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use super::lookup;
 use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
-use crate::node::Node;
+use crate::node_info::NodeInfo;
 use crate::rpccall::RpcCall;
 use crate::version;
 
@@ -64,11 +64,11 @@ impl Msg for Message {
 }
 
 impl lookup::Result for Message {
-    fn nodes4(&self) -> &[Node] {
+    fn nodes4(&self) -> &[NodeInfo] {
         &self.nodes4.as_ref().unwrap()
     }
 
-    fn nodes6(&self) -> &[Node] {
+    fn nodes6(&self) -> &[NodeInfo] {
         &self.nodes6.as_ref().unwrap()
     }
 
@@ -78,7 +78,7 @@ impl lookup::Result for Message {
 
     fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F)
     where
-        F: FnOnce() -> Option<Vec<Node>>,
+        F: FnOnce() -> Option<Vec<NodeInfo>>,
     {
         match want4 {
             true => self.nodes4 = f(),
@@ -88,7 +88,7 @@ impl lookup::Result for Message {
 
     fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F)
     where
-        F: FnOnce() -> Option<Vec<Node>>,
+        F: FnOnce() -> Option<Vec<NodeInfo>>,
     {
         match want6 {
             true => self.nodes6 = f(),
@@ -114,8 +114,8 @@ pub(crate) struct Message {
     txid: i32,
     ver: i32,
 
-    nodes4: Option<Vec<Node>>,
-    nodes6: Option<Vec<Node>>,
+    nodes4: Option<Vec<NodeInfo>>,
+    nodes6: Option<Vec<NodeInfo>>,
     token: i32,
 }
 

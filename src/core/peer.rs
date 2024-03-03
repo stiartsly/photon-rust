@@ -81,7 +81,9 @@ impl Peer {
             sig: Vec::new(),
         };
 
-        let sig = signature::sign(peer.serialize_signature_data().as_slice(), unwrap!(peer.sk));
+        let sig = signature::sign(
+            peer.serialize_signature_data().as_slice(), unwrap!(peer.sk)
+        );
         peer.sig = sig;
         peer
     }

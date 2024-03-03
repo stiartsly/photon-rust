@@ -5,7 +5,7 @@ use std::vec::Vec;
 
 use super::candidate_node::CandidateNode;
 use crate::id::{distance, Id};
-use crate::node::Node;
+use crate::node_info::NodeInfo;
 
 #[allow(dead_code)]
 pub(crate) struct ClosestCandidates {
@@ -90,7 +90,7 @@ impl ClosestCandidates {
         }
     }
 
-    pub(crate) fn add(&mut self, _: &[Node]) {
+    pub(crate) fn add(&mut self, _: &[NodeInfo]) {
         unimplemented!()
     }
 

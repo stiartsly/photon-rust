@@ -2,15 +2,15 @@ use std::env;
 use std::fs;
 
 use boson::default_configuration;
-use boson::runner::NodeRunner;
+use boson::node::Node;
 
 static mut PATH1: Option<String> = None;
 static mut PATH2: Option<String> = None;
 static mut PATH3: Option<String> = None;
 
-static mut RUNNER1: Option<NodeRunner> = None;
-static mut RUNNER2: Option<NodeRunner> = None;
-static mut RUNNER3: Option<NodeRunner> = None;
+static mut RUNNER1: Option<Node> = None;
+static mut RUNNER2: Option<Node> = None;
+static mut RUNNER3: Option<Node> = None;
 
 fn get_storage_path(input: &str) -> String {
     let path = env::current_dir().unwrap().join(input);
@@ -61,9 +61,9 @@ fn setup() {
         b2.with_storage_path(PATH3.as_ref().unwrap().as_str());
         let cfg3 = b3.build().unwrap();
 
-        RUNNER1 = Some(NodeRunner::new(cfg1).unwrap());
-        RUNNER2 = Some(NodeRunner::new(cfg2).unwrap());
-        RUNNER3 = Some(NodeRunner::new(cfg3).unwrap());
+        RUNNER1 = Some(Node::new(cfg1).unwrap());
+        RUNNER2 = Some(Node::new(cfg2).unwrap());
+        RUNNER3 = Some(Node::new(cfg3).unwrap());
 
         let _ = RUNNER1.as_mut().unwrap().start();
         let _ = RUNNER2.as_mut().unwrap().start();

@@ -2,18 +2,14 @@ use std::env;
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-use crate::{
-    config::Config,
-    error::Error,
-    node::Node
-};
+use crate::{config::Config, error::Error, node_info::NodeInfo};
 
 pub struct DefaultConfiguration {
     addr4: Option<SocketAddr>,
     addr6: Option<SocketAddr>,
 
     storage_path: String,
-    bootstrap_nodes: Vec<Node>,
+    bootstrap_nodes: Vec<NodeInfo>,
 }
 
 pub struct Builder<'a> {
@@ -24,7 +20,7 @@ pub struct Builder<'a> {
     addr4: Option<SocketAddr>,
     addr6: Option<SocketAddr>,
     storage_path: String,
-    bootstrap_nodes: Vec<Node>,
+    bootstrap_nodes: Vec<NodeInfo>,
 }
 
 impl DefaultConfiguration {
@@ -51,7 +47,7 @@ impl Config for DefaultConfiguration {
         &self.storage_path
     }
 
-    fn bootstrap_nodes(&self) -> &[Node] {
+    fn bootstrap_nodes(&self) -> &[NodeInfo] {
         &self.bootstrap_nodes
     }
 
@@ -128,12 +124,12 @@ impl<'a> Builder<'a> {
         &self.storage_path
     }
 
-    pub fn add_bootstrap(&mut self, node: &Node) -> &mut Self {
+    pub fn add_bootstrap(&mut self, node: &NodeInfo) -> &mut Self {
         self.bootstrap_nodes.push(node.clone());
         self
     }
 
-    pub fn add_bootstraps(&mut self, nodes: &[Node]) -> &mut Self {
+    pub fn add_bootstraps(&mut self, nodes: &[NodeInfo]) -> &mut Self {
         for item in nodes.iter() {
             self.bootstrap_nodes.push(item.clone())
         }

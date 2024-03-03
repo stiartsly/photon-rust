@@ -5,66 +5,80 @@ use std::net::SocketAddr;
 use log::{debug, info, warn};
 
 use crate::{
-    constants, engine::NodeEngine, id::Id, kclosest_nodes::KClosestNodes,
-    lookup_option::LookupOption, node::Node, peer::Peer, routing_table::RoutingTable,
-    rpccall::RpcCall, token_man::TokenManager, value::Value, version,
+    constants,
+    version,
+    id::Id,
+    node_info::NodeInfo,
+    peer::Peer,
+    value::Value,
+    rpccall::RpcCall,
+    lookup_option::LookupOption,
+    routing_table::RoutingTable,
+    kclosest_nodes::KClosestNodes,
+    token_man::TokenManager,
+    server::Server,
+    scheduler::Scheduler,
 };
 
 use crate::msg::{
-    announce_peer_req, announce_peer_rsp,
-    error::{self, ErrorResult},
+    ping_req,
+    announce_peer_req,
+    announce_peer_rsp,
     find_node_rsp,
-    find_peer_rsp::{self, PeerResult},
     find_value_req,
+    store_value_req,
+    store_value_rsp,
+    error::{self, ErrorResult},
+    find_peer_rsp::{self, PeerResult},
     find_value_rsp::{self, ValueResult},
     lookup::{self, Result},
     msg::{self, Msg},
-    ping_req, store_value_req, store_value_rsp,
 };
+
 use crate::task::{
+    task::{State, Task},
     lookup::LookupTask,
     node_lookup::NodeLookupTask,
     peer_lookup::PeerLookupTask,
-    task::{State, Task},
     task_manager::TaskManager,
     value_lookup::ValueLookupTask,
 };
 
 pub(crate) struct DHT {
-    engine: Rc<RefCell<NodeEngine>>,
-    token_man: Rc<RefCell<TokenManager>>,
-
     addr: SocketAddr,
-
-    routing_table: RoutingTable,
-    task_man: TaskManager,
-
-    persistence: bool,
     persist_path: String,
     running: bool,
+
+    routing_table: RoutingTable,
+
+    server:     Rc<RefCell<Server>>,
+    task_man:   Rc<RefCell<TaskManager>>,
+    token_man:  Rc<RefCell<TokenManager>>,
+    scheduler:  Rc<RefCell<Scheduler>>,
 }
+
+const DHT_UPDATE_INTERVAL: u64 = 1000; // 1 seconds;
+const RANDOM_PING_INTERVAL: u64 = 10 * 1000; // 10 seconds;
+const RANDOM_LOOKUP_INTERVAL: u64 = 10 * 60 * 1000; // 10 minutes;
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(engine: &Rc<RefCell<NodeEngine>>, binding_addr: &SocketAddr) -> Self {
+    pub(crate) fn new(server: &Rc<RefCell<Server>>, binding_addr: SocketAddr) -> Self {
         DHT {
-            engine: Rc::clone(engine),
-            token_man: Rc::clone(&engine.borrow().token_man),
-
-            addr: binding_addr.clone(),
-
-            routing_table: RoutingTable::new(),
-            task_man: TaskManager::new(),
+            addr: binding_addr,
             running: false,
-
-            persistence: false,
             persist_path: String::new(),
+            routing_table: RoutingTable::new(),
+
+            server: Rc::clone(server),
+            task_man:  Rc::new(RefCell::new(TaskManager::new())),
+            token_man: Rc::clone(server.borrow().token_man()),
+            scheduler: Rc::clone(server.borrow().scheduler()),
         }
     }
 
     pub(crate) fn enable_persistence(&mut self, path: &str) {
-        self.persistence = true;
-        self.persist_path = path.to_string()
+        self.persist_path.push_str(path);
     }
 
     pub(crate) fn addr(&self) -> &SocketAddr {
@@ -74,20 +88,16 @@ impl DHT {
     pub(crate) fn is_ipv4(&self) -> bool {
         self.addr.is_ipv4()
     }
-    /*
-        pub(crate) fn runner(&self) -> Rc<RefCell<NodeRunner>> {
-            unimplemented!()
-        }
-    */
+
     fn bootstrap_internal() {
         unimplemented!()
     }
 
-    pub(crate) fn bootstrap(&mut self, _: &[Node]) {
+    pub(crate) fn bootstrap(&mut self, _: &[NodeInfo]) {
         unimplemented!()
     }
 
-    fn fill_home_bucket(&mut self, _: &[Node]) {
+    fn fill_home_bucket(&mut self, _: &[NodeInfo]) {
         unimplemented!()
     }
 
@@ -95,8 +105,71 @@ impl DHT {
         unimplemented!()
     }
 
-    pub(crate) fn start(&mut self, _: &[Node]) {
-        unimplemented!()
+    pub(crate) fn start(&mut self) {
+        if self.is_running() {
+            return;
+        }
+
+        // Load neighboring nodes from cache storage if possible.
+        let path = self.persist_path.as_str();
+        if !path.is_empty() {
+            info!("Loading routing table from [{}] ...", path);
+            self.routing_table.load(path);
+        }
+
+        // TODO: bootstrap nodes.
+
+        info!("Starting DHT/{} on {}", addr_kind(&self.addr), self.addr);
+        self.running = true;
+
+        // Maintenance tasks should run continuously, even before the first queries
+        // are executed.
+        let task_man = Rc::clone(&self.task_man);
+        self.scheduler.borrow_mut().add(
+            500,
+            DHT_UPDATE_INTERVAL,
+            move || {
+                task_man.borrow_mut().dequeue();
+            }
+        );
+
+        // fix the first time to persist the routing table: 2 min
+        //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
+
+        // Regularly DHT update
+        self.scheduler.borrow_mut().add(
+            100,
+            DHT_UPDATE_INTERVAL,
+            move || {
+                // TODO;
+            }
+        );
+
+        // Send a ping request to a random node to verify socket liveness.
+        self.scheduler.borrow_mut().add(
+            RANDOM_PING_INTERVAL,
+            RANDOM_PING_INTERVAL,
+            move || {
+                // TODO;
+            }
+        );
+
+        // Perform a deep lookup to familiarize ourselves with random sections of
+        // the keyspace.
+        let mut kind = String::from(addr_kind(&self.addr));
+        let task_man = Rc::clone(&self.task_man);
+        self.scheduler.borrow_mut().add(
+            RANDOM_LOOKUP_INTERVAL,
+            RANDOM_LOOKUP_INTERVAL,
+            move || {
+                let mut task = Box::new(NodeLookupTask::new(&Id::random()));
+                kind.push_str(":Random refresh lookup");
+                task.with_name(&kind);
+                task.add_listener(move |_|{});
+
+                task_man.borrow_mut().add(task);
+            }
+        )
     }
 
     pub(crate) fn stop(&mut self) {
@@ -104,22 +177,15 @@ impl DHT {
             return;
         }
 
-        let kind = match self.addr.is_ipv4() {
-            true => "IPv4",
-            false => "IPv6",
-        };
-
-        info!("{} initiated shutdown ...", kind);
+        info!("{} initiated shutdown ...", addr_kind(&self.addr));
         info!("stopping servers ...");
 
         self.running = false;
 
-        if self.persistence {
-            info!("Persisting routing table on shutdown ...");
-            self.routing_table.save(self.persist_path.as_str());
-        }
+        info!("Persisting routing table on shutdown ...");
+        self.routing_table.save(self.persist_path.as_str());
 
-        self.task_man.cancel_all();
+        self.task_man.borrow_mut().cancel_all();
     }
 
     pub(crate) fn is_running(&self) -> bool {
@@ -183,12 +249,13 @@ impl DHT {
         let mut err = Box::new(error::Message::new());
 
         err.with_id(msg.id());
+        err.with_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
         err.with_txid(msg.txid());
         err.with_addr(msg.addr());
         err.with_msg(str);
         err.with_code(code);
 
-        self.engine.borrow().send_msg(err);
+        self.server.borrow_mut().send_msg(err, self.is_ipv4());
     }
 
     fn on_ping(&self, request: &dyn Msg) {
@@ -198,7 +265,7 @@ impl DHT {
         msg.with_txid(request.txid());
         msg.with_addr(request.addr());
 
-        self.engine.borrow().send_msg(msg);
+        self.server.borrow_mut().send_msg(msg, self.is_ipv4());
     }
 
     fn on_find_node<T>(&self, request: &Box<T>)
@@ -241,7 +308,7 @@ impl DHT {
                 .generate_token(request.id(), request.addr(), request.target())
         });
 
-        self.engine.borrow().send_msg(resp)
+        self.server.borrow_mut().send_msg(resp, self.is_ipv4())
     }
 
     fn on_find_value<T>(&self, request: &Box<T>)
@@ -299,7 +366,7 @@ impl DHT {
                 .generate_token(request.id(), request.addr(), request.target())
         });
 
-        self.engine.borrow().send_msg(resp);
+        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
     }
 
     fn on_store_value<T>(&mut self, request: &Box<T>)
@@ -338,7 +405,7 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.engine.borrow().send_msg(resp);
+        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
     }
 
     fn on_find_peers<T>(&self, request: &Box<T>)
@@ -391,7 +458,7 @@ impl DHT {
                 .generate_token(request.id(), request.addr(), request.target())
         });
 
-        self.engine.borrow().send_msg(resp);
+        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
     }
 
     fn on_announce_peer<T>(&mut self, request: &Box<T>)
@@ -446,12 +513,12 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.engine.borrow().send_msg(resp);
+        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
     }
 
     pub(crate) fn on_timeout(&self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
-        if !self.running || !self.engine.borrow().is_reachable() {
+        if !self.running || !self.server.borrow().is_reachable() {
             return;
         }
         self.routing_table.on_timeout(call.target_id());
@@ -466,7 +533,7 @@ impl DHT {
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
     where
-        F: Fn(Option<Box<Node>>) + 'static,
+        F: Fn(Option<Box<NodeInfo>>) + 'static,
     {
         let result = Rc::new(RefCell::new(
             self.routing_table
@@ -489,7 +556,7 @@ impl DHT {
             complete_fn(result_shadow.borrow_mut().take());
         });
 
-        self.task_man.add(task);
+        self.task_man.borrow_mut().add(task);
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
@@ -524,12 +591,12 @@ impl DHT {
         task.add_listener(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         });
-        self.task_man.add(task);
+        self.task_man.borrow_mut().add(task);
     }
 
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
     where
-        F: Fn(Option<Vec<Box<Node>>>) + 'static,
+        F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static,
     {
         let mut task = Box::new(NodeLookupTask::new(&value.id()));
         task.with_name("store-value");
@@ -550,7 +617,7 @@ impl DHT {
                 // TODO:
             }
         });
-        self.task_man.add(task);
+        self.task_man.borrow_mut().add(task);
     }
 
     pub(crate) fn find_peer<F>(
@@ -576,13 +643,20 @@ impl DHT {
 
         task.add_listener(move |_| complete_fn(result_shadow.take()));
 
-        self.task_man.add(task);
+        self.task_man.borrow_mut().add(task);
     }
 
     pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
     where
-        F: Fn(&[&Node]),
+        F: Fn(&[&NodeInfo]),
     {
         unimplemented!()
+    }
+}
+
+fn addr_kind(addr: &SocketAddr) -> &'static str {
+    match addr.is_ipv4() {
+        true => "Ipv4",
+        false => "ipv6"
     }
 }

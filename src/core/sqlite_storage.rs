@@ -4,6 +4,7 @@ use crate::data_storage::DataStorage;
 use crate::id::Id;
 use crate::peer::Peer;
 use crate::value::Value;
+use crate::error::Error;
 
 pub(crate) struct SqliteStorage {}
 
@@ -14,12 +15,12 @@ impl SqliteStorage {
 }
 
 impl DataStorage for SqliteStorage {
-    fn open(&mut self, _: &str) -> bool {
-        true
+    fn open(&mut self, _: &str) -> Result<(), Error> {
+        Ok(())
         //TODO
     }
 
-    fn get_value(&self, _: &Id) -> Box<Value> {
+    fn get_value(&self, _: &Id) -> Option<Box<Value>> {
         unimplemented!()
     }
 

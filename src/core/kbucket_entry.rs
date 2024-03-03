@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use crate::{
     as_millis, constants,
     id::Id,
-    node::{Node, Reachable},
+    node_info::{NodeInfo, Reachable},
     version,
 };
 
@@ -15,7 +15,7 @@ use crate::{
  */
 #[derive(Clone, Debug)]
 pub(crate) struct KBucketEntry {
-    node: Node,
+    node: NodeInfo,
 
     created: SystemTime,
     last_seen: SystemTime,
@@ -29,7 +29,7 @@ pub(crate) struct KBucketEntry {
 impl KBucketEntry {
     pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
         KBucketEntry {
-            node: Node::new(id, addr),
+            node: NodeInfo::new(id, addr),
             created: SystemTime::UNIX_EPOCH,
             last_seen: SystemTime::UNIX_EPOCH,
             last_sent: SystemTime::UNIX_EPOCH,
@@ -42,7 +42,7 @@ impl KBucketEntry {
         &self.node.id()
     }
 
-    pub(crate) fn node(&self) -> &Node {
+    pub(crate) fn node(&self) -> &NodeInfo {
         &self.node
     }
 
