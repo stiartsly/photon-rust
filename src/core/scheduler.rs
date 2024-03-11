@@ -42,7 +42,7 @@ impl Scheduler {
         }
     }
 
-    pub(crate) fn add<F>(&mut self, start: u64, delay: u64, cb: F) where F: FnMut() + 'static {
+    pub(crate) fn add<F>(&mut self, cb: F, start: u64, delay: u64) where F: FnMut() + 'static {
         self.add_job(
             Duration::from_millis(start),
             Box::new(Job::new(cb, delay))

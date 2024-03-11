@@ -1,23 +1,23 @@
 use std::any::Any;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
+use ciborium::Value as CVal;
 
-use super::lookup;
-use super::msg::{Kind, Method, Msg};
-use crate::id::Id;
-use crate::node_info::NodeInfo;
-use crate::peer::Peer;
-use crate::rpccall::RpcCall;
-use crate::version;
+use crate::{
+    version,
+    error,
+    id::Id,
+    node_info::NodeInfo,
+    peer::Peer,
+    rpccall::RpcCall
+};
 
-pub(crate) trait PeerResult {
-    fn has_peers(&self) -> bool;
-    fn peers(&self) -> &[Box<Peer>];
-
-    fn populate_peers<F>(&mut self, f: F)
-    where
-        F: FnMut() -> Option<Vec<Box<Peer>>>;
-}
+use super::{
+    msg::{Kind, Method, Msg}
+};
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -44,80 +44,57 @@ impl Msg for Message {
         self.ver
     }
 
-    fn with_id(&mut self, nodeid: &Id) {
-        self.id = Some(nodeid.clone())
+    fn set_id(&mut self, nodeid: Id) {
+        self.id = Some(nodeid)
     }
 
-    fn with_addr(&mut self, addr: &SocketAddr) {
-        self.addr = Some(addr.clone())
+    fn set_addr(&mut self, addr: SocketAddr) {
+        self.addr = Some(addr)
     }
 
-    fn with_txid(&mut self, txid: i32) {
+    fn set_txid(&mut self, txid: i32) {
         self.txid = txid
     }
 
-    fn with_ver(&mut self, ver: i32) {
+    fn set_ver(&mut self, ver: i32) {
         self.ver = ver
     }
 
-    fn associated_call(&self) -> Option<Box<RpcCall>> {
+    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
         unimplemented!()
     }
-
-    fn with_associated_call(&mut self, _: Box<RpcCall>) {
+    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
         unimplemented!()
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
-}
 
-impl lookup::Result for Message {
-    fn nodes4(&self) -> &[NodeInfo] {
-        &self.nodes4.as_ref().unwrap()
+    fn to_cbor(&self) -> CVal {
+        unimplemented!()
     }
 
-    fn nodes6(&self) -> &[NodeInfo] {
-        &self.nodes6.as_ref().unwrap()
+    fn from_cbor(&mut self, _: &CVal) -> bool {
+        unimplemented!()
+    }
+
+    fn nodes4(&self) -> &[NodeInfo] {
+        &self.nodes4.as_ref().unwrap()
     }
 
     fn token(&self) -> i32 {
         self.token
     }
 
-    fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>,
-    {
-        match want4 {
-            true => self.nodes4 = f(),
-            false => {}
-        }
+    fn populate_closest_nodes4(&mut self, nodes: Vec<NodeInfo>) {
+        self.nodes4 = Some(nodes)
     }
 
-    fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>,
-    {
-        match want6 {
-            true => self.nodes6 = f(),
-            false => {}
-        }
+    fn populate_token(&mut self, token: i32) {
+        self.token = token
     }
 
-    fn populate_token<F>(&mut self, want_token: bool, f: F)
-    where
-        F: FnOnce() -> i32,
-    {
-        match want_token {
-            true => self.token = f(),
-            false => {}
-        }
-    }
-}
-
-impl PeerResult for Message {
     fn has_peers(&self) -> bool {
         unimplemented!()
     }
@@ -126,14 +103,12 @@ impl PeerResult for Message {
         unimplemented!()
     }
 
-    fn populate_peers<F>(&mut self, mut f: F)
-    where
-        F: FnMut() -> Option<Vec<Box<Peer>>>,
-    {
-        self.peers = f()
+    fn populate_peers(&mut self, peers: Vec<Box<Peer>>) {
+        self.peers = Some(peers);
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -160,6 +135,12 @@ impl Message {
             token: 0,
             peers: None,
         }
+    }
+
+    pub(crate) fn from(input: &CVal) -> Result<Box<dyn Msg>, error::Error> {
+        let mut msg = Box::new(Self::new());
+        msg.from_cbor(input);
+        Ok(msg as Box<dyn Msg>)
     }
 }
 

@@ -20,7 +20,7 @@ impl DataStorage for SqliteStorage {
         //TODO
     }
 
-    fn get_value(&self, _: &Id) -> Option<Box<Value>> {
+    fn value(&self, _: &Id) -> Option<Box<Value>> {
         unimplemented!()
     }
 
@@ -40,15 +40,15 @@ impl DataStorage for SqliteStorage {
         unimplemented!()
     }
 
-    fn get_persistent_values(&self, _: &SystemTime) -> Vec<Box<Value>> {
+    fn persistent_values(&self, _: &SystemTime) -> Vec<Box<Value>> {
         unimplemented!()
     }
 
-    fn get_all_values(&self) -> Vec<Box<Value>> {
+    fn values(&self) -> Vec<Box<Value>> {
         unimplemented!()
     }
 
-    fn get_peers(&self, _: &Id, _: i32) -> Vec<Box<Peer>> {
+    fn peers(&self, _: &Id, _: i32) -> Vec<Box<Peer>> {
         unimplemented!()
     }
 
@@ -80,11 +80,11 @@ impl DataStorage for SqliteStorage {
         unimplemented!()
     }
 
-    fn get_perisistent_peers(&mut self, _: bool) {
+    fn perisistent_peers(&mut self, _: bool) -> Vec<Box<Peer>>{
         unimplemented!()
     }
 
-    fn get_all_peers(&mut self) -> Vec<Box<Id>> {
+    fn peer_ids(&mut self) -> Vec<Box<Id>> {
         unimplemented!()
     }
 

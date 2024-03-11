@@ -1,107 +1,133 @@
-use std::boxed::Box;
+use std::net::SocketAddr;
 use std::cmp::Ordering;
-use std::collections::LinkedList;
 use std::vec::Vec;
+use std::collections::HashSet;
 
-use super::candidate_node::CandidateNode;
 use crate::id::{distance, Id};
 use crate::node_info::NodeInfo;
+use super::candidate_node::CandidateNode;
 
-#[allow(dead_code)]
+#[derive(Clone)]
 pub(crate) struct ClosestCandidates {
     target: Id,
     capacity: usize,
-
-    closest: LinkedList<Box<CandidateNode>>,
+    dedup_ids: HashSet<Id>,
+    dedup_addrs: HashSet<SocketAddr>,
+    closest: Vec<Box<CandidateNode>>,
 }
 
 #[allow(dead_code)]
 impl ClosestCandidates {
     pub(crate) fn new(target: &Id, capacity: usize) -> Self {
-        ClosestCandidates {
+        Self {
             target: target.clone(),
             capacity,
-            closest: LinkedList::new(),
+            dedup_ids: HashSet::new(),
+            dedup_addrs: HashSet::new(),
+            closest: Vec::new(),
         }
+    }
+
+    fn reached_capacity(&self) -> bool {
+        self.closest.len() >= self.capacity
+    }
+
+    fn size(&self) -> usize {
+        self.closest.len()
     }
 
     pub(crate) fn get(&self, id: &Id) -> Option<&Box<CandidateNode>> {
+        let mut cn = None;
         for item in self.closest.iter() {
-            if item.node().id() == id {
-                return Some(&item);
+            if item.nodeid() == id {
+                cn = Some(item);
+                break;
             }
         }
-        None
+        cn
     }
 
     pub(crate) fn remove(&mut self, id: &Id) -> Option<Box<CandidateNode>> {
-        let mut at: usize = 0;
+        let mut pos: usize = 0;
         for item in self.closest.iter() {
-            if item.node().id() != id {
-                at += 1;
+            if item.nodeid() == id {
+                break;
             }
+            pos += 1;
         }
 
-        if at >= self.closest.len() {
-            return None;
+        let mut removed = None;
+        if pos < self.closest.len() {
+            let mut splitted = self.closest.split_off(pos);
+            removed = splitted.pop();
+            self.closest.append(&mut splitted);
         }
-
-        let mut splitted = self.closest.split_off(at);
-        let removed = splitted.pop_front();
-        self.closest.append(&mut splitted);
-        return removed;
+        removed
     }
 
-    pub(crate) fn next(&mut self) -> Option<&Box<CandidateNode>> {
-        let mut candidates: Vec<&Box<CandidateNode>> = Vec::with_capacity(self.closest.len());
+    pub(crate) fn next(&self) -> Option<&Box<CandidateNode>> {
+        let mut cns = Vec::with_capacity(self.closest.len());
         self.closest.iter().for_each(|item| {
             if item.is_eligible() {
-                candidates.push(&item);
+                cns.push(item);
             }
         });
 
-        if !candidates.is_empty() {
-            candidates.sort_by(|a, b| {
-                let comparison = a.pinged() - b.pinged();
-                if comparison != 0 {
-                    return match comparison < 0 {
-                        true => Ordering::Less,
-                        false => Ordering::Greater,
-                    };
-                }
-                self.target.three_way_compare(a.node().id(), b.node().id())
-            });
-            return candidates.pop();
-        }
-        None
+        cns.sort_by(|cn1, cn2| self.candidate_order(cn1,cn2));
+        cns.pop()
     }
 
     pub(crate) fn head(&self) -> Id {
         match self.closest.is_empty() {
             true => distance(&self.target, &Id::max()),
-            false => self.closest.front().unwrap().node().id().clone(),
+            false => self.closest.iter().next().unwrap().nodeid().clone()
         }
     }
 
     pub(crate) fn tail(&self) -> Id {
         match self.closest.is_empty() {
             true => distance(&self.target, &Id::max()),
-            false => self.closest.back().unwrap().node().id().clone(),
+            false => self.closest.iter().last().unwrap().nodeid().clone(),
         }
     }
 
-    pub(crate) fn add(&mut self, _: &[NodeInfo]) {
-        unimplemented!()
+    pub(crate) fn add(&mut self, candidates: &[NodeInfo]) {
+        let mut filtered = Vec::new();
+        for item in candidates.iter() {
+            if !self.dedup_ids.insert(item.id().clone()) ||
+                !self.dedup_addrs.insert(item.socket_addr().clone()) {
+                continue;
+            }
+            filtered.push(Box::new(CandidateNode::new(item, false)));
+        }
+
+        filtered.sort_by(|cn1, cn2|
+            self.target.three_way_compare(cn1.nodeid(), cn2.nodeid())
+        );
+
+        self.closest.append(&mut filtered);
+        if self.closest.len() >= self.capacity {
+            let mut to_remove = Vec::new();
+            self.closest.iter().for_each(|item| {
+                if !item.is_inflight() {
+                    to_remove.push(item);
+                }
+            });
+
+            if to_remove.len() > self.capacity {
+                to_remove.sort_by(|cn1, cn2| self.candidate_order(cn1, cn2));
+                while to_remove.len() > self.capacity {
+                    _ = to_remove.pop()
+                }
+            }
+        }
     }
 
     fn candidate_order(&self, a: &CandidateNode, b: &CandidateNode) -> Ordering {
-        let comparison = a.pinged() - b.pinged();
-        if comparison != 0 {
-            return match comparison < 0 {
-                true => Ordering::Less,
-                false => Ordering::Greater,
-            };
+        match a.pinged().cmp(&b.pinged()) {
+            Ordering::Equal => self.target.three_way_compare(a.nodeid(), b.nodeid()),
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater => Ordering::Greater,
         }
-        self.target.three_way_compare(a.node().id(), b.node().id())
     }
 }

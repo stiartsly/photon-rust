@@ -13,14 +13,15 @@ use crate::cryptobox;
 use crate::id::Id;
 use crate::error::Error;
 use crate::config::Config;
-use crate::node_info::NodeInfo;
+use crate::NodeInfo;
+use crate::NodeStatus;
 use crate::peer::Peer;
 use crate::value::Value;
 use crate::signature::KeyPair;
-use crate::node_status::NodeStatus;
 use crate::crypto_cache::CryptoCache;
 use crate::lookup_option::LookupOption;
 use crate::server::{self, Server};
+use crate::bootstrap::BootstrapZone;
 
 pub struct Node {
     id: Id,
@@ -34,7 +35,9 @@ pub struct Node {
     status: NodeStatus,
     storage_path: String,
 
-    worker: Option<JoinHandle<()>>, // engine working thread.
+    bootstrap_zone: Arc<Mutex<BootstrapZone>>,
+
+    thread: Option<JoinHandle<()>>, // engine working thread.
     quit: Arc<Mutex<bool>>, // notification handle
 }
 
@@ -67,28 +70,19 @@ impl Node {
         match fs::metadata(&keypath) {
             Ok(metadata) => {
                 if metadata.is_dir() {
-                    error!(
-                        "Key file path {} is an existing directory. DHT node
-                        will not be able to persist node key there.",
-                        keypath
-                    );
-                    return Err(Error::State(format!(
-                        "Bad file path {}, untable to persist node key",
-                        keypath
-                    )));
+                    let str = format!("Bad file path: {}. DHT node will not be able to persist node key there.", keypath);
+                    error!("{}", str);
+                    return Err(Error::State(str));
                 };
                 keypair = load_key(&keypath)
                     .map_err(|err| {
-                        error!("Loading key data error {}", err);
-                        return err;
-                    })
-                    .ok();
+                        error!("Loading key data error {}", err); err
+                    }).ok();
             }
             Err(_) => {
                 _ = keypair.insert(KeyPair::random());
                 _ = store_key(keypair.as_ref().unwrap(), &keypath).map_err(|err| {
-                    error!("Perisisting key data error {}", err);
-                    return err;
+                    error!("Perisisting key data error {}", err); err
                 })
             }
         };
@@ -97,13 +91,13 @@ impl Node {
         let id = Id::from_signature_key(unwrap!(keypair).public_key());
         let idpath = path.clone() + "id";
         store_nodeid(&id, &idpath).map_err(|err| {
-            error!("Persisting node Id data error {}", err);
-            return err;
+            error!("Persisting node Id data error {}", err); err
         })?;
 
         info!("Current DHT node Id {}", id);
 
         Ok(Node {
+            bootstrap_zone: Arc::new(Mutex::new(BootstrapZone::from(cfg.bootstrap_nodes()))),
             id,
             cfg,
             signature_keypair: unwrap!(keypair).clone(),
@@ -112,7 +106,7 @@ impl Node {
             status: NodeStatus::Stopped,
             option: LookupOption::Conservative,
             storage_path: path,
-            worker: None,
+            thread: None,
             quit: Arc::new(Mutex::new(false)),
         })
     }
@@ -125,7 +119,7 @@ impl Node {
         self.status = NodeStatus::Initializing;
         info!("DHT node {} is starting...", self.id);
 
-        // Parameters used to create the NodeEngine instance:
+        // Parameters used to create the working server instance:
         // - node id: Unique identifier for the node.
         // - storage path: Path used to save key information for this node.
         // - encryption keypair: Used for encrypting and decrypting incoming and
@@ -134,30 +128,33 @@ impl Node {
             self.id.clone(),
             self.storage_path.clone(),
             self.encryption_keypair.clone(),
+            Arc::clone(&self.bootstrap_zone),
         );
 
-        // Parameters used to run the NodeEngine instance.
+        // Parameters used to run the server instance.
         // - addr4: socket ipv4 address
         // - addr6: socket ipv6 address
-        let dhts = (
-            self.cfg.addr4().clone(),
-            self.cfg.addr6().clone()
-        );
+        let addr4 = self.cfg.addr4().clone();
 
         // Flag used to signal the spawned thread to stop execution.
         let quit = Arc::clone(&self.quit);
-        self.worker = Some(thread::spawn(move || {
-            let server = Rc::new(RefCell::new(
-                Server::new(params.0, params.1, params.2)
-            ));
 
-            match server::start_tweak(&server, dhts.0, dhts.1) {
+        self.thread = Some(thread::spawn(move || {
+            let server = Rc::new(RefCell::new(Server::new(params)));
+
+            match server::start_tweak(Rc::clone(&server), addr4.unwrap()) {
                 Ok(_) => {
-                    server.borrow_mut().run_loop(&quit).expect_err("loop abortion");
+                    _ = server::run_loop(
+                        Rc::clone(&server),
+                        server.borrow().dht4(),
+                        Arc::clone(&quit),
+                    ).map_err(|err| {
+                        error!("Unexpected error happened in the loop: {}.", err);
+                    });
                     server.borrow_mut().stop();
                 },
                 Err(err) => {
-                    error!("Starting node server error {}, aborted the routine.", err);
+                    error!("Starting node server error {}, aborted.", err);
                 }
             }
 
@@ -188,8 +185,8 @@ impl Node {
         }
         drop(quit);
 
-        self.worker.take().unwrap().join().expect("Join worker error");
-        self.worker = None;
+        self.thread.take().unwrap().join().expect("Join thread error");
+        self.thread = None;
         self.status = NodeStatus::Stopped;
 
         info!("DHT node {} stopped", self.id);
@@ -214,6 +211,12 @@ impl Node {
 
     pub fn lookup_option(&self) -> LookupOption {
         self.option
+    }
+
+    pub fn bootstrap(&mut self, nodes: &[NodeInfo]) {
+        let mut zone = self.bootstrap_zone.lock().unwrap();
+        zone.push_many(nodes);
+        drop(zone);
     }
 
     pub async fn find_node_with_option(

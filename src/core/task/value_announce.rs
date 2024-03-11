@@ -2,14 +2,13 @@ use std::any::Any;
 use std::boxed::Box;
 use std::collections::LinkedList;
 use std::rc::Rc;
-use std::time::SystemTime;
 
 use super::{
     closest_set::ClosestSet,
     task::{State, Task},
 };
 use crate::{
-    kbucket::KBucket, kbucket_entry::KBucketEntry, msg::msg::Msg, rpccall::RpcCall, value::Value,
+    kbucket::KBucket, kbucket_entry::KBucketEntry, value::Value,
 };
 
 #[allow(dead_code)]
@@ -38,7 +37,7 @@ impl Task for ValueAnnounceTask {
         unimplemented!()
     }
 
-    fn with_name(&mut self, _: &str) {
+    fn set_name(&mut self, _: &str) {
         unimplemented!()
     }
 
@@ -58,18 +57,6 @@ impl Task for ValueAnnounceTask {
         unimplemented!()
     }
 
-    fn started_time(&self) -> &SystemTime {
-        unimplemented!()
-    }
-
-    fn finished_time(&self) -> &SystemTime {
-        unimplemented!()
-    }
-
-    fn age(&self) -> u128 {
-        unimplemented!()
-    }
-
     fn set_nested(&mut self, _: Box<dyn Task>) {
         unimplemented!()
     }
@@ -79,34 +66,6 @@ impl Task for ValueAnnounceTask {
     }
 
     fn cancel(&mut self) {
-        unimplemented!()
-    }
-
-    fn call_sent(&mut self, _: &Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>) {
-        unimplemented!()
-    }
-
-    fn call_error(&mut self, _: &Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    fn call_timeout(&mut self, _: &Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    fn prepare(&mut self) {
-        unimplemented!()
-    }
-
-    fn update(&mut self) {
-        unimplemented!()
-    }
-
-    fn is_done(&self) -> bool {
         unimplemented!()
     }
 

@@ -1,12 +1,21 @@
 use std::any::Any;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
+use ciborium::Value as CVal;
 
-use super::lookup;
-use super::msg::{Kind, Method, Msg};
-use crate::id::Id;
-use crate::rpccall::RpcCall;
-use crate::version;
+use crate::{
+    version,
+    error,
+    id::Id,
+    rpccall::RpcCall
+};
+
+use super::{
+    msg::{Kind, Method, Msg}
+};
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -33,36 +42,42 @@ impl Msg for Message {
         self.ver
     }
 
-    fn with_id(&mut self, nodeid: &Id) {
-        self.id = Some(nodeid.clone())
+    fn set_id(&mut self, nodeid: Id) {
+        self.id = Some(nodeid)
     }
 
-    fn with_addr(&mut self, addr: &SocketAddr) {
-        self.addr = Some(addr.clone())
+    fn set_addr(&mut self, addr: SocketAddr) {
+        self.addr = Some(addr)
     }
 
-    fn with_txid(&mut self, txid: i32) {
+    fn set_txid(&mut self, txid: i32) {
         self.txid = txid
     }
 
-    fn with_ver(&mut self, ver: i32) {
+    fn set_ver(&mut self, ver: i32) {
         self.ver = ver
     }
 
-    fn associated_call(&self) -> Option<Box<RpcCall>> {
+    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
         unimplemented!()
     }
 
-    fn with_associated_call(&mut self, _: Box<RpcCall>) {
+    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
         unimplemented!()
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
-}
 
-impl lookup::Condition for Message {
+    fn to_cbor(&self) -> CVal {
+        unimplemented!()
+    }
+
+    fn from_cbor(&mut self, _: &CVal) -> bool {
+        unimplemented!()
+    }
+
     fn target(&self) -> &Id {
         &self.target.as_ref().unwrap()
     }
@@ -71,32 +86,24 @@ impl lookup::Condition for Message {
         self.want4
     }
 
-    fn want6(&self) -> bool {
-        self.want6
-    }
-
     fn want_token(&self) -> bool {
         self.want_token
     }
 
-    fn with_target(&mut self, target: &Id) {
-        self.target = Some(target.clone())
+    fn with_target(&mut self, target: Id) {
+        self.target = Some(target)
     }
 
-    fn with_want4(&mut self) {
-        self.want4 = true
+    fn with_want4(&mut self, want: bool) {
+        self.want4 = want
     }
 
-    fn with_want6(&mut self) {
-        self.want6 = true
-    }
-
-    fn with_token(&mut self) {
+    fn with_want_token(&mut self) {
         self.want_token = true
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -110,7 +117,6 @@ pub(crate) struct Message {
     want_token: bool,
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {
@@ -125,6 +131,12 @@ impl Message {
         }
     }
 
+    pub(crate) fn from(input: &CVal) -> Result<Box<dyn Msg>, error::Error> {
+        let mut msg = Box::new(Self::new());
+        msg.from_cbor(input);
+        Ok(msg as Box<dyn Msg>)
+    }
+
     fn want(&self) -> i32 {
         let mut want = 0;
 
@@ -137,7 +149,6 @@ impl Message {
         if self.want_token {
             want |= 0x04
         }
-
         want
     }
 }

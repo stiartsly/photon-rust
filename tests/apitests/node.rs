@@ -1,5 +1,5 @@
 use boson::id::Id;
-use boson::node_info::NodeInfo;
+use boson::NodeInfo;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 #[test]

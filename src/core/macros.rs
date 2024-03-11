@@ -32,3 +32,13 @@ macro_rules! unwrap {
         $val.as_ref().unwrap()
     }};
 }
+
+#[macro_export]
+macro_rules! as_kind_name {
+    ($val:expr) => {{
+        match $val.is_ipv4() {
+            true => "ipv4",
+            false => "ipv6"
+        }
+    }};
+}

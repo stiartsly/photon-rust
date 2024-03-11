@@ -1,5 +1,6 @@
 use std::fmt;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
+use ciborium::value::Value;
 
 use crate::id::Id;
 use crate::version;
@@ -28,6 +29,35 @@ impl NodeInfo {
             addr: addr.clone(),
             ver: 0,
         }
+    }
+
+    pub(crate) fn try_from_cbor(input: &Value) -> Option<Self> {
+        let mut result = None;
+
+        if let Some(array) = input.as_array().as_ref() {
+            let id = Id::from_cbor(&array[0]);
+            let mut port = 0;
+            if let Some(_port) = array[2].as_integer() {
+                port = _port.try_into().unwrap()
+            }
+
+            let mut addr = None;
+            if let Some(bytes) = array[1].as_bytes() {
+                if bytes.len() == 4 {
+                    let ip: [u8;4] = bytes.as_slice().try_into().unwrap();
+                    addr = Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), port));
+                } else if bytes.len() == 16 {
+                    let ip: [u8;16] = bytes.as_slice().try_into().unwrap();
+                    addr = Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port));
+                } else {
+                    panic!("invalid bytes length");
+                }
+            }
+            result = Some(
+                Self { id, addr: addr.unwrap(), ver: 0}
+            )
+        }
+        result
     }
 
     pub const fn ip(&self) -> IpAddr {
@@ -74,6 +104,19 @@ impl NodeInfo {
 
     pub fn matches(&self, other: &NodeInfo) -> bool {
         self.id == other.id || self.addr == other.addr
+    }
+
+    pub(crate) fn to_cbor(&self) -> Value {
+        let addr = match self.addr.ip() {
+            IpAddr::V4(addr4) => Value::Bytes(addr4.octets().to_vec()),
+            IpAddr::V6(addr6) => Value::Bytes(addr6.octets().to_vec()),
+        };
+
+        Value::Array(vec![
+            self.id.to_cbor(),
+            addr,
+            Value::Integer(self.addr.port().into())
+        ])
     }
 }
 

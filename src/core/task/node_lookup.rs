@@ -1,33 +1,39 @@
-use log::debug;
+use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::net::SocketAddr;
 use std::any::Any;
 use std::collections::HashMap;
-use std::fmt;
 use std::time::SystemTime;
+use log::{error, info, debug};
 
 use crate::{
     constants,
     id::Id,
-    node_info::NodeInfo,
-    rpccall::RpcCall
+    node_info::{NodeInfo, Reachable},
+    rpccall::RpcCall,
+    routing_table::RoutingTable,
+    kclosest_nodes::KClosestNodes,
+    error::Error,
 };
 
 use crate::msg::{
-    find_node_rsp::{self},
-    lookup::Result as MsgResult,
+    find_node_req,
+    find_node_rsp,
     msg::{self, Msg},
+
 };
 
 use super::{
     candidate_node::CandidateNode,
     closest_candidates::ClosestCandidates,
     closest_set::ClosestSet,
-    lookup::LookupTask,
-    task::{State, Task},
+    task::{State, Task, Lookup},
 };
 
 #[allow(dead_code)]
 pub(crate) struct NodeLookupTask {
-    //dht: Rc<&'a DHT>,
+    routing_table: Rc<RefCell<RoutingTable>>,
     taskid: i32,
     name: String,
     state: State,
@@ -37,7 +43,7 @@ pub(crate) struct NodeLookupTask {
     finished_time: SystemTime,
 
     inflights: HashMap<usize, Box<RpcCall>>,
-    listeners: Vec<Box<dyn FnMut(&Box<dyn Task>)>>,
+    listeners: Vec<Box<dyn FnOnce(&dyn Task)>>,
 
     // Lookup
     target: Id,
@@ -52,9 +58,9 @@ pub(crate) struct NodeLookupTask {
 
 #[allow(dead_code)]
 impl NodeLookupTask {
-    pub(crate) fn new(target: &Id) -> Self {
+    pub(crate) fn new(target: &Id, routing_table: Rc<RefCell<RoutingTable>>) -> Self {
         NodeLookupTask {
-            //dht,
+            routing_table,
             taskid: 0,
             name: String::from("N/A"),
             state: State::Initial,
@@ -77,43 +83,22 @@ impl NodeLookupTask {
     }
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where
-        F: FnMut(&mut dyn Task, Option<Box<NodeInfo>>) + 'static,
+    where F: FnMut(&mut dyn Task, Option<Box<NodeInfo>>) + 'static,
     {
         self.result_fn = Box::new(f);
-    }
-
-    pub(crate) fn add_listener<F>(&mut self, f: F)
-    where
-        F: FnMut(&Box<dyn Task>) + 'static,
-    {
-        self.listeners.push(Box::new(f));
     }
 
     fn remove_listener<F>(&mut self) {
         self.listeners.pop();
     }
 
-    pub(crate) fn with_want_token(&mut self, _: bool) {
-        unimplemented!()
-    }
-
     fn remove_candidate(&mut self, id: &Id) -> Option<Box<CandidateNode>> {
         self.closest_candidates.remove(id)
     }
 
-    /*
-    Sp<CandidateNode> removeCandidate(const Id& id) {
-        return closestCandidates.remove(id);
+    fn add_closest(&mut self, candidate_node: Box<CandidateNode>) {
+        self.closest_set.add(candidate_node);
     }
-
-    Sp<CandidateNode> getNextCandidate() const {
-        return closestCandidates.next();
-    }
-
-    void addClosest(Sp<CandidateNode> candidateNode) {
-        closestSet.add(candidateNode);
-    }*/
 
     pub(crate) fn set_bootstrap(&mut self, bootstrap: bool) {
         self.bootstrap = bootstrap
@@ -121,6 +106,137 @@ impl NodeLookupTask {
 
     pub(crate) fn set_want_token(&mut self, token: bool) {
         self.want_token = token;
+    }
+
+    fn can_request(&self) -> bool {
+        self.inflights.len() < 10 && !self.is_finished()
+    }
+
+    fn prepare(&mut self) {
+        // if we're bootstrapping start from the bucket that has the greatest
+        // possible distance from ourselves so we discover new things along
+        // the (longer) path.
+        let target = match self.bootstrap {
+            true => self.target.distance(&Id::max()),
+            false => self.target.clone()
+        };
+
+        // delay the filling of the todo list until we actually start the task
+        let mut kclosest_nodes = KClosestNodes::new_with_filter(
+            &target,
+            Rc::clone(&self.routing_table),
+            constants::MAX_ENTRIES_PER_BUCKET *2,
+            move |e| e.is_eligible_for_nodes_list()
+        );
+        kclosest_nodes.fill(false);
+        let nodes = kclosest_nodes.as_nodes();
+        self.add_candidates(&nodes);
+    }
+
+    fn update(&mut self) {
+        while self.can_request() {
+            if let None = self.next_candidate() {
+                break;
+            }
+
+            let mut req = Box::new(find_node_req::Message::new());
+            req.with_target(self.target().clone());
+            req.with_want4(true);
+            req.with_want6(false);
+
+            let cn = self.next_candidate().unwrap().clone();
+            if let Err(err) = self.send_call(&cn, req, Box::new(|_| {
+                //cn.set_sent();
+            })) {
+                error!("Error on sending 'findNode' message: {:?}", err);
+            }
+        }
+    }
+
+    fn finish(&mut self) {
+        let expected = vec![
+            State::Initial,
+            State::Queued,
+            State::Running
+        ];
+        if self.set_state(&expected, State::Finished) {
+            self.finished_time = SystemTime::now();
+            info!("Task finished: {}", self);
+            self.notify_completion();
+        }
+    }
+
+    fn call_sent(&mut self, _: &Box<RpcCall>) {}
+
+    fn call_responsed(&mut self, call: &Box<RpcCall>, rsp: &Box<dyn Msg>) {
+        if let Some(mut cn) = self.remove_candidate(call.target_id()) {
+            cn.set_replied();
+            cn.set_token(1);
+            self.add_closest(cn);
+        }
+
+        if !call.matches_id()||
+            rsp.kind() != msg::Kind::Response ||
+            rsp.method() != msg::Method::FindNode {
+            return;
+        }
+
+        if let Some(downcasted) = rsp.as_any().downcast_ref::<find_node_rsp::Message>() {
+            let nodes = downcasted.nodes4(); // TODO:
+            if !nodes.is_empty() {
+                self.add_candidates(nodes);
+            }
+
+            for item in nodes.iter() {
+                if item.id() == &self.target {
+                    //TODO: (self.result_fn)(self.clone(), None)
+                }
+            }
+        }
+    }
+
+    fn call_error(&mut self, call: &Box<RpcCall>) {
+        _ = self.closest_candidates.remove(call.target_id())
+    }
+
+    fn call_timeout(&mut self, call: &Box<RpcCall>) {
+        let mut candidate_node = Box::new(CandidateNode::new(call.target(), false));
+        if candidate_node.unreachable() {
+            self.closest_candidates.remove(candidate_node.nodeid());
+            return;
+        }
+        // Clear the sent time-stamp and make it available again for the next retry
+        candidate_node.clear_sent()
+    }
+
+    fn is_done(&self) -> bool {
+        self.inflights.is_empty() || self.is_finished()
+    }
+
+    fn serialized_update(&mut self) {
+        if self.is_done() {
+            self.finish();
+        }
+
+        if self.can_request() {
+            self.update();
+            if self.is_done() {
+                self.finish()
+            }
+        }
+    }
+
+    fn notify_completion(&mut self) {
+        while let Some(f) = self.listeners.pop() {
+            f(self as &dyn Task)
+        }
+        println!("notify_completion");
+    }
+
+    fn send_call(&mut self, _: &Box<CandidateNode>, _: Box<dyn Msg>, _: Box<dyn FnOnce(&Box<RpcCall>)>)
+        -> Result<(), Error> {
+        println!("send call>>>>>>");
+        Ok(())
     }
 }
 
@@ -132,7 +248,8 @@ impl Task for NodeLookupTask {
     fn name(&self) -> &str {
         self.name.as_str()
     }
-    fn with_name(&mut self, name: &str) {
+
+    fn set_name(&mut self, name: &str) {
         self.name = name.to_string()
     }
 
@@ -140,7 +257,18 @@ impl Task for NodeLookupTask {
         self.state
     }
 
+    fn set_state(&mut self, expected: &[State], state: State) -> bool {
+        match expected.contains(&self.state) {
+            true => { self.state = state; true},
+            false => false,
+        }
+    }
+
     fn nested(&self) -> &Box<dyn Task> {
+        unimplemented!()
+    }
+
+    fn set_nested(&mut self, _: Box<dyn Task>) {
         unimplemented!()
     }
 
@@ -152,116 +280,36 @@ impl Task for NodeLookupTask {
         self.state == State::Finished
     }
 
-    fn started_time(&self) -> &SystemTime {
-        &self.started_time
-    }
-
-    fn finished_time(&self) -> &SystemTime {
-        &self.finished_time
-    }
-
-    fn age(&self) -> u128 {
-        self.started_time.elapsed().unwrap().as_millis()
-    }
-
-    fn set_nested(&mut self, _: Box<dyn Task>) {
-        unimplemented!()
+    fn add_listener(&mut self, f: Box<dyn FnOnce(&dyn Task)>) {
+        self.listeners.push(f)
     }
 
     fn start(&mut self) {
-        if match self.state {
-            State::Initial => {
-                self.state = State::Running;
-                true
-            }
-            State::Queued => {
-                self.state = State::Running;
-                true
-            }
-            _ => false,
-        } {
-            debug!("Task starting: {}", self);
+        let expected = vec![
+            State::Initial,
+            State::Queued
+        ];
+        if self.set_state(&expected, State::Running) {
             self.started_time = SystemTime::now();
-
             self.prepare();
-            //self.serialized_updated();
+            self.serialized_update();
         }
     }
 
     fn cancel(&mut self) {
-        if match self.state {
-            State::Initial => {
-                self.state = State::Canceled;
-                true
-            }
-            State::Queued => {
-                self.state = State::Canceled;
-                true
-            }
-            State::Running => {
-                self.state = State::Canceled;
-                true
-            }
-            _ => false,
-        } {
+        let expected = vec![
+            State::Initial,
+            State::Queued,
+            State::Running
+        ];
+        if self.set_state(expected.as_slice(), State::Canceled) {
             self.finished_time = SystemTime::now();
             debug!("Task canceled: {}", self);
-
-            // self.notify_completion_listeners();
+            self.notify_completion();
         }
+
         // if (!!self.nested)
         //    nested.cancel()
-    }
-
-    fn call_sent(&mut self, _: &Box<RpcCall>) {}
-
-    fn call_responsed(&mut self, call: &Box<RpcCall>, rsp: &Box<dyn Msg>) {
-        // TODO: LookupTask::callResponsed(xxx)
-
-        if !call.matches_id()
-            || rsp.kind() != msg::Kind::Response
-            || rsp.method() != msg::Method::FindNode
-        {
-            return;
-        }
-
-        match rsp.as_any().downcast_ref::<find_node_rsp::Message>() {
-            Some(downcasted) => {
-                let nodes = downcasted.nodes4(); // TODO:
-                if !nodes.is_empty() {
-                    self.add_candidates(&nodes);
-                }
-
-                nodes.iter().for_each(|item| {
-                    if item.id() == self.target() {
-                        //self.result_fn.unwrap()(Some(Box::new(item.clone())), self as &mut dyn Task);
-                    }
-                })
-            }
-            None => {
-                panic!("panic on powncasting to find_node_response msg")
-            }
-        }
-    }
-
-    fn call_error(&mut self, _: &Box<RpcCall>) {
-        //self.as_closest_candidates().remove(call.id())
-    }
-
-    fn call_timeout(&mut self, _: &Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    fn prepare(&mut self) {
-        unimplemented!()
-    }
-
-    fn update(&mut self) {
-        unimplemented!()
-    }
-
-    fn is_done(&self) -> bool {
-        self.inflights.is_empty() || self.is_finished()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -269,33 +317,47 @@ impl Task for NodeLookupTask {
     }
 }
 
-impl LookupTask for NodeLookupTask {
+impl Lookup for NodeLookupTask {
     fn target(&self) -> &Id {
         &self.target
     }
 
-    fn candidate_node(&self) -> &CandidateNode {
-        unimplemented!()
+    fn candidate_node(&self, id: &Id) -> Option<&Box<CandidateNode>>  {
+        self.closest_candidates.get(id)
     }
 
-    fn closest_set(&self) -> ClosestSet {
-        unimplemented!()
+    fn closest_set(&self) -> &ClosestSet {
+        &self.closest_set
     }
 
-    fn add_candidates(&mut self, _: &[NodeInfo]) {
-        unimplemented!()
+    fn add_candidates(&mut self, nodes: &[NodeInfo]) {
+        let mut candidates = Vec::new();
+
+        for item in nodes.iter() {
+            if is_bogon_address(item.socket_addr()) ||
+                self.routing_table.borrow().node_id() == item.id() ||
+                self.routing_table.borrow().node_addr() == item.socket_addr() ||
+                self.closest_set.contains(item.id()) {
+                continue;
+            }
+            candidates.push(item.clone());
+        }
+
+        if !candidates.is_empty() {
+            self.closest_candidates.add(candidates.as_slice())
+        }
     }
 
-    fn remove_candidate(&mut self, _: &Id) {
-        unimplemented!()
+    fn remove_candidate(&mut self, id: &Id) {
+        _ = self.closest_candidates.remove(id)
     }
 
-    fn next_candidate(&self) -> Box<CandidateNode> {
-        unimplemented!()
+    fn next_candidate(&self) -> Option<&Box<CandidateNode>> {
+        self.closest_candidates.next()
     }
 
-    fn add_closest(&mut self, _: &Box<CandidateNode>) {
-        unimplemented!()
+    fn add_closest(&mut self, candidate_node: Box<CandidateNode>) {
+        self.closest_set.add(candidate_node)
     }
 }
 
@@ -311,4 +373,8 @@ impl fmt::Display for NodeLookupTask {
         )?;
         Ok(())
     }
+}
+
+fn is_bogon_address(_: &SocketAddr) -> bool {
+    false
 }

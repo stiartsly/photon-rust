@@ -1,16 +1,17 @@
 use std::time::SystemTime;
 
 use crate::node_info::{NodeInfo, Reachable};
+use crate::id::Id;
 
 #[derive(Clone)]
 pub(crate) struct CandidateNode {
-    node: NodeInfo,
+    ni: NodeInfo,
 
     last_sent: SystemTime,
-    last_reply: SystemTime,
+    last_replied: SystemTime,
 
     reachable: bool,
-    // acked: bool, // TODO: CHECK
+    //acked: bool,
     pinged: i32,
 
     token: i32,
@@ -20,9 +21,9 @@ pub(crate) struct CandidateNode {
 impl CandidateNode {
     pub(crate) fn new(node: &NodeInfo, reachable: bool) -> Self {
         CandidateNode {
-            node: node.clone(),
+            ni: node.clone(),
             last_sent: SystemTime::UNIX_EPOCH,
-            last_reply: SystemTime::UNIX_EPOCH,
+            last_replied: SystemTime::UNIX_EPOCH,
             reachable,
             // acked: false,
             pinged: 0,
@@ -30,8 +31,8 @@ impl CandidateNode {
         }
     }
 
-    pub(crate) fn node(&self) -> &NodeInfo {
-        &self.node
+    pub(crate) fn nodeid(&self) -> &Id {
+        self.ni.id()
     }
 
     pub(crate) fn set_sent(&mut self) {
@@ -48,7 +49,7 @@ impl CandidateNode {
     }
 
     pub(crate) fn set_replied(&mut self) {
-        self.last_reply = SystemTime::now();
+        self.last_replied = SystemTime::now();
     }
 
     pub(crate) fn set_token(&mut self, token: i32) {

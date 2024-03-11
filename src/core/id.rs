@@ -2,6 +2,7 @@ use bs58::decode;
 use hex::FromHexError;
 use std::cmp::Ordering;
 use std::fmt;
+use ciborium::value::Value;
 
 use crate::cryptobox;
 use crate::signature;
@@ -10,8 +11,7 @@ use crate::error::Error;
 pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
 
-#[derive(Default, Clone, PartialEq, Eq, Debug, Hash)]
-
+#[derive(Default, Clone, PartialEq, Ord, Eq, Debug, Hash)]
 pub struct Id([u8; ID_BYTES]);
 
 impl Id {
@@ -42,6 +42,13 @@ impl Id {
         let mut bytes = [0u8; ID_BYTES];
         bytes.copy_from_slice(input);
         Id(bytes)
+    }
+
+    pub(crate) fn from_cbor(input: &Value) -> Self {
+        match input.as_bytes() {
+            Some(bytes) => Self::from_bytes(bytes),
+            None => Id([0x0; ID_BYTES])
+        }
     }
 
     pub fn try_from_hex(input: &str) -> Result<Self, Error> {
@@ -84,11 +91,11 @@ impl Id {
         Id([0xFF; ID_BYTES])
     }
 
-    pub fn to_hex(&self) -> String {
+    pub fn into_hex(&self) -> String {
         hex::encode(&self.0)
     }
 
-    pub fn to_base58(&self) -> String {
+    pub fn into_base58(&self) -> String {
         bs58::encode(self.0)
             .with_alphabet(bs58::Alphabet::DEFAULT)
             .into_string()
@@ -118,7 +125,7 @@ impl Id {
         self.0.as_slice()
     }
 
-    pub(crate) fn as_mut_bytes(&mut self) -> &mut [u8] {
+    pub(crate) fn as_bytes_mut(&mut self) -> &mut [u8] {
         self.0.as_mut_slice()
     }
 
@@ -137,6 +144,10 @@ impl Id {
         let a = id1.0[mmi] ^ self.0[mmi];
         let b = id2.0[mmi] ^ self.0[mmi];
         a.cmp(&b)
+    }
+
+    pub(crate) fn to_cbor(&self) -> Value {
+        Value::Bytes(self.0.to_vec())
     }
 }
 
@@ -187,7 +198,13 @@ pub(crate) fn bits_copy(src: &Id, dst: &mut Id, depth: i32) {
 
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", self.to_hex())?;
+        write!(f, "{}", self.into_base58())?;
         Ok(())
+    }
+}
+
+impl PartialOrd for Id {
+    fn partial_cmp(&self, other: &Id) -> Option<Ordering> {
+        Some(self.0.cmp(&other.0))
     }
 }

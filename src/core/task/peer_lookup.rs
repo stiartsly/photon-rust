@@ -1,8 +1,7 @@
 use std::any::Any;
-use std::time::SystemTime;
 
 use super::task::{State, Task};
-use crate::{id::Id, msg::msg::Msg, peer::Peer, rpccall::RpcCall};
+use crate::{id::Id, peer::Peer};
 
 #[allow(dead_code)]
 pub(crate) struct PeerLookupTask {
@@ -56,7 +55,7 @@ impl Task for PeerLookupTask {
         unimplemented!()
     }
 
-    fn with_name(&mut self, _: &str) {
+    fn set_name(&mut self, _: &str) {
         unimplemented!()
     }
 
@@ -76,18 +75,6 @@ impl Task for PeerLookupTask {
         unimplemented!()
     }
 
-    fn started_time(&self) -> &SystemTime {
-        unimplemented!()
-    }
-
-    fn finished_time(&self) -> &SystemTime {
-        unimplemented!()
-    }
-
-    fn age(&self) -> u128 {
-        unimplemented!()
-    }
-
     fn set_nested(&mut self, _: Box<dyn Task>) {
         unimplemented!()
     }
@@ -97,34 +84,6 @@ impl Task for PeerLookupTask {
     }
 
     fn cancel(&mut self) {
-        unimplemented!()
-    }
-
-    fn call_sent(&mut self, _: &Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>) {
-        unimplemented!()
-    }
-
-    fn call_error(&mut self, _: &Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    fn call_timeout(&mut self, _: &Box<RpcCall>) {
-        unimplemented!()
-    }
-
-    fn prepare(&mut self) {
-        unimplemented!()
-    }
-
-    fn update(&mut self) {
-        unimplemented!()
-    }
-
-    fn is_done(&self) -> bool {
         unimplemented!()
     }
 

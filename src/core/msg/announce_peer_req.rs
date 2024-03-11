@@ -1,11 +1,21 @@
 use std::any::Any;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
+use ciborium::Value as CVal;
 
-use super::msg::{Kind, Method, Msg};
-use crate::id::Id;
-use crate::peer::Peer;
-use crate::rpccall::RpcCall;
+use crate::{
+    error,
+    id::Id,
+    peer::Peer,
+    rpccall::RpcCall
+};
+
+use super::{
+    msg::{Kind, Method, Msg}
+};
 
 pub(crate) trait AnnounceOption {
     fn token(&self) -> i32;
@@ -40,32 +50,40 @@ impl Msg for Message {
         self.ver
     }
 
-    fn with_id(&mut self, nodeid: &Id) {
-        self.id = Some(nodeid.clone())
+    fn set_id(&mut self, nodeid: Id) {
+        self.id = Some(nodeid)
     }
 
-    fn with_addr(&mut self, addr: &SocketAddr) {
-        self.addr = Some(addr.clone())
+    fn set_addr(&mut self, addr: SocketAddr) {
+        self.addr = Some(addr)
     }
 
-    fn with_txid(&mut self, txid: i32) {
+    fn set_txid(&mut self, txid: i32) {
         self.txid = txid
     }
 
-    fn with_ver(&mut self, ver: i32) {
+    fn set_ver(&mut self, ver: i32) {
         self.ver = ver
     }
 
-    fn associated_call(&self) -> Option<Box<RpcCall>> {
+    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
         unimplemented!()
     }
 
-    fn with_associated_call(&mut self, _: Box<RpcCall>) {
+    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
         unimplemented!()
     }
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn to_cbor(&self) -> CVal {
+        unimplemented!()
+    }
+
+    fn from_cbor(&mut self, _: &CVal)-> bool {
+        unimplemented!()
     }
 }
 
@@ -87,7 +105,7 @@ impl AnnounceOption for Message {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -98,7 +116,6 @@ pub(crate) struct Message {
     peers: Vec<Box<Peer>>,
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {
@@ -110,9 +127,14 @@ impl Message {
             peers: Vec::new(),
         }
     }
+
+    pub(crate) fn from(input: &CVal) -> Result<Box<dyn Msg>, error::Error> {
+        let mut msg = Box::new(Self::new());
+        msg.from_cbor(input);
+        Ok(msg as Box<dyn Msg>)
+    }
 }
 
-#[allow(dead_code)]
 impl fmt::Display for Message {
     fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
         unimplemented!();

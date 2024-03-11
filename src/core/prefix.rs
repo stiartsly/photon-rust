@@ -10,7 +10,7 @@ pub struct Prefix {
 
 impl Prefix {
     pub fn new() -> Self {
-        Prefix {
+        Self {
             id: Id::default(),
             depth: -1,
         }
@@ -22,6 +22,10 @@ impl Prefix {
 
     pub const fn depth(&self) -> i32 {
         self.depth
+    }
+
+    pub fn is_prefix_of(&self, id: &Id) -> bool {
+        id::bits_equal(&self.id, id, self.depth)
     }
 
     pub const fn is_splittable(&self) -> bool {
@@ -53,12 +57,12 @@ impl Prefix {
         parent
     }
 
-    pub fn split_branch(&mut self, high_branch: bool) -> Prefix {
+    pub fn split_branch(&self, high_branch: bool) -> Prefix {
         let mut branch = self.clone();
         let depth = branch.depth as usize;
         branch.depth += 1;
 
-        let bytes = self.id.as_mut_bytes();
+        let bytes = branch.id.as_bytes_mut();
         let val = 0x80 >> (depth % 8);
         if high_branch {
             bytes[depth / 8] |= val;
@@ -80,7 +84,7 @@ impl Prefix {
 
     fn set_tail(&mut self, bit: i32) {
         let index = (bit >> 3) as usize;
-        let bytes = self.id.as_mut_bytes();
+        let bytes = self.id.as_bytes_mut();
         bytes[index] &= !(0x80 >> (bit & 0x07))
     }
 }
@@ -95,7 +99,6 @@ impl fmt::Display for Prefix {
         let slice = self.id.as_bytes()[..end_index].to_vec();
 
         write!(f, "{}/{}", hex::encode(slice), self.depth)?;
-
         Ok(())
     }
 }

@@ -88,11 +88,6 @@ impl Peer {
         peer
     }
 
-    #[allow(dead_code)]
-    fn pack(_: &Builder) -> Self {
-        unimplemented!()
-    }
-
     pub const fn id(&self) -> &Id {
         &self.pk
     }

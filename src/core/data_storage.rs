@@ -8,7 +8,7 @@ use crate::error::Error;
 pub(crate) trait DataStorage {
     fn open(&mut self, _: &str) -> Result<(), Error>;
 
-    fn get_value(&self, _: &Id) -> Option<Box<Value>>;
+    fn value(&self, _: &Id) -> Option<Box<Value>>;
     fn remove_value(&mut self, _: &Id) -> bool;
 
     fn put_value_and_update(
@@ -22,10 +22,10 @@ pub(crate) trait DataStorage {
     }
 
     fn update_value_last_announce(&mut self, value_id: &Id);
-    fn get_persistent_values(&self, last_announce_before: &SystemTime) -> Vec<Box<Value>>;
-    fn get_all_values(&self) -> Vec<Box<Value>>;
+    fn persistent_values(&self, last_announce_before: &SystemTime) -> Vec<Box<Value>>;
+    fn values(&self) -> Vec<Box<Value>>;
 
-    fn get_peers(&self, peer_id: &Id, max_peers: i32) -> Vec<Box<Peer>>;
+    fn peers(&self, peer_id: &Id, max_peers: i32) -> Vec<Box<Peer>>;
     fn get_peer(&self, peer_id: &Id, origin: &Id) -> Box<Peer>;
     fn remove_peer(&mut self, peer_id: &Id, origin: &Id) -> bool;
 
@@ -41,8 +41,8 @@ pub(crate) trait DataStorage {
     }
 
     fn update_peer_last_announce(&mut self, peer_id: &Id, origin: &Id);
-    fn get_perisistent_peers(&mut self, last_annouce_before: bool);
-    fn get_all_peers(&mut self) -> Vec<Box<Id>>;
+    fn perisistent_peers(&mut self, last_annouce_before: bool) -> Vec<Box<Peer>>;
+    fn peer_ids(&mut self) -> Vec<Box<Id>>;
 
     fn close(&mut self);
 }

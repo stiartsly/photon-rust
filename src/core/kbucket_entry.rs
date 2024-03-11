@@ -3,10 +3,11 @@ use std::net::SocketAddr;
 use std::time::SystemTime;
 
 use crate::{
-    as_millis, constants,
+    as_millis,
+    constants,
+    version,
     id::Id,
     node_info::{NodeInfo, Reachable},
-    version,
 };
 
 /**
@@ -15,7 +16,7 @@ use crate::{
  */
 #[derive(Clone, Debug)]
 pub(crate) struct KBucketEntry {
-    node: NodeInfo,
+    ni: NodeInfo,
 
     created: SystemTime,
     last_seen: SystemTime,
@@ -28,8 +29,8 @@ pub(crate) struct KBucketEntry {
 #[allow(dead_code)]
 impl KBucketEntry {
     pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
-        KBucketEntry {
-            node: NodeInfo::new(id, addr),
+        Self {
+            ni: NodeInfo::new(id, addr),
             created: SystemTime::UNIX_EPOCH,
             last_seen: SystemTime::UNIX_EPOCH,
             last_sent: SystemTime::UNIX_EPOCH,
@@ -38,31 +39,35 @@ impl KBucketEntry {
         }
     }
 
-    pub(crate) fn id(&self) -> &Id {
-        &self.node.id()
+    pub(crate) fn node_id(&self) -> &Id {
+        &self.ni.id()
+    }
+
+    pub(crate) fn node_addr(&self) -> &SocketAddr {
+        self.ni.socket_addr()
     }
 
     pub(crate) fn node(&self) -> &NodeInfo {
-        &self.node
+        &self.ni
     }
 
     pub(crate) fn set_version(&mut self, ver: i32) {
-        self.node.set_version(ver)
+        self.ni.set_version(ver)
     }
 
-    pub(crate) fn ceated(&self) -> SystemTime {
+    pub(crate) const fn ceated(&self) -> SystemTime {
         self.created
     }
 
-    pub(crate) fn last_seen(&self) -> SystemTime {
+    pub(crate) const fn last_seen(&self) -> SystemTime {
         self.last_seen
     }
 
-    pub(crate) fn last_sent(&self) -> SystemTime {
+    pub(crate) const fn last_sent(&self) -> SystemTime {
         self.last_sent
     }
 
-    pub(crate) fn failed_requests(&self) -> i32 {
+    pub(crate) const fn failed_requests(&self) -> i32 {
         self.failed_requests
     }
 
@@ -76,6 +81,10 @@ impl KBucketEntry {
         self.last_sent = SystemTime::now();
     }
 
+    pub(crate) fn merge_request_time(&mut self, request_sent: SystemTime) {
+        self.last_sent = SystemTime::max(request_sent, self.last_sent);
+    }
+
     pub(crate) const fn is_eligible_for_nodes_list(&self) -> bool {
         // 1 timeout can occasionally happen. should be fine to hand it out
         // as long as we've verified it at least once
@@ -86,12 +95,11 @@ impl KBucketEntry {
         // allow implicit initial ping during lookups
         // TODO: make this work now that we don't keep unverified entries
         // in the main bucket
-        (self.reachable && self.failed_requests <= 3) || self.failed_requests <= 0
+        (self.reachable && self.failed_requests <= 3) ||
+            self.failed_requests <= 0
     }
 
-    /**
-     * Should be called to signal that a request to this node has timed out;
-     */
+    // Should be called to signal that a request to this node has timed out;
     pub(crate) fn signal_request_timeout(&mut self) {
         if self.failed_requests <= 0 {
             self.failed_requests = 1
@@ -109,7 +117,8 @@ impl KBucketEntry {
         // don't ping if recently seen to allow NAT entries to time out
         // see https://arxiv.org/pdf/1605.05606v1.pdf for numbers
         // and do exponential backoff after failures to reduce traffic
-        if as_millis!(&self.last_seen) < 30 * 1000 || self.within_backoff_window(&self.last_seen) {
+        if as_millis!(&self.last_seen) < 30 * 1000 ||
+            self.within_backoff_window(&self.last_seen) {
             return false;
         }
 
@@ -149,11 +158,11 @@ impl KBucketEntry {
     }
 
     pub(crate) fn equals(&self, other: &Self) -> bool {
-        self.node == other.node
+        self.ni == other.ni
     }
 
     pub(crate) fn matches(&self, other: &Self) -> bool {
-        self.node.matches(&other.node)
+        self.ni.matches(&other.ni)
     }
 }
 
@@ -173,11 +182,11 @@ impl Reachable for KBucketEntry {
 
 impl PartialEq for KBucketEntry {
     fn eq(&self, other: &Self) -> bool {
-        self.node == other.node
+        self.ni == other.ni
     }
 
     fn ne(&self, other: &Self) -> bool {
-        self.node != other.node
+        self.ni != other.ni
     }
 }
 
@@ -186,8 +195,8 @@ impl fmt::Display for KBucketEntry {
         write!(
             f,
             "{}@{};seen:{}; age:{}",
-            self.node.id(),
-            self.node.socket_addr().ip(),
+            self.ni.id(),
+            self.ni.socket_addr().ip(),
             as_millis!(&self.last_seen),
             as_millis!(&self.created)
         )?;
@@ -201,11 +210,11 @@ impl fmt::Display for KBucketEntry {
         if self.reachable {
             write!(f, "; reachable")?;
         }
-        if self.node.version() != 0 {
+        if self.ni.version() != 0 {
             write!(
                 f,
                 "; ver: {}",
-                version::formatted_version(self.node.version())
+                version::formatted_version(self.ni.version())
             )?;
         }
         Ok(())

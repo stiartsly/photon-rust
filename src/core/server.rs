@@ -5,19 +5,17 @@ use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
 use std::collections::{HashMap, LinkedList};
 
-use log::{debug, info, warn, error};
+use log::{info, warn, error};
 use tokio::io;
 use tokio::runtime;
 use tokio::net::UdpSocket;
 use tokio::time::{sleep, interval_at, Duration};
 
 use crate::{
-    unwrap,
-    version,
+    unwrap, as_millis,
     constants,
     cryptobox,
     id::{self, Id},
-    node_info::NodeInfo,
     dht::DHT,
     error::Error,
     rpccall::RpcCall,
@@ -30,16 +28,16 @@ use crate::{
     crypto_cache::CryptoCache,
     stats::Stats,
     msg::msg,
+    bootstrap::BootstrapZone,
 };
 
-use crate::msg::msg::Msg;
+use crate::msg::msg::{Msg};
 
 #[allow(dead_code)]
-pub(crate) struct Server {
-    id: Id,
+pub(crate) struct Server<> {
+    nodeid: Id,
     store_path: String,
 
-    running: bool,
     started: SystemTime,
 
     reachable: bool,
@@ -47,16 +45,13 @@ pub(crate) struct Server {
     msgs_atleast_reachable_check: i32,
     last_reachable_check: SystemTime,
 
+    bootstrap_zone: Arc<Mutex<BootstrapZone>>,
+
     stats: RefCell<Stats>,
     calls: RefCell<HashMap<i32, Box<RpcCall>>>,
 
-    queue4: Option<RefCell<LinkedList<Box<dyn Msg>>>>,
-    queue6: Option<RefCell<LinkedList<Box<dyn Msg>>>>,
-
     option: LookupOption,
     dht4: Option<Rc<RefCell<DHT>>>,
-    dht6: Option<Rc<RefCell<DHT>>>,
-    dht_num: i32,
 
     scheduler:  Rc<RefCell<Scheduler>>,
     token_man:  Rc<RefCell<TokenManager>>,
@@ -66,37 +61,33 @@ pub(crate) struct Server {
 
 #[allow(dead_code)]
 impl Server {
-    pub fn new(id: Id, store_path: String, keypair: cryptobox::KeyPair) -> Self {
+    pub fn new(params: (Id, String, cryptobox::KeyPair, Arc<Mutex<BootstrapZone>>)) -> Self {
         Self {
-            id,
-            store_path,
+            nodeid: params.0,
+            store_path: params.1,
             started: SystemTime::UNIX_EPOCH,
-            running: false,
 
             reachable: false,
             received_msgs: 0,
             msgs_atleast_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
+            bootstrap_zone: params.3,
+
             stats: RefCell::new(Stats::new()),
             calls: RefCell::new(HashMap::new()),
 
-            queue4: None,
-            queue6: None,
-
             option: LookupOption::Conservative,
             dht4: None,
-            dht6: None,
-            dht_num: 0,
 
             scheduler:  Rc::new(RefCell::new(Scheduler::new())),
             token_man:  Rc::new(RefCell::new(TokenManager::new())),
             storage:    Rc::new(RefCell::new(SqliteStorage::new())),
-            crypto_ctx: Rc::new(RefCell::new(CryptoCache::new(&keypair))),
+            crypto_ctx: Rc::new(RefCell::new(CryptoCache::new(&params.2))),
         }
     }
 
-    pub(crate) fn token_man(&self) -> &Rc<RefCell<TokenManager>> {
+    pub(crate) fn tokenman(&self) -> &Rc<RefCell<TokenManager>> {
         &self.token_man
     }
 
@@ -104,314 +95,95 @@ impl Server {
         &self.scheduler
     }
 
-    pub(crate) fn start<T>(&mut self, dht4: Option<T>, dht6: Option<T>) -> Result<(), Error>
-    where
-        T: Into<Rc<RefCell<DHT>>>
-    {
-        if let Some(dht) = dht4.map(|dht| dht.into()) {
-            self.dht4 = Some(Rc::clone(&dht));
-            self.queue4 = Some(RefCell::new(LinkedList::new()));
-        }
+    pub(crate) fn nodeid(&self) -> &Id {
+        &self.nodeid
+    }
 
-        if let Some(dht) = dht6.map(|dht| dht.into()) {
-            self.dht6 = Some(Rc::clone(&dht));
-            self.queue6 = Some(RefCell::new(LinkedList::new()));
-        }
+    pub(crate) fn dht4(&self) -> Rc<RefCell<DHT>> {
+        Rc::clone(self.dht4.as_ref().unwrap())
+    }
 
+    pub(crate) fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
+        Rc::clone(&self.storage)
+    }
+
+    pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
         let path = self.store_path.clone() + "/node.db";
         if let Err(err) = self.storage.borrow_mut().open(&path) {
             error!("Attempt to open database storage failed {}", err);
             return Err(err);
         }
 
-        if let Some(dht) = self.dht4.as_ref() {
-            let path = self.store_path.clone() + "/dht4.cache";
-            dht.borrow_mut().enable_persistence(&path);
-            dht.borrow_mut().start();
 
-            info!(
-                "Started RPC server on ipv4 address: {}",
-                dht.borrow().addr()
-            );
-        }
-        if let Some(dht) = self.dht6.as_ref() {
-            let path = self.store_path.clone() + "/dht6.cache";
-            dht.borrow_mut().enable_persistence(&path);
-            dht.borrow_mut().start();
+        self.dht4 = Some(Rc::clone(&dht4));
+        let path = self.store_path.clone() + "/dht4.cache";
+        dht4.borrow_mut().enable_persistence(&path);
+        dht4.borrow_mut().start();
 
-            info!(
-                "Started RPC server on ipv6 address: {}",
-                dht.borrow().addr()
-            );
-        }
+        info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
+
+        let dht4 = Rc::clone(&dht4);
+        self.scheduler.borrow_mut().add(move || {
+            dht4.borrow_mut().update();
+        }, 100, constants::DHT_UPDATE_INTERVAL);
+
 
         let ctxts = Rc::clone(&self.crypto_ctx);
-        self.scheduler.borrow_mut().add(
-            2000,
-            crypto_cache::EXPIRED_CHECK_INTERVAL,
-            move || {
-                ctxts.borrow_mut().handle_expiration();
-        });
+        self.scheduler.borrow_mut().add(move || {
+            ctxts.borrow_mut().handle_expiration();
+        }, 2000, crypto_cache::EXPIRED_CHECK_INTERVAL);
 
         let storage = Rc::clone(&self.storage);
-        self.scheduler.borrow_mut().add(
-            1000,
-            constants::RE_ANNOUNCE_INTERVAL,
-            move || {
-                persistent_announce(&storage);
-        });
+        self.scheduler.borrow_mut().add(move || {
+            persistent_announce(&storage);
+        }, 1000, constants::RE_ANNOUNCE_INTERVAL);
+
+        // A scheduled task to move bootstrap nodes from the outer (user thread)
+        // to the internal DHT instance.
+        //f let Some(zone) = self.bootstrap_zone() {
+        let cloned_zone = Arc::clone(&self.bootstrap_zone);
+        let cloned_dht4 = self.dht4();
+
+        self.scheduler.borrow_mut().add(move || {
+            cloned_zone.lock().unwrap().pop_all(|item| {
+                cloned_dht4.borrow_mut().add_bootstrap_node(item.clone());
+            })
+        },1000, 1000);
 
         Ok(())
     }
 
-    pub(crate) fn run_loop(&mut self, quit: &Arc<Mutex<bool>>) -> io::Result<()> {
-        let rt = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-
-        let buffer = Rc::new(RefCell::new(Vec::with_capacity(64*1024))) as Rc<RefCell<Vec<u8>>>;
-
-        self.running = true;
-        rt.block_on(async move {
-            let mut sock4: Option<UdpSocket> = None;
-            let mut sock6: Option<UdpSocket> = None;
-
-            if let Some(dht4) = self.dht4.as_ref() {
-                sock4 = Some(UdpSocket::bind(dht4.borrow().addr()).await?);
-            }
-            if let Some(dht6) = self.dht6.as_ref() {
-                sock6 = Some(UdpSocket::bind(dht6.borrow().addr()).await?);
-            }
-
-            let mut interval = interval_at(
-                self.scheduler.borrow().next_time(),
-                Duration::from_secs(60*60)
-            );
-            while self.running {
-                tokio::select! {
-                    rc1 = self.read_socket(sock4.as_ref(), Rc::clone(&buffer)) => {
-                        match rc1 {
-                            Ok(data) => println!("Received data on socket1: {:?}", data),
-                            Err(err) => eprintln!("Error reading from socket1: {}", err),
-                        }
-                    }
-
-                    rc2 = self.read_socket(sock6.as_ref(), Rc::clone(&buffer)) => {
-                        match rc2 {
-                            Ok(data) => println!("Received data on socket2: {:?}", data),
-                            Err(err) => eprintln!("Error reading from socket2: {}", err),
-                        }
-                    }
-
-                    rc3 = self.write_socket(sock4.as_ref(), true) => {
-                        match rc3 {
-                           Ok(_) => {},
-                           Err(err) => eprintln!("Error writing to socket1 {}", err),
-                        }
-                    }
-
-                    rc4 = self.write_socket(sock6.as_ref(), false) => {
-                        match rc4 {
-                           Ok(_) => println!("Written data on socket2 "),
-                           Err(err) => eprintln!("Error writing to socket2 {}", err),
-                        }
-                    }
-
-                    _ = interval.tick() => {
-                        self.scheduler.borrow_mut().sync_time();
-                        self.scheduler.borrow_mut().run();
-
-                        interval.reset_at(self.scheduler.borrow().next_time());
-                    }
-                }
-
-                if *quit.lock().unwrap() {
-                    self.running = false;
-                }
-                if self.scheduler.borrow().is_updated() {
-                    interval.reset_at(self.scheduler.borrow().next_time())
-                }
-            }
-            Ok(())
-        })
-    }
-
     pub(crate) fn stop(&mut self) {
         if let Some(dht) = self.dht4.take() {
-            info!("Stopped RPC server on ipv4: {}", dht.borrow().addr());
-            dht.borrow_mut().stop();
-        }
-        if let Some(dht) = self.dht6.take() {
-            info!("Started RPC server on ipv6: {}", dht.borrow().addr());
+            info!("Stopped RPC server on ipv4: {}", dht.borrow().socket_addr());
             dht.borrow_mut().stop();
         }
 
         _ = self.storage.borrow_mut().close();
     }
 
-    pub async fn bootstrap(&self, _: &[NodeInfo]) -> Result<(), Error> {
-        unimplemented!()
-    }
-
     pub(crate) fn is_reachable(&self) -> bool {
         self.reachable
     }
 
-    pub(crate) fn send_msg(&mut self, msg: Box<dyn Msg>, ipv4: bool) {
-        // Handle associated call if it exists:
-        // - Notify Kademlia DHT of being interacting with a neighboring node;
-        // - Process some internal state for this RPC call.
-        if let Some(mut call) = msg.associated_call() {
-            call.dht().borrow_mut().on_send(call.target_id());
-            call.send(&self);
+    pub(crate) fn update_reachability(&mut self) {
+        // Avoid pinging too frequently if we're not receiving any response
+        // (the connection might be dead)
+
+        if self.received_msgs != self.msgs_atleast_reachable_check {
+            self.reachable = false;
+            self.last_reachable_check = SystemTime::now();
+            self.msgs_atleast_reachable_check = self.received_msgs;
+            return;
         }
 
-        let queue = match ipv4 {
-            true => self.queue4.as_mut().unwrap(),
-            false => self.queue6.as_mut().unwrap(),
-        };
-
-        queue.borrow_mut().push_back(msg);
-    }
-
-    pub(crate) fn send_call(&self, _: Box<RpcCall>) {
-        unimplemented!()
+        if as_millis!(self.last_reachable_check) >  constants::RPC_SERVER_REACHABILITY_TIMEOUT {
+            self.reachable = false;
+        }
     }
 
     fn decrypt_into(&self, _: &Id, _: &[u8]) -> Result<Vec<u8>, Error> {
         unimplemented!()
-    }
-
-    async fn read_socket<'a>(&self, socket: Option<&UdpSocket>, buffer: Rc<RefCell<Vec<u8>>>) -> Result<Option<usize>, io::Error> {
-        match socket {
-            Some(socket) => {
-                let mut buf = buffer.borrow_mut();
-                let (size, addr) = socket.recv_from(&mut buf).await?;
-                let sender = Id::from_bytes(&buf[.. id::ID_BYTES]);
-                let plain = self.decrypt_into(&sender, &buf[id::ID_BYTES .. size - id::ID_BYTES]).map_err(|err| {
-                    self.stats.borrow_mut().on_dropped_packet(size);
-                    warn!("Decrypt packet error from {}, ignored: len {}, {}", addr, size, err);
-                    return None as Option<usize>
-                }).unwrap();
-
-                let mut msg = msg::deser(&sender, &addr, &plain).map_err(|err| {
-                    self.stats.borrow_mut().on_dropped_packet(size);
-                    warn!("Got a wrong packet from {}, ignored. {}", addr, err);
-                    return None as Option<usize>
-                }).unwrap();
-
-                self.stats.borrow_mut().on_received_bytes(size);
-                self.stats.borrow_mut().on_received_msg(&msg);
-
-                msg.with_id(&sender);
-                msg.with_addr(&addr);
-
-                debug!("Received {}/{} from {}:[{}] {}", msg.method(), msg.kind(), addr, size, "msg"); // TODO:
-
-                // transaction id should be a non-zero integer as a normal message.
-                if msg.kind() != msg::Kind::Error && msg.txid() == 0 {
-                    warn!("Reeived a message with invalid transaction id");
-                    //self.send_err(msg, ErrorCode::ProtocolError,
-                    //    "Received a message with an invalid transaction id, expected a non-zero transaction id");
-                    return Ok(None as Option<usize>);
-                }
-
-                // just respond to incoming requests, no need to match them to pending requests
-                if msg.kind() == msg::Kind::Request {
-                    // handle_msg(msg);
-                    return Ok(Some(size));
-                }
-
-                // check whether it's a response to an outstanding request
-                match self.calls.borrow_mut().remove(&msg.txid()) {
-                    Some(mut call) => {
-                        // message matches transaction ID and origin == destination
-                        // we only check the IP address here. the routing table applies more strict checks to also
-                        // verify a stable port
-                        // TODO:
-
-                        if call.req().addr() == msg.addr() {
-                            call.responsed(&msg);
-                            msg.with_associated_call(call);
-
-                            // keep processing after checking whether it's a proper response.
-                            // handle_msg(msg);
-                            return Ok(Some(size));
-                        }
-
-                        // request destination did not match response source!!
-                        // this happening by chance is exceedingly unlikely
-                        // indicates either port-mangling NAT, a multhomed host listening on any-local address or
-                        // some kind of attack ignore response
-                        warn!("Transaction id matched, socket address did not, ignoring message, request: {} -> response: {}, version: {}",
-                            call.req().addr(), msg.addr(), version::formatted_version(msg.version()));
-
-                        if msg.kind() == msg::Kind::Response && self.dht6.is_some() {
-                            // this is more likely due to incorrect binding implementation in ipv6. notify peers about that
-                            // don't bother with ipv4, there are too many complications
-
-                            // TODO;
-                        }
-
-                        // but expect an upcoming timeout if it's really just a misbehaving node
-                        call.response_socket_mismatch();
-                        call.stall();
-                        return Ok(None);
-                    },
-                    None => {
-                        // - it's not a request
-                        // - no matched call found
-                        // - up-time is high enough that it's not a stray from a restart did not expect this response
-
-                        if msg.kind() == msg::Kind::Response && self.started.elapsed().unwrap().as_secs() > 2*60 {
-                            warn!("Cannot find RPC call for {} {}", msg.kind(), msg.txid());
-
-                            // send_error;
-                            return Ok(None);
-                        }
-
-                        if msg.kind() == msg::Kind::Error {
-                            // handle_msg();
-                            return Ok(Some(size));
-                        }
-
-                        debug!("Ignored message: {}", "msg"); // TODO:
-                    }
-                }
-
-                Ok(Some(size))
-            },
-            None => {
-                sleep(Duration::MAX).await;
-                Err(io::Error::new(io::ErrorKind::NotFound, "unavailable"))
-            }
-        }
-    }
-
-    async fn write_socket(&self, socket: Option<&UdpSocket>, ipv4: bool) -> Result<(), std::io::Error> {
-        if socket.is_none() {
-            sleep(Duration::MAX).await;
-            return Ok(())
-        }
-
-        let queue = match ipv4 {
-            true  => self.queue4.as_ref().unwrap(),
-            false => self.queue6.as_ref().unwrap(),
-        };
-
-        let msg = queue.borrow_mut().pop_front();
-        if msg.is_none() {
-            sleep(Duration::from_millis(500)).await;
-            return Ok(())
-        }
-
-        let buffer = msg::serialize(unwrap!(msg));
-
-        // TODO:
-        _ = unwrap!(socket).send_to(&buffer, unwrap!(msg).addr());
-        Ok(())
     }
 }
 
@@ -426,18 +198,135 @@ fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
 // Notice: This function aims to resolve the dilemma of circular dependency between
 // the "server" instance and the two dht instances, which cannot be resolved by allowing
 // use "self" reference in engine method to create dht instances.
-pub(crate) fn start_tweak<T>(server: &Rc<RefCell<Server>>, addr4: T, addr6: T) -> Result<(), Error>
-where
-    T: Into<Option<SocketAddr>>
+pub(crate) fn start_tweak(server: Rc<RefCell<Server>>, addr4: SocketAddr) -> Result<(), Error>
 {
-    let mut dht4: Option<Rc<RefCell<DHT>>> = None;
-    let mut dht6: Option<Rc<RefCell<DHT>>> = None;
+    let dht4 = Rc::new(RefCell::new(DHT::new(Rc::clone(&server), addr4)));
+    server.borrow_mut().start(dht4)
+}
 
-    if let Some(addr) = addr4.into() {
-        dht4 = Some(Rc::new(RefCell::new(DHT::new(server, addr))));
+pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
+    dht4: Rc<RefCell<DHT>>,
+    quit: Arc<Mutex<bool>>
+) -> io::Result<()>
+{
+    let rt = runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let buffer = Rc::new(RefCell::new(vec![0; 64*1024]));
+
+    let mut running = true;
+    rt.block_on(async move {
+        let sock4 = UdpSocket::bind(dht4.borrow().socket_addr()).await?;
+        let queue4 = dht4.borrow().queue();
+
+        let mut interval = interval_at(
+            server.borrow().scheduler.borrow().next_time(),
+            Duration::from_secs(60*60)
+        );
+        while running {
+            tokio::select! {
+                data = read_socket(&sock4, Rc::clone(&buffer), move |_, buf| {
+                   Some(buf.to_vec())
+                }) => {
+                    match data {
+                        Ok(mut msg) => {
+                            dht4.borrow_mut().on_message(msg.take().unwrap())
+                        },
+                        Err(_) => {},
+                    }
+                }
+
+                _ = write_socket(&sock4, Rc::clone(&queue4),  move |_, _| {
+                    Some(Vec::new() as Vec<u8>)
+                }) => {
+                    //println!("Write data to ipv4 socket");
+                }
+
+                _ = interval.tick() => {
+                    server.borrow().scheduler.borrow_mut().sync_time();
+                    server.borrow().scheduler.borrow_mut().run();
+
+                    interval.reset_at(server.borrow().scheduler.borrow().next_time());
+                }
+            }
+
+            if *quit.lock().unwrap() {
+                running = false;
+            }
+            if server.borrow().scheduler.borrow().is_updated() {
+                interval.reset_at(server.borrow().scheduler.borrow().next_time());
+            }
+        }
+        Ok(())
+    })
+}
+async fn read_socket<F>(socket: &UdpSocket,
+    buffer: Rc<RefCell<Vec<u8>>>,
+    mut decrypt: F
+) -> Result<Option<Box<dyn Msg>>, io::Error>
+    where F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
+{
+    let mut buf = buffer.borrow_mut();
+    let (size, from_addr) = socket.recv_from(&mut buf).await?;
+    let fromid = Id::from_bytes(&buf[0.. id::ID_BYTES]);
+    let plain = decrypt(&fromid, &mut buf[id::ID_BYTES .. size]);
+    if plain.is_none() {
+        //self.stats.borrow_mut().on_dropped_packet(size);
+        warn!("Decrypt packet error from {}, ignored: len {}", from_addr, size);
+        return Ok(None);
+    };
+
+    let mut msg = msg::deser(&unwrap!(plain)).map_err(|err| {
+        //self.stats.borrow_mut().on_dropped_packet(size);
+        warn!("Got a wrong packet from {}, ignored. {}", from_addr, err);
+    }).unwrap();
+
+    //self.stats.borrow_mut().on_received_bytes(size);
+    //self.stats.borrow_mut().on_received_msg(&msg);
+
+    msg.set_id(fromid.clone());
+    msg.set_addr(from_addr);
+
+    info!("Received message: {}/{} from {}:[size: {}] {}", msg.method(), msg.kind(), from_addr, size, msg);
+
+    // transaction id should be a non-zero integer as a normal message.
+    if msg.kind() != msg::Kind::Error && msg.txid() == 0 {
+        warn!("Reeived a message with invalid transaction id");
+        // self.send_err(msg, ErrorCode::ProtocolError,
+        //    "Received a message with an invalid transaction id, expected a non-zero transaction id");
+        return Ok(None);
     }
-    if let Some(addr) = addr6.into() {
-        dht6 = Some(Rc::new(RefCell::new(DHT::new(server, addr))));
+
+    // Just respond to incoming requests, no need to match them to pending requests
+    if msg.kind() == msg::Kind::Request {
+        return Ok(Some(msg));
     }
-    server.borrow_mut().start(dht4, dht6)
+
+    Ok(Some(msg))
+}
+
+async fn write_socket<F>(socket: &UdpSocket, queue: Rc<RefCell<LinkedList<Box<dyn Msg>>>>, _: F) -> Result<(), io::Error>
+where
+    F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
+{
+    if queue.borrow().is_empty() {
+        sleep(Duration::MAX).await;
+        return Ok(())
+    }
+
+    match queue.borrow_mut().pop_front() {
+        Some(msg) => {
+            let serialized = msg::serialize(&msg);
+            let mut buffer = Vec::new() as Vec<u8>;
+            buffer.extend_from_slice(msg.id().as_bytes());
+            buffer.extend_from_slice(&serialized);
+            _ = socket.send_to(&buffer, msg.addr()).await?;
+        },
+        None => {
+            sleep(Duration::from_millis(500)).await;
+        }
+    }
+    Ok(())
 }

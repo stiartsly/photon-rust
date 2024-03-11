@@ -1,43 +1,46 @@
 
 use std::rc::Rc;
+use std::collections::{LinkedList, HashMap};
 use std::cell::RefCell;
+use std::time::SystemTime;
 use std::net::SocketAddr;
-use log::{debug, info, warn};
+use std::ops::Deref;
+use log::{debug, info, warn, trace};
 
 use crate::{
+    as_kind_name,
+    as_millis,
     constants,
     version,
     id::Id,
     node_info::NodeInfo,
     peer::Peer,
     value::Value,
-    rpccall::RpcCall,
+    rpccall::{self, RpcCall},
     lookup_option::LookupOption,
     routing_table::RoutingTable,
     kclosest_nodes::KClosestNodes,
     token_man::TokenManager,
     server::Server,
     scheduler::Scheduler,
+    kbucket_entry::KBucketEntry,
 };
 
 use crate::msg::{
     ping_req,
-    announce_peer_req,
-    announce_peer_rsp,
+    ping_rsp,
+    find_node_req,
     find_node_rsp,
-    find_value_req,
-    store_value_req,
+    find_peer_rsp,
     store_value_rsp,
-    error::{self, ErrorResult},
-    find_peer_rsp::{self, PeerResult},
-    find_value_rsp::{self, ValueResult},
-    lookup::{self, Result},
-    msg::{self, Msg},
+    find_value_rsp,
+    announce_peer_rsp,
+    error,
+    msg::{Msg, Kind, Method},
 };
 
 use crate::task::{
-    task::{State, Task},
-    lookup::LookupTask,
+    task::{State, Task, Lookup},
     node_lookup::NodeLookupTask,
     peer_lookup::PeerLookupTask,
     task_manager::TaskManager,
@@ -45,31 +48,52 @@ use crate::task::{
 };
 
 pub(crate) struct DHT {
+    nodeid: Id,
     addr: SocketAddr,
     persist_path: Option<String>,
+    last_save: SystemTime,
     running: bool,
 
-    routing_table: RoutingTable,
+    bootstrap_need: bool,
+    bootstrap_nodes: Vec<Box<NodeInfo>>,
+    bootstrap_time: Rc<RefCell<SystemTime>>,
 
-    server:     Rc<RefCell<Server>>,
-    task_man:   Rc<RefCell<TaskManager>>,
-    token_man:  Rc<RefCell<TokenManager>>,
-    scheduler:  Rc<RefCell<Scheduler>>,
+    next_tid: i32,
+    calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
+
+    routing_table: Rc<RefCell<RoutingTable>>,
+    server: Rc<RefCell<Server>>,
+    taskman: Rc<RefCell<TaskManager>>,
+    tokenman: Rc<RefCell<TokenManager>>,
+    scheduler: Rc<RefCell<Scheduler>>,
+
+    queue: Rc<RefCell<LinkedList<Box<dyn Msg>>>>,
 }
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(server: &Rc<RefCell<Server>>, binding_addr: SocketAddr) -> Self {
+    pub(crate) fn new(server: Rc<RefCell<Server>>, binding_addr: SocketAddr) -> Self {
         DHT {
+            nodeid: server.borrow().nodeid().clone(),
             addr: binding_addr,
             running: false,
             persist_path: None,
-            routing_table: RoutingTable::new(),
+            last_save: SystemTime::UNIX_EPOCH,
+            routing_table: Rc::new(RefCell::new(RoutingTable::new(server.borrow().nodeid(), &binding_addr))),
 
-            server: Rc::clone(server),
-            task_man:  Rc::new(RefCell::new(TaskManager::new())),
-            token_man: Rc::clone(server.borrow().token_man()),
+            bootstrap_nodes: Vec::new(),
+            bootstrap_need: false,
+            bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
+
+            next_tid: 0,
+            calls: HashMap::new(),
+
+            server: Rc::clone(&server),
+            taskman:  Rc::new(RefCell::new(TaskManager::new())),
+            tokenman: Rc::clone(server.borrow().tokenman()),
             scheduler: Rc::clone(server.borrow().scheduler()),
+
+            queue: Rc::new(RefCell::new(LinkedList::new())),
         }
     }
 
@@ -77,160 +101,266 @@ impl DHT {
         self.persist_path = Some(String::from(path));
     }
 
-    pub(crate) fn addr(&self) -> &SocketAddr {
+    pub(crate) fn add_bootstrap_node(&mut self, node: Box<NodeInfo>) {
+        self.bootstrap_nodes.push(node);
+        self.bootstrap_need = true;
+    }
+
+    pub(crate) fn socket_addr(&self) -> &SocketAddr {
         &self.addr
     }
 
-    pub(crate) fn is_ipv4(&self) -> bool {
-        self.addr.is_ipv4()
+    pub(crate) fn nodeid(&self) -> &Id {
+        &self.nodeid
     }
 
-    fn bootstrap_internal() {
-        unimplemented!()
+    pub(crate) fn routing_table(&self) -> Rc<RefCell<RoutingTable>> {
+        Rc::clone(&self.routing_table)
     }
 
-    pub(crate) fn bootstrap(&mut self, _: &[NodeInfo]) {
-        unimplemented!()
+    pub(crate) fn queue(&self) -> Rc<RefCell<LinkedList<Box<dyn Msg>>>> {
+        Rc::clone(&self.queue)
     }
 
-    fn fill_home_bucket(&mut self, _: &[NodeInfo]) {
-        unimplemented!()
+    pub(crate) fn bootstrap(&mut self) {
+        let bns = match self.bootstrap_nodes.is_empty() {
+            true => self.routing_table.borrow().random_entries(8),
+            false => self.bootstrap_nodes.clone()
+        };
+
+        info!("DHT/{} bootstraping ....", as_kind_name!(&self.addr));
+
+        let nodes = Rc::new(RefCell::new(Vec::new())) as Rc<RefCell<Vec<NodeInfo>>>;
+        let count = Rc::new(RefCell::new(0));
+
+        for node in bns.iter() {
+            let mut req = Box::new(find_node_req::Message::new());
+            req.set_id(node.id().clone());
+            req.set_addr(node.socket_addr().clone());
+            req.with_target(Id::random());
+            req.with_want4(true);
+
+
+
+            let call = Rc::new(RefCell::new(RpcCall::new(node.clone(), req)));
+            let len = bns.len();
+            let cloned_nodes = Rc::clone(&nodes);
+            let cloned_count = Rc::clone(&count);
+            let cloned_id = Rc::new(node.id().clone());
+            let taskman = Rc::clone(&self.taskman);
+            let routing_table = Rc::clone(&self.routing_table);
+            let bootstrap_time = Rc::clone(&self.bootstrap_time);
+            call.borrow_mut().set_state_changed_fn(move |call, _, cur| {
+                if cur == &rpccall::State::Responsed || cur == &rpccall::State::Err ||
+                    cur == &rpccall::State::Timeout {
+                    if let Some(rsp) = call.rsp() {
+                        cloned_nodes.borrow_mut().extend_from_slice(rsp.nodes4());
+                    }
+
+                    *cloned_count.borrow_mut() += 1;
+                    if *cloned_count.borrow() == len {
+                        *bootstrap_time.borrow_mut() = SystemTime::now();
+                        if routing_table.borrow().size() == 0 &&
+                            cloned_nodes.borrow().is_empty() {
+                            return;
+                        }
+
+                        let mut task = Box::new(NodeLookupTask::new(
+                            cloned_id.deref(),
+                            Rc::clone(&routing_table)
+                        ));
+                        task.set_bootstrap(true);
+                        task.set_name("Bootstrap: filling home bucket");
+                        task.add_candidates(cloned_nodes.borrow().as_slice());
+                        task.add_listener(Box::new(move |_| {
+                             println!(">>>>>> listener invoked!!!! >>>>");
+                        }));
+                        taskman.borrow_mut().add(task);
+                    }
+                }
+            });
+
+            self.send_call(call);
+        };
     }
 
-    fn update(&mut self) {
-        unimplemented!()
-    }
-
-    pub(crate) fn start(&mut self) {
-        if self.is_running() {
+    pub(crate) fn update(&mut self) {
+        if !self.running {
             return;
         }
 
-        // Load neighboring nodes from cache storage if possible.
-        let path = self.persist_path.as_ref().unwrap().as_str();
-        if !path.is_empty() {
+        trace!("DHT/{} regularly update...", as_kind_name!(&self.addr));
+        //self.server.borrow_mut().update_reachability();
+        self.routing_table.borrow_mut().maintenance();
+
+        if self.bootstrap_need || self.routing_table.borrow().size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
+            as_millis!(self.bootstrap_time.borrow()) > constants::SELF_LOOKUP_INTERVAL {
+
+            self.bootstrap_need = false;
+            // Regularly search for our ID to update the routing table
+            self.bootstrap();
+        }
+
+        if as_millis!(self.last_save) > constants::ROUTING_TABLE_PERSIST_INTERVAL {
+            info!("Persisting routing table ....");
+            self.routing_table.borrow_mut().save(self.persist_path.as_ref().unwrap().as_str());
+            self.last_save = SystemTime::now();
+        }
+    }
+
+    pub(crate) fn start(&mut self) {
+        if self.running {
+            return;
+        }
+
+        // Load neighboring nodes from cache storage if they exist.
+        if let Some(path) = self.persist_path.as_ref() {
             info!("Loading routing table from [{}] ...", path);
-            self.routing_table.load(path);
+            self.routing_table.borrow_mut().load(path);
         }
 
         // TODO: bootstrap nodes.
 
-        info!("Starting DHT/{} on {}", addr_kind(&self.addr), self.addr);
+        info!("Starting DHT/{} on {}", as_kind_name!(&self.addr), self.addr);
         self.running = true;
 
-        // Maintenance tasks should run continuously, even before the first queries
-        // are executed.
-        let task_man = Rc::clone(&self.task_man);
-        self.scheduler.borrow_mut().add(
-            500,
-            constants::DHT_UPDATE_INTERVAL,
-            move || {
-                task_man.borrow_mut().dequeue();
-            }
-        );
+        // Task management.
+        let taskman = Rc::clone(&self.taskman);
+        self.scheduler.borrow_mut().add(move || {
+            taskman.borrow_mut().dequeue();
+        }, 500, constants::DHT_UPDATE_INTERVAL);
 
         // fix the first time to persist the routing table: 2 min
         //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
 
-        // Regularly DHT update
-        self.scheduler.borrow_mut().add(
-            100,
-            constants::DHT_UPDATE_INTERVAL,
-            move || {
-                // TODO;
-            }
-        );
-
         // Send a ping request to a random node to verify socket liveness.
-        self.scheduler.borrow_mut().add(
-            constants::RANDOM_PING_INTERVAL,
-            constants::RANDOM_PING_INTERVAL,
-            move || {
-                // TODO;
-            }
-        );
+        self.scheduler.borrow_mut().add(move || {
+            // TODO;
+        }, constants::RANDOM_PING_INTERVAL, constants::RANDOM_PING_INTERVAL);
 
         // Perform a deep lookup to familiarize ourselves with random sections of
         // the keyspace.
-        let mut kind = String::from(addr_kind(&self.addr));
-        let task_man = Rc::clone(&self.task_man);
-        self.scheduler.borrow_mut().add(
-            constants::RANDOM_LOOKUP_INTERVAL,
-            constants::RANDOM_LOOKUP_INTERVAL,
-            move || {
-                let mut task = Box::new(NodeLookupTask::new(&Id::random()));
-                kind.push_str(":Random refresh lookup");
-                task.with_name(&kind);
-                task.add_listener(move |_|{});
-
-                task_man.borrow_mut().add(task);
-            }
-        )
+        let addr = self.addr.clone();
+        let taskman = Rc::clone(&self.taskman);
+        let routing_table = Rc::clone(&self.routing_table);
+        self.scheduler.borrow_mut().add(move || {
+            let mut task = Box::new(NodeLookupTask::new(&Id::random(), Rc::clone(&routing_table)));
+            let name = format!("{}: random lookup", as_kind_name!(&addr));
+            task.set_name(&name);
+            task.add_listener(Box::new(move |_|{}));
+            taskman.borrow_mut().add(task);
+        }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL)
     }
 
     pub(crate) fn stop(&mut self) {
-        if !self.is_running() {
+        if !self.running {
             return;
         }
 
-        info!("{} initiated shutdown ...", addr_kind(&self.addr));
+        info!("{} initiated shutdown ...", as_kind_name!(&self.addr));
         info!("stopping servers ...");
 
         self.running = false;
 
         info!("Persisting routing table on shutdown ...");
-        self.routing_table.save(self.persist_path.as_ref().unwrap().as_str());
-
-        self.task_man.borrow_mut().cancel_all();
+        if let Some(path) = self.persist_path.as_ref() {
+            self.routing_table.borrow_mut().save(path);
+        }
+        self.taskman.borrow_mut().cancel_all();
     }
 
-    pub(crate) fn is_running(&self) -> bool {
-        self.running
-    }
-
-    fn on_message<T>(&mut self, msg: &Box<T>)
-    where
-        T: Msg
-            + lookup::Condition
-            + find_value_req::ValueOption
-            + store_value_req::StoreOption
-            + announce_peer_req::AnnounceOption
-            + error::ErrorResult,
+    pub(crate) fn on_message(&mut self, msg: Box<dyn Msg>)
     {
-        match msg.kind() {
-            msg::Kind::Error => self.on_error(msg),
-            msg::Kind::Request => self.on_request(msg),
-            msg::Kind::Response => self.on_response(msg.as_ref()),
+        let msg = self.pre_process(msg);
+        let msg = match msg.kind() {
+            Kind::Error => self.on_error(msg),
+            Kind::Request => self.on_request(msg),
+            Kind::Response => self.on_response(msg),
+        };
+        self.post_received(msg);
+    }
+
+    fn pre_process(&mut self, mut msg: Box<dyn Msg>) -> Box<dyn Msg> {
+        match self.calls.remove(&msg.txid()) {
+            Some(call) => {
+                // message matches transaction ID and origin == destination
+                // we only check the IP address here. the routing table applies
+                // more strict checks to also verify a stable port
+                msg.with_associated_call(Rc::clone(&call));
+                call.borrow_mut().responsed(msg)
+            },
+            None => msg
         }
     }
 
-    fn on_request<T>(&mut self, msg: &Box<T>)
-    where
-        T: Msg
-            + lookup::Condition
-            + find_value_req::ValueOption
-            + store_value_req::StoreOption
-            + announce_peer_req::AnnounceOption,
-    {
-        match msg.method() {
-            msg::Method::Ping => self.on_ping(msg.as_ref()),
-            msg::Method::FindNode => self.on_find_node(msg),
-            msg::Method::FindValue => self.on_find_value(msg),
-            msg::Method::StoreValue => self.on_store_value(msg),
-            msg::Method::FindPeer => self.on_find_peers(msg),
-            msg::Method::AnnouncePeer => self.on_announce_peer(msg),
-            msg::Method::Unknown => {
-                self.send_err(msg.as_ref(), 203, "Invalid request method");
+    fn post_received(&mut self, msg: Box<dyn Msg>) {
+        let from_id = msg.id();
+        let from_addr = msg.addr();
+
+        if is_bogon(from_addr) {
+            info!("Received a message from bogon address {}, ignored the potential
+                  routing table operation", from_addr);
+            return;
+        }
+
+        //let mut new_entry = Box::new(KBucketEntry::new(msg.id(), addr));
+        // new_entry.set_version(msg.version());
+        let call_opt = msg.associated_call();
+        if let Some(call) = call_opt.as_ref() {
+            // we only want remote nodes with stable ports in our routing table,
+            // so apply a stricter check here
+            if !call.borrow().matches_address() {
+                return;
             }
         }
+
+        let mut entry_found = false;
+        if let Some(old) = self.routing_table.borrow().bucket_entry(from_id) {
+            // this might happen if one node changes ports (broken NAT?) or IP address
+            // ignore until routing table entry times out
+            if old.node_addr() != self.socket_addr() {
+                return;
+            }
+            entry_found = true;
+        }
+
+        let mut new_entry = Box::new(KBucketEntry::new(msg.id(), from_addr));
+        if let Some(call) = call_opt.as_ref() {
+            new_entry.set_version(msg.version());
+            new_entry.signal_response();
+            new_entry.merge_request_time(call.borrow().sent_time().clone());
+        } else if !entry_found {
+            let mut req = Box::new(ping_req::Message::new());
+            req.set_id(msg.id().clone());
+            req.set_addr(from_addr.clone());
+
+            let ni  = Box::new(NodeInfo::new(msg.id(), from_addr));
+            let call = Rc::new(RefCell::new(RpcCall::new(ni, req)));
+            self.send_call(call);
+        }
+        self.routing_table.borrow_mut().put(new_entry);
     }
 
-    fn on_response(&self, _: &dyn Msg) {}
+    fn on_request(&mut self, msg: Box<dyn Msg>) -> Box<dyn Msg> {
+        match msg.method() {
+            Method::Ping => self.on_ping(&msg),
+            Method::FindNode => self.on_find_node(&msg),
+            Method::FindValue => self.on_find_value(&msg),
+            Method::StoreValue => self.on_store_value(&msg),
+            Method::FindPeer => self.on_find_peers(&msg),
+            Method::AnnouncePeer => self.on_announce_peer(&msg),
+            Method::Unknown => {
+                //self.send_err(msg, 203, "Invalid request method");
+            }
+        }
+        msg
+    }
 
-    fn on_error<T>(&self, msg: &Box<T>)
-    where
-        T: Msg + error::ErrorResult,
-    {
+    fn on_response(&mut self, msg: Box<dyn Msg>) -> Box<dyn Msg> {
+        msg
+    }
+
+    fn on_error(&mut self, msg: Box<dyn Msg>) -> Box<dyn Msg> {
         warn!(
             "Error from {}/{} - {}:{}, txid {}",
             msg.addr(),
@@ -239,307 +369,233 @@ impl DHT {
             msg.msg(),
             msg.txid()
         );
+        msg
     }
 
-    fn send_err(&self, msg: &dyn Msg, code: i32, str: &str) {
+    fn send_err(&mut self, msg: &Box<dyn Msg>, code: i32, str: &str) {
         let mut err = Box::new(error::Message::new());
 
-        err.with_id(msg.id());
-        err.with_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
-        err.with_txid(msg.txid());
-        err.with_addr(msg.addr());
+        err.set_id(msg.id().clone());
+        err.set_addr(msg.addr().clone());
+        err.set_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
+        err.set_txid(msg.txid());
         err.with_msg(str);
         err.with_code(code);
 
-        self.server.borrow_mut().send_msg(err, self.is_ipv4());
+        self.send_msg(err);
     }
 
-    fn on_ping(&self, request: &dyn Msg) {
-        let mut msg = Box::new(ping_req::Message::new());
+    fn on_ping(&mut self, req: &Box<dyn Msg>) {
+        let mut rsp = Box::new(ping_rsp::Message::new());
+        rsp.set_id(req.id().clone());
+        rsp.set_addr(req.addr().clone());
+        rsp.set_txid(req.txid());
 
-        msg.with_id(request.id());
-        msg.with_txid(request.txid());
-        msg.with_addr(request.addr());
-
-        self.server.borrow_mut().send_msg(msg, self.is_ipv4());
+        self.send_msg(rsp);
     }
 
-    fn on_find_node<T>(&self, request: &Box<T>)
-    where
-        T: Msg + lookup::Condition,
-    {
-        let mut resp = Box::new(find_node_rsp::Message::new());
+    fn on_find_node(&mut self, req: &Box<dyn Msg>) {
+        let mut rsp = Box::new(find_node_rsp::Message::new());
+        rsp.set_id(req.id().clone());
+        rsp.set_addr(req.addr().clone());
+        rsp.set_txid(req.txid());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+        if req.want4() {
+            let mut knodes = KClosestNodes::new(
+                req.target(),
+                Rc::clone(&self.routing_table),
+                constants::MAX_ENTRIES_PER_BUCKET,
+            );
+            knodes.fill(true);
+            rsp.populate_closest_nodes4(knodes.as_nodes());
+        }
 
-        resp.populate_closest_nodes4(request.want4(), || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
+        if req.want_token() {
+            let token = self.tokenman.borrow_mut().generate_token(
+                req.id(), req.addr(), req.target()
+            );
+            rsp.populate_token(token);
+        }
 
-        resp.populate_closest_nodes6(request.want6(), || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
-
-        resp.populate_token(request.want_token(), || {
-            self.token_man
-                .borrow()
-                .generate_token(request.id(), request.addr(), request.target())
-        });
-
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4())
+        self.send_msg(rsp)
     }
 
-    fn on_find_value<T>(&self, request: &Box<T>)
-    where
-        T: Msg + lookup::Condition + find_value_req::ValueOption,
-    {
-        let mut resp = Box::new(find_value_rsp::Message::new());
-
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+    fn on_find_value(&mut self, req: &Box<dyn Msg>) {
+        let mut rsp = Box::new(find_value_rsp::Message::new());
+        rsp.set_id(req.id().clone());
+        rsp.set_addr(req.addr().clone());
+        rsp.set_txid(req.txid());
 
         let mut has_value = false;
-        resp.populate_value(|| {
-            // TODO;
-            let value: Option<Box<Value>> = None;
-            if value.is_some() {
-                if request.seq() < 0
-                    || value.as_ref().unwrap().sequence_number() < 0
-                    || request.seq() <= value.as_ref().unwrap().sequence_number()
-                {
-                    has_value = true;
-                }
+        let value = self.server.borrow().storage().borrow().value(req.target());
+        if value.is_some() {
+            if req.seq() < 0
+                || value.as_ref().unwrap().sequence_number() < 0
+                || req.seq() <= value.as_ref().unwrap().sequence_number()
+            {
+                has_value = true;
+                rsp.populate_value(value.unwrap());
             }
-            value
-        });
+        }
 
-        resp.populate_closest_nodes4(request.want4() && has_value, || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(&self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
+        if req.want4() && has_value {
+            let mut knodes = KClosestNodes::new(
+                req.target(),
+                Rc::clone(&self.routing_table),
+                constants::MAX_ENTRIES_PER_BUCKET,
+            );
+            knodes.fill(true);
+            rsp.populate_closest_nodes4(knodes.as_nodes());
+        }
 
-        resp.populate_closest_nodes6(request.want6() && has_value, || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(&self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
+        if req.want_token() {
+            let token = self.tokenman.borrow_mut().generate_token(
+                req.id(), req.addr(), req.target()
+            );
+            rsp.populate_token(token);
+        }
 
-        resp.populate_token(request.want_token(), || {
-            self.token_man
-                .borrow()
-                .generate_token(request.id(), request.addr(), request.target())
-        });
-
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(rsp);
     }
 
-    fn on_store_value<T>(&mut self, request: &Box<T>)
-    where
-        T: Msg + lookup::Condition + store_value_req::StoreOption,
-    {
-        let value = request.value();
-        let value_id = value.id();
+    fn on_store_value(&mut self, req: &Box<dyn Msg>) {
+        let value = req.value();
+        let value_id = value.as_ref().unwrap().id();
 
-        if !self.token_man.borrow_mut().verify_token(
-            request.token(),
-            request.id(),
-            request.addr(),
-            &value_id,
-        ) {
+        let valid = self.tokenman.borrow_mut().verify_token(
+            req.token(), req.id(), req.addr(), &value_id,
+        );
+        if !valid {
             warn!(
                 "Received a store value request with invalid token from {}",
-                request.addr()
+                req.addr()
             );
             self.send_err(
-                request.as_ref(),
+                req,
                 203,
                 "Invalid token for STORE VALUE request",
             );
             return;
         }
 
-        if !value.is_valid() {
-            self.send_err(request.as_ref(), 203, "Invalid value");
+        if !value.as_ref().unwrap().is_valid() {
+            self.send_err(req, 203, "Invalid value");
             return;
         }
         // TODO: store value.
-        let mut resp = Box::new(store_value_rsp::Message::new());
+        let mut rsp = Box::new(store_value_rsp::Message::new());
+        rsp.set_id(req.id().clone());
+        rsp.set_addr(req.addr().clone());
+        rsp.set_txid(req.txid());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
-
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(rsp);
     }
 
-    fn on_find_peers<T>(&self, request: &Box<T>)
-    where
-        T: Msg + lookup::Condition + find_value_req::ValueOption,
-    {
-        let mut resp = Box::new(find_peer_rsp::Message::new());
-
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+    fn on_find_peers(&mut self, req: &Box<dyn Msg>) {
+        let mut rsp = Box::new(find_peer_rsp::Message::new());
+        rsp.set_id(req.id().clone());
+        rsp.set_addr(req.addr().clone());
+        rsp.set_txid(req.txid());
 
         let mut has_peers = false;
-        resp.populate_peers(|| {
-            // TODO;
-            let peers: Vec<Box<Peer>> = Vec::new();
-            if !peers.is_empty() {
-                has_peers = true;
-            };
-            Some(peers)
-        });
+        let peers = self.server.borrow().storage().borrow().peers(req.target(), 8);
+        if !peers.is_empty() {
+            has_peers = true;
+            rsp.populate_peers(peers);
+        }
 
-        resp.populate_closest_nodes4(request.want4() && has_peers, || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(&self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
+        if req.want4() && has_peers {
+            let mut knodes = KClosestNodes::new(
+                req.target(),
+                Rc::clone(&self.routing_table),
+                constants::MAX_ENTRIES_PER_BUCKET,
+            );
+            knodes.fill(true);
+            rsp.populate_closest_nodes4(knodes.as_nodes());
+        }
 
-        resp.populate_closest_nodes6(request.want6() && has_peers, || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(&self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
+        if req.want_token() {
+            let token = self.tokenman.borrow_mut().generate_token(
+                req.id(), req.addr(), req.target()
+            );
+            rsp.populate_token(token);
+        }
 
-        resp.populate_token(request.want_token(), || {
-            self.token_man
-                .borrow()
-                .generate_token(request.id(), request.addr(), request.target())
-        });
-
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(rsp);
     }
 
-    fn on_announce_peer<T>(&mut self, request: &Box<T>)
-    where
-        T: Msg + lookup::Condition + announce_peer_req::AnnounceOption,
-    {
-        let bogon = false;
-
-        if bogon {
+    fn on_announce_peer(&mut self, req: &Box<dyn Msg>) {
+        if is_bogon(req.addr()) {
             info!(
                 "Received an announce peer request from bogon address {}, ignored ",
-                request.addr()
+                req.addr()
             );
         }
 
-        if !self.token_man.borrow_mut().verify_token(
-            request.token(),
-            request.id(),
-            request.addr(),
-            request.target(),
-        ) {
+        let valid = self.tokenman.borrow_mut().verify_token(
+            req.token(), req.id(), req.addr(), req.target()
+        );
+        if !valid {
             warn!(
                 "Received an announce peer request with invalid token from {}",
-                request.addr()
+                req.addr()
             );
             self.send_err(
-                request.as_ref(),
-                203,
-                "Invalid token for ANNOUNCE PEER request",
+                req, 203,"Invalid token for ANNOUNCE PEER request",
             );
             return;
         }
 
-        let peers = request.peers();
+        let peers = req.peers();
         for peer in peers.iter() {
             if !peer.is_valid() {
-                self.send_err(request.as_ref(), 203, "One peer is invalid peer");
+                self.send_err(req, 203, "One peer is invalid peer");
                 return;
             }
         }
 
         debug!(
             "Received an announce peer request from {}, saving peer {}",
-            request.addr(),
-            request.target()
+            req.addr(),
+            req.target()
         );
         // TODO: Store peers.
 
-        let mut resp = Box::new(announce_peer_rsp::Message::new());
+        let mut rsp = Box::new(announce_peer_rsp::Message::new());
+        rsp.set_id(req.id().clone());
+        rsp.set_addr(req.addr().clone());
+        rsp.set_txid(req.txid());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
-
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(rsp);
     }
 
-    pub(crate) fn on_timeout(&self, call: &RpcCall) {
+    pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
         if !self.running || !self.server.borrow().is_reachable() {
             return;
         }
-        self.routing_table.on_timeout(call.target_id());
+        self.routing_table.borrow_mut().on_timeout(call.target_id());
     }
 
-    pub(crate) fn on_send(&self, id: &Id) {
+    pub(crate) fn on_send(&mut self, id: &Id) {
         if !self.running {
             return;
         }
-        self.routing_table.on_send(id)
+        self.routing_table.borrow_mut().on_send(id)
     }
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where
-        F: Fn(Option<Box<NodeInfo>>) + 'static,
+    where F: Fn(Option<Box<NodeInfo>>) + 'static
     {
         let result = Rc::new(RefCell::new(
-            self.routing_table
+            self.routing_table.borrow()
                 .bucket_entry(id)
                 .map(|item| Box::new(item.node().clone())),
         ));
         let result_shadow = Rc::clone(&result);
 
-        let mut task = Box::new(NodeLookupTask::new(id));
-        task.with_name("node-lookup");
+        let mut task = Box::new(NodeLookupTask::new(id, Rc::clone(&self.routing_table)));
+        task.set_name("node-lookup");
         task.set_result_fn(move |_task, _node| {
             if _node.is_some() {
                 *(result.borrow_mut()) = Some(_node.unwrap().clone());
@@ -548,22 +604,21 @@ impl DHT {
                 _task.cancel()
             }
         });
-        task.add_listener(move |_| {
+        task.add_listener(Box::new(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
-        });
+        }));
 
-        self.task_man.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
-    where
-        F: Fn(Option<Box<Value>>) + 'static,
+    where F: Fn(Option<Box<Value>>) + 'static,
     {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
         let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(ValueLookupTask::new(id));
-        task.with_name("value-lookup");
+        task.set_name("value-lookup");
         task.set_result_fn(move |_task, _value| {
             if let Some(_v) = _value.as_ref() {
                 match result.borrow().as_ref() {
@@ -587,17 +642,16 @@ impl DHT {
         task.add_listener(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         });
-        self.task_man.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
-    where
-        F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static,
+    where F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static,
     {
-        let mut task = Box::new(NodeLookupTask::new(&value.id()));
-        task.with_name("store-value");
+        let mut task = Box::new(NodeLookupTask::new(&value.id(), Rc::clone(&self.routing_table)));
+        task.set_name("store-value");
         task.set_want_token(true);
-        task.add_listener(move |_task| {
+        task.add_listener(Box::new(move |_task| {
             if _task.state() != State::Finished {
                 return;
             }
@@ -612,8 +666,8 @@ impl DHT {
                 }
                 // TODO:
             }
-        });
-        self.task_man.borrow_mut().add(task);
+        }));
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn find_peer<F>(
@@ -629,7 +683,7 @@ impl DHT {
         let result_shadow = Rc::clone(&result);
 
         let mut task = Box::new(PeerLookupTask::new(id));
-        task.with_name("peer-lookup");
+        task.set_name("peer-lookup");
         task.set_result_fn(move |_task, _peers| {
             (*result.borrow_mut()).append(_peers);
             if option != LookupOption::Conservative && result.borrow().len() >= expected {
@@ -639,7 +693,7 @@ impl DHT {
 
         task.add_listener(move |_| complete_fn(result_shadow.take()));
 
-        self.task_man.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
@@ -648,11 +702,45 @@ impl DHT {
     {
         unimplemented!()
     }
+
+    fn send_msg(&mut self, msg: Box<dyn Msg>) {
+        // Handle associated call if it exists:
+        // - Notify Kademlia DHT of being interacting with a neighboring node;
+        // - Process some internal state for this RPC call.
+        if let Some(call) = msg.associated_call() {
+            self.on_send(call.borrow().target_id());
+            call.borrow_mut().send(&self.scheduler);
+        }
+
+        self.queue.borrow_mut().push_back(msg);
+    }
+
+    pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
+        self.next_tid += 1;
+        let mut txid = self.next_tid;
+        if txid == 0 {
+            txid += 1;
+        }
+
+        call.borrow_mut().set_responsed_fn(|_,_| {
+            println!("in responsed_fn");
+        });
+        call.borrow_mut().set_timeout_fn(|_|{
+            println!("in timeout_fn");
+        });
+
+        let msg_opt = call.borrow_mut().req_take();
+        let cloned_call = Rc::clone(&call);
+        self.calls.insert(txid, call);
+
+        if let Some(mut msg) = msg_opt {
+            msg.set_txid(txid);
+            msg.with_associated_call(cloned_call);
+            self.send_msg(msg);
+        }
+    }
 }
 
-fn addr_kind(addr: &SocketAddr) -> &'static str {
-    match addr.is_ipv4() {
-        true => "Ipv4",
-        false => "ipv6"
-    }
+fn is_bogon(_: &SocketAddr) -> bool {
+    false
 }

@@ -1,33 +1,67 @@
 use std::any::Any;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::fmt;
 use std::net::SocketAddr;
-
-//use ciborium::{de::from_reader, Value};
-use ciborium_io::Read;
-use core::result::Result;
-use std::io::Error;
+use ciborium;
+use std::fmt::Display;
 
 use crate::id::Id;
 use crate::rpccall::RpcCall;
+use crate::error::Error;
+use crate::node_info::NodeInfo;
+use crate::peer::Peer;
+use crate::value::Value;
+
+use super::keys;
+use super::cbor;
+use super::error;
+use super::ping_req;
+use super::ping_rsp;
+use super::find_node_req;
+use super::find_node_rsp;
+use super::announce_peer_req;
+use super::announce_peer_rsp;
+use super::find_peer_req;
+use super::find_peer_rsp;
+use super::store_value_req;
+use super::store_value_rsp;
+use super::find_value_req;
+use super::find_value_rsp;
 
 #[derive(PartialEq)]
 pub(crate) enum Kind {
-    Error = 0x00,
+    Error = 0,
     Request = 0x20,
     Response = 0x40,
 }
 
 impl Kind {
     const MASK: i32 = 0xE0;
-    fn from(mtype: i32) -> Kind {
-        let kind: i32 = mtype & Self::MASK;
+    pub(crate) fn from(_type: i32) -> Kind {
+        let kind = _type & Self::MASK;
         match kind {
             0x00 => Kind::Error,
             0x20 => Kind::Request,
             0x40 => Kind::Response,
-            _ => {
-                panic!("invalid msg kind: {}", kind)
-            }
+            _ => panic!("invalid msg kind: {}", kind)
+        }
+    }
+
+    fn is_valid(_type: i32) -> bool {
+        match _type & Self::MASK {
+            0x00 => true,
+            0x20 => true,
+            0x40 => true,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn to_key(&self) -> &'static str {
+        match self {
+            Kind::Error => "e",
+            Kind::Request => "q",
+            Kind::Response => "r",
         }
     }
 }
@@ -57,9 +91,9 @@ pub(crate) enum Method {
 
 impl Method {
     const MASK: i32 = 0x1F;
-    fn from(_type: i32) -> Self {
-        let method: i32 = _type & Self::MASK;
-        match method {
+    pub(crate) fn from(_type: i32) -> Self {
+        let method = _type & Self::MASK;
+        match _type & Self::MASK {
             0x00 => Method::Unknown,
             0x01 => Method::Ping,
             0x02 => Method::FindNode,
@@ -67,10 +101,13 @@ impl Method {
             0x04 => Method::FindPeer,
             0x05 => Method::StoreValue,
             0x06 => Method::FindValue,
-            _ => {
-                panic!("invalid msg method: {}", method)
-            }
+            _ => panic!("invalid msg method: {}", method)
         }
+    }
+
+    fn is_valid(_type: i32) -> bool {
+        let method = _type & Self::MASK;
+        method >= 0 && method < 0x06
     }
 }
 
@@ -90,119 +127,136 @@ impl fmt::Display for Method {
     }
 }
 
-pub(crate) trait Msg {
+pub(crate) trait Msg: Display {
     fn kind(&self) -> Kind;
     fn method(&self) -> Method;
 
+    // Common methods
     fn id(&self) -> &Id;
     fn addr(&self) -> &SocketAddr;
-
     fn txid(&self) -> i32;
     fn version(&self) -> i32;
+    fn set_id(&mut self, _: Id);
+    fn set_addr(&mut self, _: SocketAddr);
+    fn set_txid(&mut self, _: i32);
+    fn set_ver(&mut self, _: i32);
+    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>>;
+    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>);
 
-    fn with_id(&mut self, _: &Id);
-    fn with_addr(&mut self, _: &SocketAddr);
+    // Methods for Node/Value/Peer Lookup as query condition.
+    fn target(&self) -> &Id { panic!() }
+    fn want4(&self) -> bool { panic!() }
+    fn want6(&self) -> bool { panic!() }
+    fn want_token(&self) -> bool { panic!() }
+    fn with_target(&mut self, _: Id) { panic!() }
+    fn with_want4(&mut self, _: bool) { panic!() }
+    fn with_want6(&mut self, _: bool) { panic!() }
+    fn with_want_token(&mut self) { panic!() }
 
-    fn with_txid(&mut self, _: i32);
-    fn with_ver(&mut self, _: i32);
+    // Common methods for Node/Value/Peer Lookup as query result.
+    fn nodes4(&self) -> &[NodeInfo] { panic!() }
+    fn nodes6(&self) -> &[NodeInfo] { panic!() }
+    fn token(&self) -> i32 { panic!() }
 
-    //fn with_cbor(&mut self, _: &[u8]);
+    // Common methos for Node/Value/Peer Lookup as query result.
+    fn populate_closest_nodes4(&mut self, _: Vec<NodeInfo>) { panic!() }
+    fn populate_closest_nodes6(&mut self, _: Vec<NodeInfo>) { panic!() }
+    fn populate_token(&mut self, _:i32) { panic!() }
 
-    fn associated_call(&self) -> Option<Box<RpcCall>>;
-    fn with_associated_call(&mut self, _: Box<RpcCall>);
+    // Methods for FindValue as query condition
+    fn seq(&self) -> i32 { panic!() }
+    fn with_seq(&mut self, _: i32) { panic!() }
+
+    // Methods for FindPeer as query result.
+    fn has_peers(&self) -> bool { panic!() }
+    fn peers(&self) -> &[Box<Peer>] { panic!() }
+    fn populate_peers(&mut self, _: Vec<Box<Peer>>) { panic!()}
+
+    // Methods for Lookup Peer as query result.
+    fn value(&self) -> &Option<Box<Value>> { panic!() }
+    fn populate_value(&mut self, _: Box<Value>) { panic!() }
+
+
+    // StoreValue option
+    // fn token(&self) -> i32;
+    //fn value(&self) -> &Box<Value>;
+
+    // Methods for Error Message.
+    fn msg(&self) -> &str { panic!() }
+    fn code(&self) -> i32 { panic!() }
+    fn with_msg(&mut self, _: &str) { panic!() }
+    fn with_code(&mut self, _: i32) { panic!() }
+
+    fn with_value(&mut self, _: Box<Value>) { panic!() }
 
     fn as_any(&self) -> &dyn Any;
+
+    fn to_cbor(&self) -> ciborium::value::Value;
+    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool;
 }
 
-#[allow(dead_code)]
-pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Result<Box<dyn Msg>, Error> {
-    let mtype: i32 = 0;
-    //let reader = Reader::new(cbor);
-    //let value: Value = from_reader(reader).unwrap();
+pub(crate) fn deser(buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
+    let mut msg_type = 0;
+    let value: ciborium::value::Value;
+    let reader = cbor::Reader::new(buf);
+    value = ciborium::de::from_reader(reader).unwrap();
+    if let Some(root) = value.as_map() {
+        for (key, val) in root.iter() {
+            if key.as_text().unwrap() == keys::KEY_TYPE {
+                msg_type = val.as_integer().unwrap().try_into().unwrap();
+            }
+        }
+    } else {
+        return Err(Error::Protocol(
+            format!("Invalid content for message deserialization")
+        ));
+    }
 
-    match Kind::from(mtype) {
+    if !Kind::is_valid(msg_type) ||!Method::is_valid(msg_type) {
+        return Err(Error::Protocol(format!(
+            "Invalid message kind {} or method {}", Kind::from(msg_type),Method::from(msg_type)
+        )));
+    }
+
+    let msg = match Kind::from(msg_type) {
         Kind::Error => {
-            panic!("TODO")
-        }
-        Kind::Request => match Method::from(mtype) {
-            Method::Unknown => {
-                panic!("TODO")
-            }
-            Method::Ping => {
-                panic!("TODO")
-            }
-            Method::FindNode => {
-                panic!("TODO")
-            }
-            Method::AnnouncePeer => {
-                panic!("TODO")
-            }
-            Method::FindPeer => {
-                panic!("TODO")
-            }
-            Method::StoreValue => {
-                panic!("TODO")
-            }
-            Method::FindValue => {
-                panic!("TODO")
-            }
+            error::Message::from(&value)
         },
-        Kind::Response => match Method::from(mtype) {
-            Method::Unknown => {
-                panic!("TODO")
-            }
-            Method::Ping => {
-                panic!("TODO")
-            }
-            Method::FindNode => {
-                panic!("TODO")
-            }
-            Method::AnnouncePeer => {
-                panic!("TODO")
-            }
-            Method::FindPeer => {
-                panic!("TODO")
-            }
-            Method::StoreValue => {
-                panic!("TODO")
-            }
-            Method::FindValue => {
-                panic!("TODO")
-            }
+        Kind::Request => match Method::from(msg_type) {
+            Method::Ping => ping_req::Message::from(&value),
+            Method::FindNode => find_node_req::Message::from(&value),
+            Method::AnnouncePeer => announce_peer_req::Message::from(&value),
+            Method::FindPeer => find_peer_req::Message::from(&value),
+            Method::StoreValue => store_value_req::Message::from(&value),
+            Method::FindValue => find_value_req::Message::from(&value),
+            _ => Err(Error::Protocol(format!(
+                "Invalid request message: {}, ignored it", Method::from(msg_type)
+            )))
         },
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) fn serialize(_: &Box<dyn Msg>) -> Vec<u8> {
-    unimplemented!()
-}
-
-struct Reader<'a> {
-    data: &'a [u8],
-    position: usize,
-}
-
-#[allow(dead_code)]
-impl<'a> Reader<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        Reader { data, position: 0 }
-    }
-}
-
-impl<'a> Read for Reader<'a> {
-    type Error = Error;
-
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
-        let remaining_len = self.data.len() - self.position;
-
-        if remaining_len >= buf.len() {
-            // If there is enough data remaining, copy it to buf
-            buf.copy_from_slice(&self.data[self.position..self.position + buf.len()]);
-            self.position += buf.len();
-            Ok(())
-        } else {
-            Err(Error::from(std::io::ErrorKind::UnexpectedEof))
+        Kind::Response => match Method::from(msg_type) {
+            Method::Ping => ping_rsp::Message::from(&value),
+            Method::FindNode => find_node_rsp::Message::from(&value),
+            Method::AnnouncePeer => announce_peer_rsp::Message::from(&value),
+            Method::FindPeer => find_peer_rsp::Message::from(&value),
+            Method::StoreValue => store_value_rsp::Message::from(&value),
+            Method::FindValue => find_value_rsp::Message::from(&value),
+            _ => Err(Error::Protocol(format!(
+                "Invalid response message: {}, ignored it", Method::from(msg_type)
+            )))
         }
-    }
+    };
+    msg
+}
+
+pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {
+    let mut value = msg.to_cbor();
+    let mut encoded = Vec::new() as Vec<u8>;
+    let writer = cbor::Writer::new(&mut encoded);
+    let _ = ciborium::ser::into_writer(&mut value, writer);
+    encoded.push(0x0);
+    encoded
+}
+
+pub(crate) fn msg_type(kind: Kind, method: Method) -> i32 {
+    kind as i32 | method as i32
 }

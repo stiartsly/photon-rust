@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use super::candidate_node::CandidateNode;
 use crate::id::{distance, Id};
+use super::candidate_node::CandidateNode;
 
-#[allow(dead_code)]
 pub(crate) struct ClosestSet {
     target: Id,
     capacity: usize,
@@ -17,7 +16,7 @@ pub(crate) struct ClosestSet {
 #[allow(dead_code)]
 impl ClosestSet {
     pub(crate) fn new(target: &Id, capacity: usize) -> Self {
-        ClosestSet {
+        Self {
             target: target.clone(),
             capacity,
             closest: HashMap::new(),
@@ -26,7 +25,7 @@ impl ClosestSet {
         }
     }
 
-    pub(crate) fn reach_capacity(&self) -> bool {
+    pub(crate) fn reached_capacity(&self) -> bool {
         self.closest.len() >= self.capacity
     }
 
@@ -43,11 +42,35 @@ impl ClosestSet {
     }
 
     pub(crate) fn add(&mut self, candidate: Box<CandidateNode>) {
-        let _ = self
-            .closest
-            .insert(candidate.node().id().clone(), candidate);
+        let nodeid = candidate.nodeid().clone();
+        self.closest.insert(
+            candidate.nodeid().clone(),
+            candidate
+        );
 
-        unimplemented!()
+        if self.closest.len() > self.capacity {
+            let mut to_remove = None;
+            let last = self.closest.iter().last();
+            if let Some(item) = last {
+                if item.0 == &nodeid {
+                    self.insert_attempt_since_tail_modification += 1;
+                } else {
+                    self.insert_attempt_since_tail_modification = 0;
+                }
+                to_remove = Some(item.0.clone());
+            }
+            if let Some(id) = to_remove {
+                self.closest.remove(&id);
+            }
+        }
+        let head = self.closest.iter().next();
+        if let Some(item) = head {
+            if item.0 == &nodeid {
+                self.insert_attempt_since_head_modification = 0;
+            } else {
+                self.insert_attempt_since_head_modification += 1;
+            }
+        }
     }
 
     pub(crate) fn remove(&mut self, candidate: &Id) {
@@ -57,24 +80,19 @@ impl ClosestSet {
     pub(crate) fn tail(&self) -> Id {
         match self.closest.is_empty() {
             true => distance(&self.target, &Id::max()),
-            false => {
-                let (id, _) = self.closest.iter().last().unwrap();
-                id.clone()
-            }
+            false => self.closest.iter().last().unwrap().0.clone(),
         }
     }
 
     pub(crate) fn head(&self) -> Id {
         match self.closest.is_empty() {
             true => distance(&self.target, &Id::max()),
-            false => {
-                let (id, _) = self.closest.iter().next().unwrap();
-                id.clone()
-            }
+            false => self.closest.iter().next().unwrap().0.clone(),
         }
     }
 
     pub(crate) fn is_eligible(&self) -> bool {
-        self.reach_capacity() && self.insert_attempt_since_tail_modification > self.capacity
+        self.reached_capacity() &&
+            self.insert_attempt_since_tail_modification > self.capacity
     }
 }

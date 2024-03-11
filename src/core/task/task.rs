@@ -1,10 +1,16 @@
 use std::any::Any;
 use std::fmt;
-use std::time::SystemTime;
 
-use crate::{msg::msg::Msg, rpccall::RpcCall};
+use super::{
+    candidate_node::CandidateNode,
+    closest_set::ClosestSet
+};
 
-#[allow(dead_code)]
+use crate::{
+    id::Id,
+    node_info::NodeInfo,
+};
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum State {
     Initial,
@@ -31,33 +37,30 @@ impl fmt::Display for State {
 pub(crate) trait Task {
     fn taskid(&self) -> i32;
     fn name(&self) -> &str;
-    fn with_name(&mut self, _: &str);
+    fn set_name(&mut self, _: &str);
     fn state(&self) -> State;
+    fn set_state(&mut self, _:&[State], _: State) -> bool { true }
+    fn nested(&self) -> &Box<dyn Task> { panic!() }
+    fn set_nested(&mut self, _: Box<dyn Task>) { panic!() }
 
-    fn nested(&self) -> &Box<dyn Task>;
-
-    fn is_canceled(&self) -> bool;
-    fn is_finished(&self) -> bool;
-
-    fn started_time(&self) -> &SystemTime;
-    fn finished_time(&self) -> &SystemTime;
-
-    fn age(&self) -> u128;
-
-    fn set_nested(&mut self, _: Box<dyn Task>);
+    fn add_listener(&mut self, _: Box<dyn FnOnce(&dyn Task)>) { panic!()}
 
     fn start(&mut self);
     fn cancel(&mut self);
 
-    fn call_sent(&mut self, _: &Box<RpcCall>);
-    fn call_responsed(&mut self, _: &Box<RpcCall>, _: &Box<dyn Msg>);
-    fn call_error(&mut self, _: &Box<RpcCall>);
-    fn call_timeout(&mut self, _: &Box<RpcCall>);
-
-    fn prepare(&mut self);
-    fn update(&mut self);
-
-    fn is_done(&self) -> bool;
+    fn is_canceled(&self) -> bool {true}
+    fn is_finished(&self) -> bool {true}
 
     fn as_any(&self) -> &dyn Any;
+}
+
+pub(crate) trait Lookup: Task {
+    fn target(&self) -> &Id;
+    fn candidate_node(&self, id: &Id) -> Option<&Box<CandidateNode>>;
+    fn closest_set(&self) -> &ClosestSet;
+
+    fn add_candidates(&mut self, _: &[NodeInfo]) { panic!()}
+    fn remove_candidate(&mut self, _: &Id) { panic!() }
+    fn next_candidate(&self) -> Option<&Box<CandidateNode>> { panic!() }
+    fn add_closest(&mut self, _: Box<CandidateNode>) { panic!() }
 }
