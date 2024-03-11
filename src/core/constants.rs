@@ -16,3 +16,8 @@ pub(crate) const KBUCKET_PING_BACKOFF_BASE_INTERVAL: u128 = 60 * 1000;
 pub(crate) const KBUCKET_MAX_TIMEOUTS: i32 = 5;
 
 pub(crate) const RE_ANNOUNCE_INTERVAL: u64 = 5 * 60 * 1000;
+
+
+pub(crate) const DHT_UPDATE_INTERVAL:u64 = 1000;
+pub(crate) const RANDOM_LOOKUP_INTERVAL: u64 = 10 * 60 * 1000;  // 10 minutes
+pub(crate) const RANDOM_PING_INTERVAL: u64 = 10 * 1000;         // 10 seconds

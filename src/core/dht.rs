@@ -46,7 +46,7 @@ use crate::task::{
 
 pub(crate) struct DHT {
     addr: SocketAddr,
-    persist_path: String,
+    persist_path: Option<String>,
     running: bool,
 
     routing_table: RoutingTable,
@@ -57,17 +57,13 @@ pub(crate) struct DHT {
     scheduler:  Rc<RefCell<Scheduler>>,
 }
 
-const DHT_UPDATE_INTERVAL: u64 = 1000; // 1 seconds;
-const RANDOM_PING_INTERVAL: u64 = 10 * 1000; // 10 seconds;
-const RANDOM_LOOKUP_INTERVAL: u64 = 10 * 60 * 1000; // 10 minutes;
-
 #[allow(dead_code)]
 impl DHT {
     pub(crate) fn new(server: &Rc<RefCell<Server>>, binding_addr: SocketAddr) -> Self {
         DHT {
             addr: binding_addr,
             running: false,
-            persist_path: String::new(),
+            persist_path: None,
             routing_table: RoutingTable::new(),
 
             server: Rc::clone(server),
@@ -78,7 +74,7 @@ impl DHT {
     }
 
     pub(crate) fn enable_persistence(&mut self, path: &str) {
-        self.persist_path.push_str(path);
+        self.persist_path = Some(String::from(path));
     }
 
     pub(crate) fn addr(&self) -> &SocketAddr {
@@ -111,7 +107,7 @@ impl DHT {
         }
 
         // Load neighboring nodes from cache storage if possible.
-        let path = self.persist_path.as_str();
+        let path = self.persist_path.as_ref().unwrap().as_str();
         if !path.is_empty() {
             info!("Loading routing table from [{}] ...", path);
             self.routing_table.load(path);
@@ -127,7 +123,7 @@ impl DHT {
         let task_man = Rc::clone(&self.task_man);
         self.scheduler.borrow_mut().add(
             500,
-            DHT_UPDATE_INTERVAL,
+            constants::DHT_UPDATE_INTERVAL,
             move || {
                 task_man.borrow_mut().dequeue();
             }
@@ -139,7 +135,7 @@ impl DHT {
         // Regularly DHT update
         self.scheduler.borrow_mut().add(
             100,
-            DHT_UPDATE_INTERVAL,
+            constants::DHT_UPDATE_INTERVAL,
             move || {
                 // TODO;
             }
@@ -147,8 +143,8 @@ impl DHT {
 
         // Send a ping request to a random node to verify socket liveness.
         self.scheduler.borrow_mut().add(
-            RANDOM_PING_INTERVAL,
-            RANDOM_PING_INTERVAL,
+            constants::RANDOM_PING_INTERVAL,
+            constants::RANDOM_PING_INTERVAL,
             move || {
                 // TODO;
             }
@@ -159,8 +155,8 @@ impl DHT {
         let mut kind = String::from(addr_kind(&self.addr));
         let task_man = Rc::clone(&self.task_man);
         self.scheduler.borrow_mut().add(
-            RANDOM_LOOKUP_INTERVAL,
-            RANDOM_LOOKUP_INTERVAL,
+            constants::RANDOM_LOOKUP_INTERVAL,
+            constants::RANDOM_LOOKUP_INTERVAL,
             move || {
                 let mut task = Box::new(NodeLookupTask::new(&Id::random()));
                 kind.push_str(":Random refresh lookup");
@@ -183,7 +179,7 @@ impl DHT {
         self.running = false;
 
         info!("Persisting routing table on shutdown ...");
-        self.routing_table.save(self.persist_path.as_str());
+        self.routing_table.save(self.persist_path.as_ref().unwrap().as_str());
 
         self.task_man.borrow_mut().cancel_all();
     }
