@@ -151,7 +151,7 @@ impl Node {
                 Server::new(params.0, params.1, params.2)
             ));
 
-            match server::start_tweak(&server, dhts.0, dhts.1) {
+            match server::start_tweak(&server, dhts) {
                 Ok(_) => {
                     server.borrow_mut().run_loop(&quit).expect_err("loop abortion");
                     server.borrow_mut().stop();

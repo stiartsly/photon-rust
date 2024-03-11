@@ -426,17 +426,17 @@ fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
 // Notice: This function aims to resolve the dilemma of circular dependency between
 // the "server" instance and the two dht instances, which cannot be resolved by allowing
 // use "self" reference in engine method to create dht instances.
-pub(crate) fn start_tweak<T>(server: &Rc<RefCell<Server>>, addr4: T, addr6: T) -> Result<(), Error>
+pub(crate) fn start_tweak<T>(server: &Rc<RefCell<Server>>, addrs: (T, T)) -> Result<(), Error>
 where
     T: Into<Option<SocketAddr>>
 {
     let mut dht4: Option<Rc<RefCell<DHT>>> = None;
     let mut dht6: Option<Rc<RefCell<DHT>>> = None;
 
-    if let Some(addr) = addr4.into() {
+    if let Some(addr) = addrs.0.into() {
         dht4 = Some(Rc::new(RefCell::new(DHT::new(server, addr))));
     }
-    if let Some(addr) = addr6.into() {
+    if let Some(addr) = addrs.1.into() {
         dht6 = Some(Rc::new(RefCell::new(DHT::new(server, addr))));
     }
     server.borrow_mut().start(dht4, dht6)
