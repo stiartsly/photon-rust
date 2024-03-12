@@ -8,5 +8,6 @@ pub(crate) fn build(_: &str, _: i32) -> i32 {
 }
 
 pub(crate) fn formatted_version(_: i32) -> String {
-    unimplemented!()
+   // unimplemented!()
+   return "TODO".to_string();
 }

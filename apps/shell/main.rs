@@ -2,8 +2,14 @@ use std::env;
 use std::fs;
 use std::thread;
 use std::time::Duration;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use boson::{default_configuration, node::Node};
+use boson::{
+    default_configuration,
+    id::Id,
+    node_info::NodeInfo,
+    node::Node
+};
 
 fn get_storage_path(input: &str) -> String {
     let path = env::current_dir().unwrap().join(input);
@@ -27,6 +33,12 @@ fn main() {
     //b1.with_ipv4("192.168.1.109");
     b.with_ipv4("172.20.10.2");
     b.with_storage_path(path.as_str());
+
+    let id = Id::try_from_base58("6o6LkHgLyD5sYyW9iN5LNRYnUoX29jiYauQ5cDjhCpWQ").unwrap();
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(155, 138,245, 211)), 39001);
+    let node = NodeInfo::new(&id, &addr);
+    b.add_bootstrap(&node);
+
     let cfg = b.build().unwrap();
 
     let mut runner = Node::new(cfg).unwrap();

@@ -20,8 +20,15 @@ fn test_default() {
 #[test]
 fn test_from_hex() {
     let hex_str = "71e1b2ecdf528b623192f899d984c53f2b13508e21ccd53de5d7158672820636";
-    let hex_id = Id::try_from_hex(hex_str).expect("Invalid hex Id");
-    assert_eq!(hex_id.to_hex(), hex_str);
+    let id = Id::try_from_hex(hex_str).expect("Invalid hex Id");
+    assert_eq!(id.to_hex(), hex_str);
+}
+
+#[test]
+fn test_from_base58() {
+    let base58_str = "HZXXs9LTfNQjrDKvvexRhuMk8TTJhYCfrHwaj3jUzuhZ";
+    let id = Id::try_from_base58(base58_str).expect("Invalid base58 Id");
+    assert_eq!(id.to_base58(), base58_str);
 }
 
 #[test]

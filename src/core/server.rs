@@ -186,6 +186,21 @@ impl Server {
                 persistent_announce(&storage);
         });
 
+        if let Some(bootstrap) = self.bootstrap.as_ref() {
+            let _bootstrap = Arc::clone(&bootstrap);
+            self.scheduler.borrow_mut().add(
+                1000,
+                1000,
+                move || {
+                    _bootstrap.lock().unwrap().update(|v| {
+                        v.iter().for_each(|item | {
+                            println!("item => {}", item);
+                        });
+                    })
+                }
+            )
+        }
+
         Ok(())
     }
 
