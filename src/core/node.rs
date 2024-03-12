@@ -21,6 +21,7 @@ use crate::node_status::NodeStatus;
 use crate::crypto_cache::CryptoCache;
 use crate::lookup_option::LookupOption;
 use crate::server::{self, Server};
+use crate::bootstrap::Bootstrap;
 
 pub struct Node {
     id: Id,
@@ -33,6 +34,8 @@ pub struct Node {
     option: LookupOption,
     status: NodeStatus,
     storage_path: String,
+
+    bootstrap: Arc<Mutex<Bootstrap>>,
 
     worker: Option<JoinHandle<()>>, // engine working thread.
     quit: Arc<Mutex<bool>>, // notification handle
@@ -104,6 +107,7 @@ impl Node {
         info!("Current DHT node Id {}", id);
 
         Ok(Node {
+            bootstrap: Arc::new(Mutex::new(Bootstrap::from(cfg.bootstrap_nodes()))),
             id,
             cfg,
             signature_keypair: unwrap!(keypair).clone(),
@@ -146,14 +150,18 @@ impl Node {
 
         // Flag used to signal the spawned thread to stop execution.
         let quit = Arc::clone(&self.quit);
+        let bootstrap = Arc::clone(&self.bootstrap);
         self.worker = Some(thread::spawn(move || {
             let server = Rc::new(RefCell::new(
                 Server::new(params.0, params.1, params.2)
             ));
 
+            server.borrow_mut().set_bootstrap(bootstrap);
             match server::start_tweak(&server, dhts) {
                 Ok(_) => {
-                    server.borrow_mut().run_loop(&quit).expect_err("loop abortion");
+                    _ = server.borrow_mut().run_loop(&quit).map_err(|err| {
+                        error!("Unexpected error happened in the running loop: {}.", err);
+                    });
                     server.borrow_mut().stop();
                 },
                 Err(err) => {
@@ -214,6 +222,12 @@ impl Node {
 
     pub fn lookup_option(&self) -> LookupOption {
         self.option
+    }
+
+    pub fn bootstrap(&mut self, nodes: &[NodeInfo]) {
+        let mut bootstrap = self.bootstrap.lock().unwrap();
+        bootstrap.add_many(nodes);
+        drop(bootstrap);
     }
 
     pub async fn find_node_with_option(

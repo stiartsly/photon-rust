@@ -12,7 +12,7 @@ use tokio::net::UdpSocket;
 use tokio::time::{sleep, interval_at, Duration};
 
 use crate::{
-    unwrap,
+    unwrap, as_millis,
     version,
     constants,
     cryptobox,
@@ -30,6 +30,7 @@ use crate::{
     crypto_cache::CryptoCache,
     stats::Stats,
     msg::msg,
+    bootstrap::Bootstrap,
 };
 
 use crate::msg::msg::Msg;
@@ -46,6 +47,8 @@ pub(crate) struct Server {
     received_msgs: i32,
     msgs_atleast_reachable_check: i32,
     last_reachable_check: SystemTime,
+
+    bootstrap: Option<Arc<Mutex<Bootstrap>>>,
 
     stats: RefCell<Stats>,
     calls: RefCell<HashMap<i32, Box<RpcCall>>>,
@@ -78,6 +81,8 @@ impl Server {
             msgs_atleast_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
+            bootstrap: None,
+
             stats: RefCell::new(Stats::new()),
             calls: RefCell::new(HashMap::new()),
 
@@ -102,6 +107,10 @@ impl Server {
 
     pub(crate) fn scheduler(&self) -> &Rc<RefCell<Scheduler>> {
         &self.scheduler
+    }
+
+    pub(crate) fn set_bootstrap(&mut self, bootstrap: Arc<Mutex<Bootstrap>>) {
+        self.bootstrap = Some(bootstrap);
     }
 
     pub(crate) fn start<T>(&mut self, dht4: Option<T>, dht6: Option<T>) -> Result<(), Error>
@@ -133,6 +142,14 @@ impl Server {
                 "Started RPC server on ipv4 address: {}",
                 dht.borrow().addr()
             );
+
+            let _dht = Rc::clone(&dht);
+            self.scheduler.borrow_mut().add(
+                100,
+                constants::DHT_UPDATE_INTERVAL,
+                move || {
+                    _dht.borrow_mut().update();
+            });
         }
         if let Some(dht) = self.dht6.as_ref() {
             let path = self.store_path.clone() + "/dht6.cache";
@@ -143,6 +160,14 @@ impl Server {
                 "Started RPC server on ipv6 address: {}",
                 dht.borrow().addr()
             );
+
+            let _dht = Rc::clone(&dht);
+            self.scheduler.borrow_mut().add(
+                100,
+                constants::DHT_UPDATE_INTERVAL,
+                move || {
+                    _dht.borrow_mut().update();
+            });
         }
 
         let ctxts = Rc::clone(&self.crypto_ctx);
@@ -231,7 +256,7 @@ impl Server {
                     self.running = false;
                 }
                 if self.scheduler.borrow().is_updated() {
-                    interval.reset_at(self.scheduler.borrow().next_time())
+                    interval.reset_at(self.scheduler.borrow().next_time());
                 }
             }
             Ok(())
@@ -257,6 +282,22 @@ impl Server {
 
     pub(crate) fn is_reachable(&self) -> bool {
         self.reachable
+    }
+
+    pub(crate) fn update_reachability(&mut self) {
+        // Avoid pinging too frequently if we're not receiving any response
+        // (the connection might be dead)
+
+        if self.received_msgs != self.msgs_atleast_reachable_check {
+            self.reachable = false;
+            self.last_reachable_check = SystemTime::now();
+            self.msgs_atleast_reachable_check = self.received_msgs;
+            return;
+        }
+
+        if as_millis!(self.last_reachable_check) >  constants::RPC_SERVER_REACHABILITY_TIMEOUT {
+            self.reachable = false;
+        }
     }
 
     pub(crate) fn send_msg(&mut self, msg: Box<dyn Msg>, ipv4: bool) {

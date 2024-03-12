@@ -1,10 +1,12 @@
 
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::time::SystemTime;
 use std::net::SocketAddr;
-use log::{debug, info, warn};
+use log::{debug, info, warn, trace};
 
 use crate::{
+    as_millis,
     constants,
     version,
     id::Id,
@@ -47,8 +49,11 @@ use crate::task::{
 pub(crate) struct DHT {
     addr: SocketAddr,
     persist_path: Option<String>,
+    last_save: SystemTime,
     running: bool,
 
+    need_bootstrap: bool,
+    last_bootstrap: SystemTime,
     routing_table: RoutingTable,
 
     server:     Rc<RefCell<Server>>,
@@ -64,7 +69,11 @@ impl DHT {
             addr: binding_addr,
             running: false,
             persist_path: None,
+            last_save: SystemTime::UNIX_EPOCH,
             routing_table: RoutingTable::new(),
+
+            need_bootstrap: false,
+            last_bootstrap: SystemTime::UNIX_EPOCH,
 
             server: Rc::clone(server),
             task_man:  Rc::new(RefCell::new(TaskManager::new())),
@@ -89,16 +98,35 @@ impl DHT {
         unimplemented!()
     }
 
-    pub(crate) fn bootstrap(&mut self, _: &[NodeInfo]) {
-        unimplemented!()
+    pub(crate) fn bootstrap(&mut self) {
+        info!("DHT/{} bootstraping ....", addr_kind(&self.addr));
     }
 
     fn fill_home_bucket(&mut self, _: &[NodeInfo]) {
         unimplemented!()
     }
 
-    fn update(&mut self) {
-        unimplemented!()
+    pub(crate) fn update(&mut self) {
+        if !self.is_running() {
+            return;
+        }
+        trace!("DHT/{} regularly update...", addr_kind(&self.addr));
+        //self.server.borrow_mut().update_reachability();
+        self.routing_table.maintenance();
+
+        if self.need_bootstrap || self.routing_table.size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
+            as_millis!(self.last_bootstrap) > constants::SELF_LOOKUP_INTERVAL {
+
+            self.need_bootstrap = false;
+            // Regularly search for our ID to update the routing table
+            self.bootstrap();
+        }
+
+        if as_millis!(self.last_save) > constants::ROUTING_TABLE_PERSIST_INTERVAL {
+            info!("Persisting routing table ....");
+            self.routing_table.save(self.persist_path.as_ref().unwrap().as_str());
+            self.last_save = SystemTime::now();
+        }
     }
 
     pub(crate) fn start(&mut self) {

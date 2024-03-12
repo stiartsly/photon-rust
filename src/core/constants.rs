@@ -21,3 +21,9 @@ pub(crate) const RE_ANNOUNCE_INTERVAL: u64 = 5 * 60 * 1000;
 pub(crate) const DHT_UPDATE_INTERVAL:u64 = 1000;
 pub(crate) const RANDOM_LOOKUP_INTERVAL: u64 = 10 * 60 * 1000;  // 10 minutes
 pub(crate) const RANDOM_PING_INTERVAL: u64 = 10 * 1000;         // 10 seconds
+
+pub(crate) const RPC_SERVER_REACHABILITY_TIMEOUT: u128 = 60 * 1000;
+
+pub(crate) const BOOTSTRAP_IF_LESS_THAN_X_PEERS:usize = 30;
+pub(crate) const SELF_LOOKUP_INTERVAL:u128 = 30 * 60 * 1000;   // 30 minutes
+pub(crate) const ROUTING_TABLE_PERSIST_INTERVAL: u128 = 10 * 60 * 1000;   // 10 minutes
