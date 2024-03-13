@@ -84,11 +84,11 @@ impl Id {
         Id([0xFF; ID_BYTES])
     }
 
-    pub fn to_hex(&self) -> String {
+    pub fn into_hex(&self) -> String {
         hex::encode(&self.0)
     }
 
-    pub fn to_base58(&self) -> String {
+    pub fn into_base58(&self) -> String {
         bs58::encode(self.0)
             .with_alphabet(bs58::Alphabet::DEFAULT)
             .into_string()
@@ -187,7 +187,7 @@ pub(crate) fn bits_copy(src: &Id, dst: &mut Id, depth: i32) {
 
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", self.to_hex())?;
+        write!(f, "0x{}", self.into_base58())?;
         Ok(())
     }
 }
