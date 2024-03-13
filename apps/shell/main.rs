@@ -7,7 +7,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use boson::{
     default_configuration,
     id::Id,
-    node_info::NodeInfo,
+    NodeInfo,
     node::Node
 };
 

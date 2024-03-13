@@ -11,7 +11,6 @@ pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
 
 #[derive(Default, Clone, PartialEq, Eq, Debug, Hash)]
-
 pub struct Id([u8; ID_BYTES]);
 
 impl Id {

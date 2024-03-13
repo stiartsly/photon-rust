@@ -25,10 +25,15 @@ pub mod default_configuration;
 pub mod error;
 pub mod id;
 pub mod lookup_option;
-pub mod node_info;
-pub mod node_status;
+
+mod node_info;
+mod node_status;
 pub mod peer;
 pub mod prefix;
+
+pub use self::node_info::NodeInfo;
+pub use self::node_status::NodeStatus;
+
 pub mod node;
 pub mod signature;
 pub mod value;
