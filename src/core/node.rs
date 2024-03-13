@@ -129,7 +129,7 @@ impl Node {
         self.status = NodeStatus::Initializing;
         info!("DHT node {} is starting...", self.id);
 
-        // Parameters used to create the NodeEngine instance:
+        // Parameters used to create the working server instance:
         // - node id: Unique identifier for the node.
         // - storage path: Path used to save key information for this node.
         // - encryption keypair: Used for encrypting and decrypting incoming and
@@ -140,7 +140,7 @@ impl Node {
             self.encryption_keypair.clone(),
         );
 
-        // Parameters used to run the NodeEngine instance.
+        // Parameters used to run the server instance.
         // - addr4: socket ipv4 address
         // - addr6: socket ipv6 address
         let dhts = (
@@ -151,21 +151,21 @@ impl Node {
         // Flag used to signal the spawned thread to stop execution.
         let quit = Arc::clone(&self.quit);
         let bootstrap = Arc::clone(&self.bootstrap);
+
         self.worker = Some(thread::spawn(move || {
             let server = Rc::new(RefCell::new(
                 Server::new(params.0, params.1, params.2)
             ));
 
-            server.borrow_mut().set_bootstrap(bootstrap);
-            match server::start_tweak(&server, dhts) {
+            match server::start_tweak(&server, dhts, bootstrap) {
                 Ok(_) => {
                     _ = server.borrow_mut().run_loop(&quit).map_err(|err| {
-                        error!("Unexpected error happened in the running loop: {}.", err);
+                        error!("Unexpected error happened in the loop: {}.", err);
                     });
                     server.borrow_mut().stop();
                 },
                 Err(err) => {
-                    error!("Starting node server error {}, aborted the routine.", err);
+                    error!("Starting node server error {}, aborted.", err);
                 }
             }
 

@@ -17,7 +17,7 @@ use crate::{
     constants,
     cryptobox,
     id::{self, Id},
-    node_info::NodeInfo,
+    NodeInfo,
     dht::DHT,
     error::Error,
     rpccall::RpcCall,
@@ -113,6 +113,10 @@ impl Server {
         self.bootstrap = Some(bootstrap);
     }
 
+    pub(crate) fn bootstrap(&self) -> &Arc<Mutex<Bootstrap>> {
+        unwrap!(self.bootstrap)
+    }
+
     pub(crate) fn start<T>(&mut self, dht4: Option<T>, dht6: Option<T>) -> Result<(), Error>
     where
         T: Into<Rc<RefCell<DHT>>>
@@ -143,12 +147,10 @@ impl Server {
                 dht.borrow().addr()
             );
 
-            let _dht = Rc::clone(&dht);
+            let cloned = Rc::clone(&dht);
             self.scheduler.borrow_mut().add(
-                100,
-                constants::DHT_UPDATE_INTERVAL,
-                move || {
-                    _dht.borrow_mut().update();
+                100, constants::DHT_UPDATE_INTERVAL, move || {
+                    cloned.borrow_mut().update();
             });
         }
         if let Some(dht) = self.dht6.as_ref() {
@@ -161,38 +163,30 @@ impl Server {
                 dht.borrow().addr()
             );
 
-            let _dht = Rc::clone(&dht);
+            let cloned = Rc::clone(&dht);
             self.scheduler.borrow_mut().add(
-                100,
-                constants::DHT_UPDATE_INTERVAL,
-                move || {
-                    _dht.borrow_mut().update();
+                100, constants::DHT_UPDATE_INTERVAL, move || {
+                    cloned.borrow_mut().update();
             });
         }
 
-        let ctxts = Rc::clone(&self.crypto_ctx);
+        let ctxts_cloned = Rc::clone(&self.crypto_ctx);
         self.scheduler.borrow_mut().add(
-            2000,
-            crypto_cache::EXPIRED_CHECK_INTERVAL,
-            move || {
-                ctxts.borrow_mut().handle_expiration();
+            2000, crypto_cache::EXPIRED_CHECK_INTERVAL, move || {
+                ctxts_cloned.borrow_mut().handle_expiration();
         });
 
-        let storage = Rc::clone(&self.storage);
+        let storage_cloned = Rc::clone(&self.storage);
         self.scheduler.borrow_mut().add(
-            1000,
-            constants::RE_ANNOUNCE_INTERVAL,
-            move || {
-                persistent_announce(&storage);
+            1000, constants::RE_ANNOUNCE_INTERVAL, move || {
+                persistent_announce(&storage_cloned);
         });
 
         if let Some(bootstrap) = self.bootstrap.as_ref() {
-            let _bootstrap = Arc::clone(&bootstrap);
+            let bootstrap_cloned = Arc::clone(&bootstrap);
             self.scheduler.borrow_mut().add(
-                1000,
-                1000,
-                move || {
-                    _bootstrap.lock().unwrap().update(|v| {
+                1000, 1000, move || {
+                    bootstrap_cloned.lock().unwrap().update(|v| {
                         v.iter().for_each(|item | {
                             println!("item => {}", item);
                         });
@@ -291,10 +285,6 @@ impl Server {
         _ = self.storage.borrow_mut().close();
     }
 
-    pub async fn bootstrap(&self, _: &[NodeInfo]) -> Result<(), Error> {
-        unimplemented!()
-    }
-
     pub(crate) fn is_reachable(&self) -> bool {
         self.reachable
     }
@@ -340,7 +330,7 @@ impl Server {
         unimplemented!()
     }
 
-    async fn read_socket<'a>(&self, socket: Option<&UdpSocket>, buffer: Rc<RefCell<Vec<u8>>>) -> Result<Option<usize>, io::Error> {
+    async fn read_socket(&self, socket: Option<&UdpSocket>, buffer: Rc<RefCell<Vec<u8>>>) -> Result<Option<usize>, io::Error> {
         match socket {
             Some(socket) => {
                 let mut buf = buffer.borrow_mut();
@@ -482,7 +472,7 @@ fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
 // Notice: This function aims to resolve the dilemma of circular dependency between
 // the "server" instance and the two dht instances, which cannot be resolved by allowing
 // use "self" reference in engine method to create dht instances.
-pub(crate) fn start_tweak<T>(server: &Rc<RefCell<Server>>, addrs: (T, T)) -> Result<(), Error>
+pub(crate) fn start_tweak<T>(server: &Rc<RefCell<Server>>, addrs: (T, T), bootstrap: Arc<Mutex<Bootstrap>>) -> Result<(), Error>
 where
     T: Into<Option<SocketAddr>>
 {
@@ -490,10 +480,14 @@ where
     let mut dht6: Option<Rc<RefCell<DHT>>> = None;
 
     if let Some(addr) = addrs.0.into() {
-        dht4 = Some(Rc::new(RefCell::new(DHT::new(server, addr))));
+        let dht = Rc::new(RefCell::new(DHT::new(server, addr)));
+        dht.borrow_mut().with_bootstrap(&bootstrap);
+        dht4 = Some(dht);
     }
     if let Some(addr) = addrs.1.into() {
-        dht6 = Some(Rc::new(RefCell::new(DHT::new(server, addr))));
+        let dht = Rc::new(RefCell::new(DHT::new(server, addr)));
+        dht.borrow_mut().with_bootstrap(&bootstrap);
+        dht6 = Some(dht);
     }
     server.borrow_mut().start(dht4, dht6)
 }

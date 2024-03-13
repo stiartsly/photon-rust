@@ -1,8 +1,10 @@
 
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::cell::RefCell;
 use std::time::SystemTime;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use log::{debug, info, warn, trace};
 
 use crate::{
@@ -13,19 +15,21 @@ use crate::{
     node_info::NodeInfo,
     peer::Peer,
     value::Value,
-    rpccall::RpcCall,
+    rpccall::{self, RpcCall},
     lookup_option::LookupOption,
     routing_table::RoutingTable,
     kclosest_nodes::KClosestNodes,
     token_man::TokenManager,
     server::Server,
     scheduler::Scheduler,
+    bootstrap::Bootstrap,
 };
 
 use crate::msg::{
     ping_req,
     announce_peer_req,
     announce_peer_rsp,
+    find_node_req,
     find_node_rsp,
     find_value_req,
     store_value_req,
@@ -33,7 +37,7 @@ use crate::msg::{
     error::{self, ErrorResult},
     find_peer_rsp::{self, PeerResult},
     find_value_rsp::{self, ValueResult},
-    lookup::{self, Result},
+    lookup::{self, Result, Condition},
     msg::{self, Msg},
 };
 
@@ -54,6 +58,8 @@ pub(crate) struct DHT {
 
     need_bootstrap: bool,
     last_bootstrap: SystemTime,
+    bootstraping: AtomicBool,
+    bootstrap: Option<Arc<Mutex<Bootstrap>>>,
     routing_table: RoutingTable,
 
     server:     Rc<RefCell<Server>>,
@@ -74,12 +80,18 @@ impl DHT {
 
             need_bootstrap: false,
             last_bootstrap: SystemTime::UNIX_EPOCH,
+            bootstraping: AtomicBool::new(false),
+            bootstrap: None,
 
             server: Rc::clone(server),
             task_man:  Rc::new(RefCell::new(TaskManager::new())),
             token_man: Rc::clone(server.borrow().token_man()),
             scheduler: Rc::clone(server.borrow().scheduler()),
         }
+    }
+
+    pub(crate) fn with_bootstrap(&mut self, bootstrap: &Arc<Mutex<Bootstrap>>) {
+        self.bootstrap = Some(Arc::clone(&bootstrap));
     }
 
     pub(crate) fn enable_persistence(&mut self, path: &str) {
@@ -99,7 +111,48 @@ impl DHT {
     }
 
     pub(crate) fn bootstrap(&mut self) {
+        if !self.is_running() ||
+            as_millis!(self.last_bootstrap) < constants::BOOTSTRAP_MIN_INTERVAL {
+            return;
+        }
+
+        let bootstrap = self.bootstrap.as_ref().unwrap().lock().unwrap();
+        let mut nodes = bootstrap.nodes();
+        let mut entries = Option::default() as Option<Vec<NodeInfo>>;
+        if nodes.is_empty() {
+            entries = Some(self.routing_table.random_entries(8));
+            nodes = entries.as_ref().unwrap().as_ref();
+        }
+
         info!("DHT/{} bootstraping ....", addr_kind(&self.addr));
+
+        if !self.bootstraping.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            return;
+        }
+
+        nodes.iter().for_each(|item| {
+            let mut req = Box::new(find_node_req::Message::new());
+            req.with_id(&Id::random());
+            match self.is_ipv4() {
+                true  => req.with_want4(),
+                false => req.with_want6(),
+            };
+
+            let mut call = Box::new(RpcCall::new(item, req));
+            call.set_state_changed_fn(move |call, _, cur| {
+                if cur == &rpccall::State::Responsed || cur == &rpccall::State::Err ||
+                    cur == &rpccall::State::Timeout {
+
+                    if let Some(_) = call.rsp() {
+                        //let list = resp.nodes();
+                        println!("resp: {}", "response");
+                    }
+                    // TODO:
+                }
+
+            });
+            self.server.borrow_mut().send_call(call);
+        });
     }
 
     fn fill_home_bucket(&mut self, _: &[NodeInfo]) {
@@ -110,6 +163,7 @@ impl DHT {
         if !self.is_running() {
             return;
         }
+
         trace!("DHT/{} regularly update...", addr_kind(&self.addr));
         //self.server.borrow_mut().update_reachability();
         self.routing_table.maintenance();

@@ -30,6 +30,10 @@ impl Bootstrap {
         self.updated = true;
     }
 
+    pub(crate) fn nodes(&self) -> &[NodeInfo] {
+        &self.nodes
+    }
+
     pub(crate) fn update<F>(&mut self, mut f: F) where F: FnMut(&[NodeInfo]) {
         if self.updated {
             f(self.nodes.as_ref());
