@@ -1,6 +1,7 @@
 
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+use std::collections::LinkedList;
 use std::cell::RefCell;
 use std::time::SystemTime;
 use std::net::SocketAddr;
@@ -8,6 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use log::{debug, info, warn, trace};
 
 use crate::{
+    as_kind_name,
     as_millis,
     constants,
     version,
@@ -63,9 +65,11 @@ pub(crate) struct DHT {
     routing_table: RoutingTable,
 
     server:     Rc<RefCell<Server>>,
-    task_man:   Rc<RefCell<TaskManager>>,
+    taskman:   Rc<RefCell<TaskManager>>,
     token_man:  Rc<RefCell<TokenManager>>,
     scheduler:  Rc<RefCell<Scheduler>>,
+
+    queue: Rc<RefCell<LinkedList<Box<dyn Msg>>>>,
 }
 
 #[allow(dead_code)]
@@ -84,9 +88,11 @@ impl DHT {
             bootstrap: None,
 
             server: Rc::clone(server),
-            task_man:  Rc::new(RefCell::new(TaskManager::new())),
-            token_man: Rc::clone(server.borrow().token_man()),
+            taskman:  Rc::new(RefCell::new(TaskManager::new())),
+            token_man: Rc::clone(server.borrow().tokenman()),
             scheduler: Rc::clone(server.borrow().scheduler()),
+
+            queue: Rc::new(RefCell::new(LinkedList::new())),
         }
     }
 
@@ -100,6 +106,10 @@ impl DHT {
 
     pub(crate) fn addr(&self) -> &SocketAddr {
         &self.addr
+    }
+
+    pub(crate) fn queue(&self) -> Rc<RefCell<LinkedList<Box<dyn Msg>>>> {
+        Rc::clone(&self.queue)
     }
 
     pub(crate) fn is_ipv4(&self) -> bool {
@@ -124,7 +134,7 @@ impl DHT {
             nodes = entries.as_ref().unwrap().as_ref();
         }
 
-        info!("DHT/{} bootstraping ....", addr_kind(&self.addr));
+        info!("DHT/{} bootstraping ....", as_kind_name!(&self.addr));
 
         if !self.bootstraping.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
             return;
@@ -151,7 +161,7 @@ impl DHT {
                 }
 
             });
-            self.server.borrow_mut().send_call(call);
+           // self.server.borrow_mut().send_call(call);
         });
     }
 
@@ -164,7 +174,7 @@ impl DHT {
             return;
         }
 
-        trace!("DHT/{} regularly update...", addr_kind(&self.addr));
+        trace!("DHT/{} regularly update...", as_kind_name!(&self.addr));
         //self.server.borrow_mut().update_reachability();
         self.routing_table.maintenance();
 
@@ -188,40 +198,30 @@ impl DHT {
             return;
         }
 
-        // Load neighboring nodes from cache storage if possible.
-        let path = self.persist_path.as_ref().unwrap().as_str();
-        if !path.is_empty() {
+        // Load neighboring nodes from cache storage if they exist.
+        if let Some(path) = self.persist_path.as_ref() {
             info!("Loading routing table from [{}] ...", path);
             self.routing_table.load(path);
         }
 
         // TODO: bootstrap nodes.
 
-        info!("Starting DHT/{} on {}", addr_kind(&self.addr), self.addr);
+        info!("Starting DHT/{} on {}", as_kind_name!(&self.addr), self.addr);
         self.running = true;
 
-        // Maintenance tasks should run continuously, even before the first queries
-        // are executed.
-        let task_man = Rc::clone(&self.task_man);
-        self.scheduler.borrow_mut().add(
-            500,
-            constants::DHT_UPDATE_INTERVAL,
-            move || {
-                task_man.borrow_mut().dequeue();
-            }
-        );
+        // Task management.
+        let taskman = Rc::clone(&self.taskman);
+        self.scheduler.borrow_mut().add(500, constants::DHT_UPDATE_INTERVAL, move || {
+            taskman.borrow_mut().dequeue();
+        });
 
         // fix the first time to persist the routing table: 2 min
         //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
 
         // Regularly DHT update
-        self.scheduler.borrow_mut().add(
-            100,
-            constants::DHT_UPDATE_INTERVAL,
-            move || {
-                // TODO;
-            }
-        );
+        self.scheduler.borrow_mut().add(100, constants::DHT_UPDATE_INTERVAL, move || {
+            // TODO;
+        });
 
         // Send a ping request to a random node to verify socket liveness.
         self.scheduler.borrow_mut().add(
@@ -234,18 +234,18 @@ impl DHT {
 
         // Perform a deep lookup to familiarize ourselves with random sections of
         // the keyspace.
-        let mut kind = String::from(addr_kind(&self.addr));
-        let task_man = Rc::clone(&self.task_man);
+        //let mut kind = String::from(addr_kind(&self.addr));
+        let addr = self.addr.clone();
+        let taskman = Rc::clone(&self.taskman);
         self.scheduler.borrow_mut().add(
             constants::RANDOM_LOOKUP_INTERVAL,
             constants::RANDOM_LOOKUP_INTERVAL,
             move || {
                 let mut task = Box::new(NodeLookupTask::new(&Id::random()));
-                kind.push_str(":Random refresh lookup");
-                task.with_name(&kind);
+                let name = format!("{}: random lookup", as_kind_name!(&addr));
+                task.with_name(&name);
                 task.add_listener(move |_|{});
-
-                task_man.borrow_mut().add(task);
+                taskman.borrow_mut().add(task);
             }
         )
     }
@@ -255,22 +255,23 @@ impl DHT {
             return;
         }
 
-        info!("{} initiated shutdown ...", addr_kind(&self.addr));
+        info!("{} initiated shutdown ...", as_kind_name!(&self.addr));
         info!("stopping servers ...");
 
         self.running = false;
 
         info!("Persisting routing table on shutdown ...");
-        self.routing_table.save(self.persist_path.as_ref().unwrap().as_str());
-
-        self.task_man.borrow_mut().cancel_all();
+        if let Some(path) = self.persist_path.as_ref() {
+            self.routing_table.save(path);
+        }
+        self.taskman.borrow_mut().cancel_all();
     }
 
     pub(crate) fn is_running(&self) -> bool {
         self.running
     }
 
-    fn on_message<T>(&mut self, msg: &Box<T>)
+    pub(crate) fn on_msg<T>(&mut self, msg: Box<T>)
     where
         T: Msg
             + lookup::Condition
@@ -286,7 +287,7 @@ impl DHT {
         }
     }
 
-    fn on_request<T>(&mut self, msg: &Box<T>)
+    fn on_request<T>(&mut self, msg: Box<T>)
     where
         T: Msg
             + lookup::Condition
@@ -307,9 +308,9 @@ impl DHT {
         }
     }
 
-    fn on_response(&self, _: &dyn Msg) {}
+    fn on_response(&mut self, _: &dyn Msg) {}
 
-    fn on_error<T>(&self, msg: &Box<T>)
+    fn on_error<T>(&mut self, msg: Box<T>)
     where
         T: Msg + error::ErrorResult,
     {
@@ -323,7 +324,7 @@ impl DHT {
         );
     }
 
-    fn send_err(&self, msg: &dyn Msg, code: i32, str: &str) {
+    fn send_err(&mut self, msg: &dyn Msg, code: i32, str: &str) {
         let mut err = Box::new(error::Message::new());
 
         err.with_id(msg.id());
@@ -333,20 +334,20 @@ impl DHT {
         err.with_msg(str);
         err.with_code(code);
 
-        self.server.borrow_mut().send_msg(err, self.is_ipv4());
+        self.send_msg(err);
     }
 
-    fn on_ping(&self, request: &dyn Msg) {
+    fn on_ping(&mut self, request: &dyn Msg) {
         let mut msg = Box::new(ping_req::Message::new());
 
         msg.with_id(request.id());
         msg.with_txid(request.txid());
         msg.with_addr(request.addr());
 
-        self.server.borrow_mut().send_msg(msg, self.is_ipv4());
+        self.send_msg(msg);
     }
 
-    fn on_find_node<T>(&self, request: &Box<T>)
+    fn on_find_node<T>(&mut self, request: Box<T>)
     where
         T: Msg + lookup::Condition,
     {
@@ -386,10 +387,10 @@ impl DHT {
                 .generate_token(request.id(), request.addr(), request.target())
         });
 
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4())
+        self.send_msg(resp)
     }
 
-    fn on_find_value<T>(&self, request: &Box<T>)
+    fn on_find_value<T>(&mut self, request: Box<T>)
     where
         T: Msg + lookup::Condition + find_value_req::ValueOption,
     {
@@ -444,10 +445,10 @@ impl DHT {
                 .generate_token(request.id(), request.addr(), request.target())
         });
 
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(resp);
     }
 
-    fn on_store_value<T>(&mut self, request: &Box<T>)
+    fn on_store_value<T>(&mut self, request: Box<T>)
     where
         T: Msg + lookup::Condition + store_value_req::StoreOption,
     {
@@ -483,10 +484,10 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(resp);
     }
 
-    fn on_find_peers<T>(&self, request: &Box<T>)
+    fn on_find_peers<T>(&mut self, request: Box<T>)
     where
         T: Msg + lookup::Condition + find_value_req::ValueOption,
     {
@@ -536,10 +537,10 @@ impl DHT {
                 .generate_token(request.id(), request.addr(), request.target())
         });
 
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(resp);
     }
 
-    fn on_announce_peer<T>(&mut self, request: &Box<T>)
+    fn on_announce_peer<T>(&mut self, request: Box<T>)
     where
         T: Msg + lookup::Condition + announce_peer_req::AnnounceOption,
     {
@@ -591,7 +592,7 @@ impl DHT {
         resp.with_txid(request.txid());
         resp.with_addr(request.addr());
 
-        self.server.borrow_mut().send_msg(resp, self.is_ipv4());
+        self.send_msg(resp);
     }
 
     pub(crate) fn on_timeout(&self, call: &RpcCall) {
@@ -634,7 +635,7 @@ impl DHT {
             complete_fn(result_shadow.borrow_mut().take());
         });
 
-        self.task_man.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
@@ -669,7 +670,7 @@ impl DHT {
         task.add_listener(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         });
-        self.task_man.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
@@ -695,7 +696,7 @@ impl DHT {
                 // TODO:
             }
         });
-        self.task_man.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn find_peer<F>(
@@ -721,7 +722,7 @@ impl DHT {
 
         task.add_listener(move |_| complete_fn(result_shadow.take()));
 
-        self.task_man.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn announce_peer<F>(&self, _: &Peer, _: F)
@@ -730,11 +731,20 @@ impl DHT {
     {
         unimplemented!()
     }
-}
 
-fn addr_kind(addr: &SocketAddr) -> &'static str {
-    match addr.is_ipv4() {
-        true => "Ipv4",
-        false => "ipv6"
+    fn send_msg(&mut self, msg: Box<dyn Msg>) {
+        // Handle associated call if it exists:
+        // - Notify Kademlia DHT of being interacting with a neighboring node;
+        // - Process some internal state for this RPC call.
+        if let Some(mut call) = msg.associated_call() {
+            call.dht().borrow_mut().on_send(call.target_id());
+            call.send(&self.scheduler);
+        }
+
+        self.queue.borrow_mut().push_back(msg);
+    }
+
+    pub(crate) fn send_call(&self, _: Box<RpcCall>) {
+        // TODO:
     }
 }

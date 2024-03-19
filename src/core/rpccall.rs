@@ -8,7 +8,7 @@ use crate::{
     id::Id,
     node_info::NodeInfo,
     dht::DHT,
-    server::Server,
+    scheduler::Scheduler,
     msg::msg::{self, Msg}
 };
 
@@ -151,7 +151,7 @@ impl RpcCall {
         }
     }
 
-    pub(crate) fn send(&mut self, _: &Server) {
+    pub(crate) fn send(&mut self, _: &Rc<RefCell<Scheduler>>) {
         self.sent = SystemTime::now();
         self.update_state(State::Sent);
 

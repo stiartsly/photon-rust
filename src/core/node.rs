@@ -37,7 +37,7 @@ pub struct Node {
 
     bootstrap: Arc<Mutex<Bootstrap>>,
 
-    worker: Option<JoinHandle<()>>, // engine working thread.
+    thread: Option<JoinHandle<()>>, // engine working thread.
     quit: Arc<Mutex<bool>>, // notification handle
 }
 
@@ -70,28 +70,19 @@ impl Node {
         match fs::metadata(&keypath) {
             Ok(metadata) => {
                 if metadata.is_dir() {
-                    error!(
-                        "Key file path {} is an existing directory. DHT node
-                        will not be able to persist node key there.",
-                        keypath
-                    );
-                    return Err(Error::State(format!(
-                        "Bad file path {}, untable to persist node key",
-                        keypath
-                    )));
+                    let str = format!("Bad file path: {}. DHT node will not be able to persist node key there.", keypath);
+                    error!("{}", str);
+                    return Err(Error::State(str));
                 };
                 keypair = load_key(&keypath)
                     .map_err(|err| {
-                        error!("Loading key data error {}", err);
-                        return err;
-                    })
-                    .ok();
+                        error!("Loading key data error {}", err); err
+                    }).ok();
             }
             Err(_) => {
                 _ = keypair.insert(KeyPair::random());
                 _ = store_key(keypair.as_ref().unwrap(), &keypath).map_err(|err| {
-                    error!("Perisisting key data error {}", err);
-                    return err;
+                    error!("Perisisting key data error {}", err); err
                 })
             }
         };
@@ -100,8 +91,7 @@ impl Node {
         let id = Id::from_signature_key(unwrap!(keypair).public_key());
         let idpath = path.clone() + "id";
         store_nodeid(&id, &idpath).map_err(|err| {
-            error!("Persisting node Id data error {}", err);
-            return err;
+            error!("Persisting node Id data error {}", err); err
         })?;
 
         info!("Current DHT node Id {}", id);
@@ -116,7 +106,7 @@ impl Node {
             status: NodeStatus::Stopped,
             option: LookupOption::Conservative,
             storage_path: path,
-            worker: None,
+            thread: None,
             quit: Arc::new(Mutex::new(false)),
         })
     }
@@ -143,7 +133,7 @@ impl Node {
         // Parameters used to run the server instance.
         // - addr4: socket ipv4 address
         // - addr6: socket ipv6 address
-        let dhts = (
+        let addrs = (
             self.cfg.addr4().clone(),
             self.cfg.addr6().clone()
         );
@@ -152,14 +142,19 @@ impl Node {
         let quit = Arc::clone(&self.quit);
         let bootstrap = Arc::clone(&self.bootstrap);
 
-        self.worker = Some(thread::spawn(move || {
+        self.thread = Some(thread::spawn(move || {
             let server = Rc::new(RefCell::new(
                 Server::new(params.0, params.1, params.2)
             ));
 
-            match server::start_tweak(&server, dhts, bootstrap) {
+            match server::start_tweak(&server, addrs.0, addrs.1, bootstrap) {
                 Ok(_) => {
-                    _ = server.borrow_mut().run_loop(&quit).map_err(|err| {
+                    _ = server::run_loop(
+                        &server,
+                        server.borrow().dht4(),
+                        server.borrow().dht6(),
+                        &quit
+                    ).map_err(|err| {
                         error!("Unexpected error happened in the loop: {}.", err);
                     });
                     server.borrow_mut().stop();
@@ -196,8 +191,8 @@ impl Node {
         }
         drop(quit);
 
-        self.worker.take().unwrap().join().expect("Join worker error");
-        self.worker = None;
+        self.thread.take().unwrap().join().expect("Join thread error");
+        self.thread = None;
         self.status = NodeStatus::Stopped;
 
         info!("DHT node {} stopped", self.id);
