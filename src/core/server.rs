@@ -129,10 +129,9 @@ impl Server {
             info!("Started RPC server on ipv4 address: {}", dht.borrow().addr());
 
             let cloned = Rc::clone(&dht);
-            self.scheduler.borrow_mut().add(
-                100, constants::DHT_UPDATE_INTERVAL, move || {
-                    cloned.borrow_mut().update();
-            });
+            self.scheduler.borrow_mut().add(move || {
+                cloned.borrow_mut().update();
+            }, 100, constants::DHT_UPDATE_INTERVAL);
         }
         if let Some(dht) = dht6.as_ref() {
             self.dht6 = Some(Rc::clone(&dht));
@@ -144,35 +143,30 @@ impl Server {
             info!("Started RPC server on ipv6 address: {}", dht.borrow().addr());
 
             let cloned = Rc::clone(&dht);
-            self.scheduler.borrow_mut().add(
-                100, constants::DHT_UPDATE_INTERVAL, move || {
-                    cloned.borrow_mut().update();
-            });
+            self.scheduler.borrow_mut().add(move || {
+                cloned.borrow_mut().update()
+            }, 100, constants::DHT_UPDATE_INTERVAL);
         }
 
-        let ctxts_cloned = Rc::clone(&self.crypto_ctx);
-        self.scheduler.borrow_mut().add(
-            2000, crypto_cache::EXPIRED_CHECK_INTERVAL, move || {
-                ctxts_cloned.borrow_mut().handle_expiration();
-        });
+        let ctxts = Rc::clone(&self.crypto_ctx);
+        self.scheduler.borrow_mut().add(move || {
+            ctxts.borrow_mut().handle_expiration();
+        }, 2000, crypto_cache::EXPIRED_CHECK_INTERVAL);
 
-        let storage_cloned = Rc::clone(&self.storage);
-        self.scheduler.borrow_mut().add(
-            1000, constants::RE_ANNOUNCE_INTERVAL, move || {
-                persistent_announce(&storage_cloned);
-        });
+        let storage = Rc::clone(&self.storage);
+        self.scheduler.borrow_mut().add(move || {
+            persistent_announce(&storage);
+        }, 1000, constants::RE_ANNOUNCE_INTERVAL);
 
         if let Some(bootstrap) = self.bootstrap.as_ref() {
-            let bootstrap_cloned = Arc::clone(&bootstrap);
-            self.scheduler.borrow_mut().add(
-                1000, 1000, move || {
-                    bootstrap_cloned.lock().unwrap().update(|v| {
-                        v.iter().for_each(|item | {
-                            println!("item => {}", item);
-                        });
-                    })
-                }
-            )
+            let bootstrap = Arc::clone(&bootstrap);
+            self.scheduler.borrow_mut().add(move || {
+                bootstrap.lock().unwrap().update(|v| {
+                    v.iter().for_each(|item | {
+                        println!("item => {}", item);
+                    });
+                })
+            },1000, 1000);
         }
 
         Ok(())
@@ -409,6 +403,7 @@ async fn write_socket<F>(
             _ = unwrap!(socket).send_to(&buffer, msg.addr());
         },
         None => {
+            println!(">>>>>>>>> write_socket");
             sleep(Duration::from_millis(500)).await;
         }
     }

@@ -207,43 +207,35 @@ impl DHT {
 
         // Task management.
         let taskman = Rc::clone(&self.taskman);
-        self.scheduler.borrow_mut().add(500, constants::DHT_UPDATE_INTERVAL, move || {
+        self.scheduler.borrow_mut().add(move || {
             taskman.borrow_mut().dequeue();
-        });
+        }, 500, constants::DHT_UPDATE_INTERVAL);
 
         // fix the first time to persist the routing table: 2 min
         //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
 
         // Regularly DHT update
-        self.scheduler.borrow_mut().add(100, constants::DHT_UPDATE_INTERVAL, move || {
+        self.scheduler.borrow_mut().add(move || {
             // TODO;
-        });
+        }, 100, constants::DHT_UPDATE_INTERVAL);
 
         // Send a ping request to a random node to verify socket liveness.
-        self.scheduler.borrow_mut().add(
-            constants::RANDOM_PING_INTERVAL,
-            constants::RANDOM_PING_INTERVAL,
-            move || {
-                // TODO;
-            }
-        );
+        self.scheduler.borrow_mut().add(move || {
+            // TODO;
+        }, constants::RANDOM_PING_INTERVAL, constants::RANDOM_PING_INTERVAL);
 
         // Perform a deep lookup to familiarize ourselves with random sections of
         // the keyspace.
         //let mut kind = String::from(addr_kind(&self.addr));
         let addr = self.addr.clone();
         let taskman = Rc::clone(&self.taskman);
-        self.scheduler.borrow_mut().add(
-            constants::RANDOM_LOOKUP_INTERVAL,
-            constants::RANDOM_LOOKUP_INTERVAL,
-            move || {
-                let mut task = Box::new(NodeLookupTask::new(&Id::random()));
-                let name = format!("{}: random lookup", as_kind_name!(&addr));
-                task.with_name(&name);
-                task.add_listener(move |_|{});
-                taskman.borrow_mut().add(task);
-            }
-        )
+        self.scheduler.borrow_mut().add(move || {
+            let mut task = Box::new(NodeLookupTask::new(&Id::random()));
+            let name = format!("{}: random lookup", as_kind_name!(&addr));
+            task.with_name(&name);
+            task.add_listener(move |_|{});
+            taskman.borrow_mut().add(task);
+        }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL)
     }
 
     pub(crate) fn stop(&mut self) {
