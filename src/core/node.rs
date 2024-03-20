@@ -21,7 +21,7 @@ use crate::signature::KeyPair;
 use crate::crypto_cache::CryptoCache;
 use crate::lookup_option::LookupOption;
 use crate::server::{self, Server};
-use crate::bootstrap::Bootstrap;
+use crate::bootstrap::BootstrapZone;
 
 pub struct Node {
     id: Id,
@@ -35,7 +35,7 @@ pub struct Node {
     status: NodeStatus,
     storage_path: String,
 
-    bootstrap: Arc<Mutex<Bootstrap>>,
+    bootstrap_zone: Arc<Mutex<BootstrapZone>>,
 
     thread: Option<JoinHandle<()>>, // engine working thread.
     quit: Arc<Mutex<bool>>, // notification handle
@@ -97,7 +97,7 @@ impl Node {
         info!("Current DHT node Id {}", id);
 
         Ok(Node {
-            bootstrap: Arc::new(Mutex::new(Bootstrap::from(cfg.bootstrap_nodes()))),
+            bootstrap_zone: Arc::new(Mutex::new(BootstrapZone::from(cfg.bootstrap_nodes()))),
             id,
             cfg,
             signature_keypair: unwrap!(keypair).clone(),
@@ -140,20 +140,21 @@ impl Node {
 
         // Flag used to signal the spawned thread to stop execution.
         let quit = Arc::clone(&self.quit);
-        let bootstrap = Arc::clone(&self.bootstrap);
+        let zone = Arc::clone(&self.bootstrap_zone);
 
         self.thread = Some(thread::spawn(move || {
             let server = Rc::new(RefCell::new(
                 Server::new(params.0, params.1, params.2)
             ));
+            server.borrow_mut().with_bootstrap(zone);
 
-            match server::start_tweak(&server, addrs.0, addrs.1, bootstrap) {
+            match server::start_tweak(&server, addrs.0, addrs.1) {
                 Ok(_) => {
                     _ = server::run_loop(
-                        &server,
+                        Rc::clone(&server),
                         server.borrow().dht4(),
                         server.borrow().dht6(),
-                        &quit
+                        Arc::clone(&quit),
                     ).map_err(|err| {
                         error!("Unexpected error happened in the loop: {}.", err);
                     });
@@ -220,9 +221,9 @@ impl Node {
     }
 
     pub fn bootstrap(&mut self, nodes: &[NodeInfo]) {
-        let mut bootstrap = self.bootstrap.lock().unwrap();
-        bootstrap.add_many(nodes);
-        drop(bootstrap);
+        let mut zone = self.bootstrap_zone.lock().unwrap();
+        zone.push_many(nodes);
+        drop(zone);
     }
 
     pub async fn find_node_with_option(

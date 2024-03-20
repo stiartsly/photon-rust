@@ -28,7 +28,7 @@ use crate::{
     crypto_cache::CryptoCache,
     stats::Stats,
     msg::msg,
-    bootstrap::Bootstrap,
+    bootstrap::BootstrapZone,
 };
 
 use crate::msg::msg::Msg;
@@ -46,7 +46,7 @@ pub(crate) struct Server {
     msgs_atleast_reachable_check: i32,
     last_reachable_check: SystemTime,
 
-    bootstrap: Option<Arc<Mutex<Bootstrap>>>,
+    bootstrap_zone: Option<Arc<Mutex<BootstrapZone>>>,
 
     stats: RefCell<Stats>,
     calls: RefCell<HashMap<i32, Box<RpcCall>>>,
@@ -76,7 +76,7 @@ impl Server {
             msgs_atleast_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
-            bootstrap: None,
+            bootstrap_zone: None,
 
             stats: RefCell::new(Stats::new()),
             calls: RefCell::new(HashMap::new()),
@@ -93,6 +93,10 @@ impl Server {
         }
     }
 
+    pub(crate) fn with_bootstrap(&mut self, zone: Arc<Mutex<BootstrapZone>>) {
+        self.bootstrap_zone = Some(zone)
+    }
+
     pub(crate) fn tokenman(&self) -> &Rc<RefCell<TokenManager>> {
         &self.token_man
     }
@@ -101,12 +105,18 @@ impl Server {
         &self.scheduler
     }
 
-    pub(crate) fn dht4(&self) -> &Option<Rc<RefCell<DHT>>> {
-        &self.dht4
+    pub(crate) fn dht4(&self) -> Option<Rc<RefCell<DHT>>> {
+        match self.dht4.as_ref() {
+            Some(dht) => Some(Rc::clone(&dht)),
+            None => None
+        }
     }
 
-    pub(crate) fn dht6(&self) -> &Option<Rc<RefCell<DHT>>> {
-        &self.dht6
+    pub(crate) fn dht6(&self) -> Option<Rc<RefCell<DHT>>> {
+        match self.dht6.as_ref() {
+            Some(dht) => Some(Rc::clone(&dht)),
+            None => None
+        }
     }
 
     pub(crate) fn start(&mut self,
@@ -158,13 +168,21 @@ impl Server {
             persistent_announce(&storage);
         }, 1000, constants::RE_ANNOUNCE_INTERVAL);
 
-        if let Some(bootstrap) = self.bootstrap.as_ref() {
-            let bootstrap = Arc::clone(&bootstrap);
+        // A scheduled task to move bootstrap nodes from the outer (user thread)
+        // to the internal DHT instance.
+        if let Some(zone) = self.bootstrap_zone.as_mut() {
+            let zone = Arc::clone(&zone);
+            let dht4 = self.dht4();
+            let dht6 = self.dht6();
+
             self.scheduler.borrow_mut().add(move || {
-                bootstrap.lock().unwrap().update(|v| {
-                    v.iter().for_each(|item | {
-                        println!("item => {}", item);
-                    });
+                zone.lock().unwrap().pop_all(|item| {
+                    if let Some(dht) = dht4.as_ref() {
+                        dht.borrow_mut().add_bootstrap(item.clone());
+                    }
+                    if let Some(dht) = dht6.as_ref() {
+                        dht.borrow_mut().add_bootstrap(item);
+                    }
                 })
             },1000, 1000);
         }
@@ -224,8 +242,7 @@ fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
 pub(crate) fn start_tweak(
     server: &Rc<RefCell<Server>>,
     addr4: Option<SocketAddr>,
-    addr6: Option<SocketAddr>,
-    bootstrap: Arc<Mutex<Bootstrap>>
+    addr6: Option<SocketAddr>
 ) -> Result<(), Error>
 {
     let mut dht4: Option<Rc<RefCell<DHT>>> = None;
@@ -233,22 +250,20 @@ pub(crate) fn start_tweak(
 
     if let Some(addr) = addr4 {
         let dht = Rc::new(RefCell::new(DHT::new(server, addr)));
-        dht.borrow_mut().with_bootstrap(&bootstrap);
         dht4 = Some(dht);
     }
     if let Some(addr) = addr6 {
         let dht = Rc::new(RefCell::new(DHT::new(server, addr)));
-        dht.borrow_mut().with_bootstrap(&bootstrap);
         dht6 = Some(dht);
     }
     server.borrow_mut().start(dht4, dht6)
 }
 
 pub(crate) fn run_loop(
-    server: &Rc<RefCell<Server>>,
-    dht4: &Option<Rc<RefCell<DHT>>>,
-    dht6: &Option<Rc<RefCell<DHT>>>,
-    quit: &Arc<Mutex<bool>>
+    server: Rc<RefCell<Server>>,
+    dht4: Option<Rc<RefCell<DHT>>>,
+    dht6: Option<Rc<RefCell<DHT>>>,
+    quit: Arc<Mutex<bool>>
 ) -> io::Result<()>
 {
     let rt = runtime::Builder::new_current_thread()

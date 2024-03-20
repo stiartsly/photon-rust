@@ -59,8 +59,9 @@ impl RoutingTable {
         unimplemented!()
     }
 
-    pub(crate) fn random_entries(&self, _: i32) -> Vec<NodeInfo> {
-        unimplemented!();
+    pub(crate) fn random_entries(&self, _: i32) -> Vec<Box<NodeInfo>> {
+        //unimplemented!();
+        Vec::new()
     }
 
     pub(crate) fn put(&mut self, _: Box<KBucket>) {

@@ -1,6 +1,5 @@
 
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
 use std::cell::RefCell;
 use std::time::SystemTime;
@@ -24,7 +23,6 @@ use crate::{
     token_man::TokenManager,
     server::Server,
     scheduler::Scheduler,
-    bootstrap::Bootstrap,
 };
 
 use crate::msg::{
@@ -58,10 +56,11 @@ pub(crate) struct DHT {
     last_save: SystemTime,
     running: bool,
 
-    need_bootstrap: bool,
-    last_bootstrap: SystemTime,
-    bootstraping: AtomicBool,
-    bootstrap: Option<Arc<Mutex<Bootstrap>>>,
+    bootstrap_need: bool,
+    bootstrap_nodes: LinkedList<Box<NodeInfo>>,
+    bootstrap_time: SystemTime,
+    bootstrap_flag: AtomicBool,
+
     routing_table: RoutingTable,
 
     server:     Rc<RefCell<Server>>,
@@ -82,10 +81,10 @@ impl DHT {
             last_save: SystemTime::UNIX_EPOCH,
             routing_table: RoutingTable::new(),
 
-            need_bootstrap: false,
-            last_bootstrap: SystemTime::UNIX_EPOCH,
-            bootstraping: AtomicBool::new(false),
-            bootstrap: None,
+            bootstrap_nodes: LinkedList::new(),
+            bootstrap_need: false,
+            bootstrap_time: SystemTime::UNIX_EPOCH,
+            bootstrap_flag: AtomicBool::new(false),
 
             server: Rc::clone(server),
             taskman:  Rc::new(RefCell::new(TaskManager::new())),
@@ -96,12 +95,13 @@ impl DHT {
         }
     }
 
-    pub(crate) fn with_bootstrap(&mut self, bootstrap: &Arc<Mutex<Bootstrap>>) {
-        self.bootstrap = Some(Arc::clone(&bootstrap));
-    }
-
     pub(crate) fn enable_persistence(&mut self, path: &str) {
         self.persist_path = Some(String::from(path));
+    }
+
+    pub(crate) fn add_bootstrap(&mut self, node: Box<NodeInfo>) {
+        self.bootstrap_nodes.push_back(node);
+        self.bootstrap_need = true;
     }
 
     pub(crate) fn addr(&self) -> &SocketAddr {
@@ -117,22 +117,14 @@ impl DHT {
     }
 
     pub(crate) fn bootstrap(&mut self) {
-        if !self.is_running() ||
-            as_millis!(self.last_bootstrap) < constants::BOOTSTRAP_MIN_INTERVAL {
-            return;
-        }
-
-        let bootstrap = self.bootstrap.as_ref().unwrap().lock().unwrap();
-        let mut nodes = bootstrap.nodes();
-        let mut entries = Option::default() as Option<Vec<NodeInfo>>;
+        let mut nodes = self.bootstrap_nodes.clone().into_iter().collect::<Vec<_>>();
         if nodes.is_empty() {
-            entries = Some(self.routing_table.random_entries(8));
-            nodes = entries.as_ref().unwrap().as_ref();
+            nodes = self.routing_table.random_entries(8);
         }
 
         info!("DHT/{} bootstraping ....", as_kind_name!(&self.addr));
 
-        if !self.bootstraping.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+        if !self.bootstrap_flag.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
             return;
         }
 
@@ -174,10 +166,10 @@ impl DHT {
         //self.server.borrow_mut().update_reachability();
         self.routing_table.maintenance();
 
-        if self.need_bootstrap || self.routing_table.size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
-            as_millis!(self.last_bootstrap) > constants::SELF_LOOKUP_INTERVAL {
+        if self.bootstrap_need || self.routing_table.size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
+            as_millis!(self.bootstrap_time) > constants::SELF_LOOKUP_INTERVAL {
 
-            self.need_bootstrap = false;
+            self.bootstrap_need = false;
             // Regularly search for our ID to update the routing table
             self.bootstrap();
         }
