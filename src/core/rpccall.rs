@@ -27,7 +27,7 @@ pub(crate) struct RpcCall {
     //dht: Option<Rc<RefCell<DHT>>>,
     target: NodeInfo,
 
-    req: Box<dyn Msg>,
+    req: Option<Box<dyn Msg>>,
     rsp: Option<Box<dyn Msg>>,
 
     sent: SystemTime,
@@ -36,7 +36,7 @@ pub(crate) struct RpcCall {
     state: State,
 
     state_changed_fn: Box<dyn Fn(&Self, &State, &State)>,
-    responsed_fn: Box<dyn Fn(&Self, &Box<dyn Msg>)>,
+    responsed_fn: Box<dyn Fn(&Self, Box<dyn Msg>)>,
     stalled_fn: Box<dyn Fn(&Self)>,
     timeout_fn: Box<dyn Fn(&Self)>,
 }
@@ -47,7 +47,7 @@ impl RpcCall {
         RpcCall {
             //dht: None,
             target: node.clone(),
-            req,
+            req: Some(req),
             rsp: None,
 
             sent: SystemTime::UNIX_EPOCH,
@@ -74,19 +74,26 @@ impl RpcCall {
     }
 
     pub(crate) fn matches_id(&self) -> bool {
-        self.req.id() == self.target_id()
-    }
-
-    pub(crate) fn matches_address(&self) -> bool {
-        if let Some(msg) = self.rsp.as_ref() {
-            msg.addr() == self.req.addr()
-        } else {
-            false
+        match self.rsp.as_ref() {
+            Some(msg) => msg.id() == self.target_id(),
+            None => false
         }
     }
 
-    pub(crate) fn req(&self) -> &Box<dyn Msg> {
-        &self.req
+    pub(crate) fn matches_address(&self) -> bool {
+        /*match self.rsp.as_ref() {
+            Some(msg) => msg.addr() == self.req.addr(),
+            None => false
+        }*/
+        true
+    }
+
+    pub(crate) fn req_mut(&mut self) -> &mut Box<dyn Msg> {
+        self.req.as_mut().unwrap()
+    }
+
+    pub(crate) fn req(&mut self) -> Box<dyn Msg> {
+        self.req.take().unwrap()
     }
 
     pub(crate) fn rsp(&self) -> &Option<Box<dyn Msg>> {
@@ -118,7 +125,7 @@ impl RpcCall {
 
     pub(crate) fn set_responsed_fn<F>(&mut self, f: F)
     where
-        F: Fn(&Self, &Box<dyn Msg>) + 'static,
+        F: Fn(&Self, Box<dyn Msg>) + 'static,
     {
         self.responsed_fn = Box::new(f)
     }
@@ -146,7 +153,11 @@ impl RpcCall {
         match self.state {
             State::Timeout => (self.timeout_fn)(self),
             State::Stalled => (self.stalled_fn)(self),
-            State::Responsed => (self.responsed_fn)(self, self.rsp.as_ref().unwrap()),
+            State::Responsed => {
+                /*if let Some(msg) = self.rsp.as_ref() {
+                    (self.responsed_fn)(self, msg);
+                }*/
+            },
             _ => {}
         }
     }

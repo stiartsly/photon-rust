@@ -1,6 +1,6 @@
 
 use std::rc::Rc;
-use std::collections::LinkedList;
+use std::collections::{LinkedList, HashMap};
 use std::cell::RefCell;
 use std::time::SystemTime;
 use std::net::SocketAddr;
@@ -61,6 +61,9 @@ pub(crate) struct DHT {
     bootstrap_time: SystemTime,
     bootstrap_flag: AtomicBool,
 
+    next_tid: i32,
+    calls: HashMap<i32, Box<RpcCall>>,
+
     routing_table: RoutingTable,
 
     server:     Rc<RefCell<Server>>,
@@ -85,6 +88,9 @@ impl DHT {
             bootstrap_need: false,
             bootstrap_time: SystemTime::UNIX_EPOCH,
             bootstrap_flag: AtomicBool::new(false),
+
+            next_tid: 0,
+            calls: HashMap::new(),
 
             server: Rc::clone(server),
             taskman:  Rc::new(RefCell::new(TaskManager::new())),
@@ -124,13 +130,15 @@ impl DHT {
 
         info!("DHT/{} bootstraping ....", as_kind_name!(&self.addr));
 
-        if !self.bootstrap_flag.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+       /* if self.bootstrap_flag.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
             return;
-        }
+        }*/
 
         nodes.iter().for_each(|item| {
             let mut req = Box::new(find_node_req::Message::new());
-            req.with_id(&Id::random());
+            req.with_target(&Id::random());
+            req.with_id(item.id());
+            req.with_addr(item.socket_addr());
             match self.is_ipv4() {
                 true  => req.with_want4(),
                 false => req.with_want6(),
@@ -147,7 +155,6 @@ impl DHT {
                     }
                     // TODO:
                 }
-
             });
             self.send_call(call);
         });
@@ -724,7 +731,21 @@ impl DHT {
         self.queue.borrow_mut().push_back(msg);
     }
 
-    pub(crate) fn send_call(&self, _: Box<RpcCall>) {
-        // unimplemented!()
+    pub(crate) fn send_call(&mut self, mut call: Box<RpcCall>) {
+        self.next_tid += 1;
+        let mut txid = self.next_tid;
+        if txid == 0 {
+            txid += 1;
+        }
+
+        call.set_responsed_fn(|_,_| {});
+        call.set_timeout_fn(|_|{});
+
+        let mut req = call.req();
+        req.with_txid(txid);
+        // call.req_mut().with_associated_call(&call);
+        self.calls.insert(txid, call);
+
+        self.send_msg(req);
     }
 }

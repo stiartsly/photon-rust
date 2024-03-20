@@ -27,4 +27,4 @@ pub(crate) const RPC_SERVER_REACHABILITY_TIMEOUT: u128 = 60 * 1000;
 pub(crate) const BOOTSTRAP_IF_LESS_THAN_X_PEERS:usize = 30;
 pub(crate) const SELF_LOOKUP_INTERVAL:u128 = 30 * 60 * 1000;   // 30 minutes
 pub(crate) const ROUTING_TABLE_PERSIST_INTERVAL: u128 = 10 * 60 * 1000;   // 10 minutes
-pub(crate) const BOOTSTRAP_MIN_INTERVAL: u128 = 4 * 60 * 1000;
+// pub(crate) const BOOTSTRAP_MIN_INTERVAL: u128 = 4 * 60 * 1000;

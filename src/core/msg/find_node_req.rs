@@ -22,7 +22,7 @@ impl Msg for Message {
     }
 
     fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
+        self.addr.as_ref().unwrap()
     }
 
     fn txid(&self) -> i32 {
@@ -50,7 +50,8 @@ impl Msg for Message {
     }
 
     fn associated_call(&self) -> Option<Box<RpcCall>> {
-        unimplemented!()
+        // unimplemented!()
+        None
     }
 
     fn with_associated_call(&mut self, _: Box<RpcCall>) {

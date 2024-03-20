@@ -175,7 +175,8 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Result<Box<dyn Msg>, Er
 
 #[allow(dead_code)]
 pub(crate) fn serialize(_: &Box<dyn Msg>) -> Vec<u8> {
-    unimplemented!()
+    // unimplemented!()
+    "todo".to_string().as_bytes().to_vec()
 }
 
 struct Reader<'a> {
