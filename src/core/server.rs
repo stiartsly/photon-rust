@@ -262,7 +262,7 @@ pub(crate) fn run_loop(
         .build()
         .unwrap();
 
-    let buffer = Rc::new(RefCell::new(Vec::with_capacity(64*1024))) as Rc<RefCell<Vec<u8>>>;
+    let buffer = Rc::new(RefCell::new(vec![0; 64*1024]));
 
     let mut running = true;
     rt.block_on(async move {
@@ -412,6 +412,5 @@ async fn write_socket<F>(
             sleep(Duration::from_millis(500)).await;
         }
     }
-
     Ok(())
 }

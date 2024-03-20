@@ -116,10 +116,6 @@ impl DHT {
         self.addr.is_ipv4()
     }
 
-    fn bootstrap_internal() {
-        unimplemented!()
-    }
-
     pub(crate) fn bootstrap(&mut self) {
         if !self.is_running() ||
             as_millis!(self.last_bootstrap) < constants::BOOTSTRAP_MIN_INTERVAL {
@@ -161,7 +157,7 @@ impl DHT {
                 }
 
             });
-           // self.server.borrow_mut().send_call(call);
+            self.send_call(call);
         });
     }
 
@@ -745,6 +741,6 @@ impl DHT {
     }
 
     pub(crate) fn send_call(&self, _: Box<RpcCall>) {
-        // TODO:
+        // unimplemented!()
     }
 }
