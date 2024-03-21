@@ -112,6 +112,8 @@ pub(crate) trait Msg {
     fn with_associated_call(&mut self, _: Box<RpcCall>);
 
     fn as_any(&self) -> &dyn Any;
+
+    fn serialize(&self) -> Vec<u8>;
 }
 
 #[allow(dead_code)]
@@ -174,9 +176,10 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Result<Box<dyn Msg>, Er
 }
 
 #[allow(dead_code)]
-pub(crate) fn serialize(_: &Box<dyn Msg>) -> Vec<u8> {
+pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Option<Vec<u8>> {
+    Some(msg.serialize())
     // unimplemented!()
-    "todo".to_string().as_bytes().to_vec()
+    //Some("todo".to_string().as_bytes().to_vec())
 }
 
 struct Reader<'a> {

@@ -61,6 +61,10 @@ impl Msg for Message {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn serialize(&self) -> Vec<u8> {
+        unimplemented!()
+    }
 }
 
 impl lookup::Result for Message {

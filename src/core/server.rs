@@ -31,7 +31,7 @@ use crate::{
     bootstrap::BootstrapZone,
 };
 
-use crate::msg::msg::Msg;
+use crate::msg::msg::{Msg};
 
 #[allow(dead_code)]
 pub(crate) struct Server {
@@ -404,7 +404,7 @@ async fn write_socket<F>(
     queue: Option<&Rc<RefCell<LinkedList<Box<dyn Msg>>>>>,
     _: F
 ) -> Result<(), io::Error>
-    where
+where
     F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
 {
     if socket.is_none() || queue.is_none() {
@@ -414,7 +414,7 @@ async fn write_socket<F>(
 
     match unwrap!(queue).borrow_mut().pop_front() {
         Some(msg) => {
-            let buffer = msg::serialize(&msg);
+            let buffer = msg::serialize(&msg).unwrap();
             _ = unwrap!(socket).send_to(&buffer, msg.addr());
         },
         None => {

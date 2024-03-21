@@ -4,7 +4,7 @@ use std::collections::{LinkedList, HashMap};
 use std::cell::RefCell;
 use std::time::SystemTime;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
+// use std::sync::atomic::{AtomicBool};
 use log::{debug, info, warn, trace};
 
 use crate::{
@@ -50,6 +50,13 @@ use crate::task::{
     value_lookup::ValueLookupTask,
 };
 
+pub(crate) trait ReqMsg: Msg
+    + lookup::Condition
+    + find_value_req::ValueOption
+    + store_value_req::StoreOption
+    + announce_peer_req::AnnounceOption
+    + error::ErrorResult {}
+
 pub(crate) struct DHT {
     addr: SocketAddr,
     persist_path: Option<String>,
@@ -59,7 +66,7 @@ pub(crate) struct DHT {
     bootstrap_need: bool,
     bootstrap_nodes: LinkedList<Box<NodeInfo>>,
     bootstrap_time: SystemTime,
-    bootstrap_flag: AtomicBool,
+    //bootstrap_flag: AtomicBool,
 
     next_tid: i32,
     calls: HashMap<i32, Box<RpcCall>>,
@@ -87,7 +94,7 @@ impl DHT {
             bootstrap_nodes: LinkedList::new(),
             bootstrap_need: false,
             bootstrap_time: SystemTime::UNIX_EPOCH,
-            bootstrap_flag: AtomicBool::new(false),
+            // bootstrap_flag: AtomicBool::new(false),
 
             next_tid: 0,
             calls: HashMap::new(),
@@ -259,13 +266,7 @@ impl DHT {
     }
 
     pub(crate) fn on_msg<T>(&mut self, msg: Box<T>)
-    where
-        T: Msg
-            + lookup::Condition
-            + find_value_req::ValueOption
-            + store_value_req::StoreOption
-            + announce_peer_req::AnnounceOption
-            + error::ErrorResult,
+    where T: ReqMsg
     {
         match msg.kind() {
             msg::Kind::Error => self.on_error(msg),
@@ -275,12 +276,7 @@ impl DHT {
     }
 
     fn on_request<T>(&mut self, msg: Box<T>)
-    where
-        T: Msg
-            + lookup::Condition
-            + find_value_req::ValueOption
-            + store_value_req::StoreOption
-            + announce_peer_req::AnnounceOption,
+    where T: ReqMsg
     {
         match msg.method() {
             msg::Method::Ping => self.on_ping(msg.as_ref()),
