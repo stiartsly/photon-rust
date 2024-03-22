@@ -377,8 +377,8 @@ async fn read_socket<F>(
     //self.stats.borrow_mut().on_received_bytes(size);
     //self.stats.borrow_mut().on_received_msg(&msg);
 
-    msg.with_id(&fromid);
-    msg.with_addr(&from_addr);
+    msg.set_id(&fromid);
+    msg.set_addr(&from_addr);
 
     debug!("Received {}/{} from {}:[{}] {}", msg.method(), msg.kind(), from_addr, size, "msg"); // TODO:
 

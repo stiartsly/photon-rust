@@ -1,3 +1,5 @@
+mod cbor;
+pub(crate) mod keys;
 pub(crate) mod announce_peer_req;
 pub(crate) mod announce_peer_rsp;
 pub(crate) mod error;

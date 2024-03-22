@@ -32,6 +32,14 @@ impl Msg for Message {
         &self.addr.as_ref().unwrap()
     }
 
+    fn remote_id(&self) -> &Id {
+        self.id.as_ref().unwrap()
+    }
+
+    fn remote_addr(&self) -> &SocketAddr {
+        &self.addr.as_ref().unwrap()
+    }
+
     fn txid(&self) -> i32 {
         self.txid
     }
@@ -40,19 +48,27 @@ impl Msg for Message {
         self.ver
     }
 
-    fn with_id(&mut self, nodeid: &Id) {
+    fn set_id(&mut self, nodeid: &Id) {
         self.id = Some(nodeid.clone())
     }
 
-    fn with_addr(&mut self, addr: &SocketAddr) {
+    fn set_addr(&mut self, addr: &SocketAddr) {
         self.addr = Some(addr.clone())
     }
 
-    fn with_txid(&mut self, txid: i32) {
+    fn set_remote_id(&mut self, _: &Id) {
+        unimplemented!()
+    }
+
+    fn set_remote_addr(&mut self, _: &SocketAddr) {
+        unimplemented!()
+    }
+
+    fn set_txid(&mut self, txid: i32) {
         self.txid = txid
     }
 
-    fn with_ver(&mut self, ver: i32) {
+    fn set_ver(&mut self, ver: i32) {
         self.ver = ver
     }
 
@@ -68,7 +84,7 @@ impl Msg for Message {
         self
     }
 
-    fn serialize(&self) -> Vec<u8> {
+    fn ser(&self) -> Vec<u8> {
         unimplemented!()
     }
 }

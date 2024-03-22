@@ -1,11 +1,11 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use ciborium::value::Value;
 
-//use ciborium::value::Integer;
-//use ciborium_io::Read;
-
-use super::msg::{Kind, Method, Msg};
+use super::msg::{self, Kind, Method, Msg};
+use super::keys;
+use super::cbor;
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
@@ -27,6 +27,14 @@ impl Msg for Message {
         &self.addr.as_ref().unwrap()
     }
 
+    fn remote_id(&self) -> &Id {
+        unimplemented!()
+    }
+
+    fn remote_addr(&self) -> &SocketAddr {
+        unimplemented!()
+    }
+
     fn txid(&self) -> i32 {
         self.txid
     }
@@ -35,19 +43,27 @@ impl Msg for Message {
         self.ver
     }
 
-    fn with_id(&mut self, nodeid: &Id) {
+    fn set_id(&mut self, nodeid: &Id) {
         self.id = Some(nodeid.clone())
     }
 
-    fn with_addr(&mut self, addr: &SocketAddr) {
+    fn set_addr(&mut self, addr: &SocketAddr) {
         self.addr = Some(addr.clone())
     }
 
-    fn with_txid(&mut self, txid: i32) {
+    fn set_remote_id(&mut self, _: &Id) {
+        unimplemented!()
+    }
+
+    fn set_remote_addr(&mut self, _: &SocketAddr) {
+        unimplemented!()
+    }
+
+    fn set_txid(&mut self, txid: i32) {
         self.txid = txid
     }
 
-    fn with_ver(&mut self, ver: i32) {
+    fn set_ver(&mut self, ver: i32) {
         self.ver = ver
     }
 
@@ -63,8 +79,8 @@ impl Msg for Message {
         self
     }
 
-    fn serialize(&self) -> Vec<u8> {
-        unimplemented!()
+    fn ser(&self) -> Vec<u8> {
+        self.serialize()
     }
 }
 
@@ -72,6 +88,7 @@ pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
 
+    _type: i32,
     txid: i32,
     ver: i32,
 }
@@ -82,9 +99,32 @@ impl Message {
         Message {
             id: None,
             addr: None,
+            _type: msg::msg_type(Kind::Response, Method::Ping),
             txid: 0,
             ver: 0,
         }
+    }
+
+    fn serialize(&self) -> Vec<u8> {
+        let mut value = Value::Map(vec![
+            (
+                Value::Text(String::from(keys::KEY_TYPE)),
+                Value::Integer(self._type.into())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_TXID)),
+                Value::Integer(self.txid.into())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_VERSION)),
+                Value::Integer(self.ver.into())
+            )
+        ]);
+
+        let mut encoded: Vec<u8> = Vec::new();
+        let writer = cbor::Writer::new(encoded.as_mut());
+        let _ = ciborium::ser::into_writer(&mut value, writer);
+        encoded
     }
 }
 

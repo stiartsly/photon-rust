@@ -1,20 +1,23 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use ciborium::value::Value;
 
 use super::lookup;
-use super::msg::{Kind, Method, Msg};
+use super::msg::{self, Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
+use crate::msg::keys;
+use crate::msg::cbor;
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
-        Kind::Request
+        Kind::from(self._type)
     }
 
     fn method(&self) -> Method {
-        Method::Ping
+        Method::from(self._type)
     }
 
     fn id(&self) -> &Id {
@@ -25,6 +28,14 @@ impl Msg for Message {
         self.addr.as_ref().unwrap()
     }
 
+    fn remote_id(&self) -> &Id {
+        unimplemented!()
+    }
+
+    fn remote_addr(&self) -> &SocketAddr {
+        unimplemented!()
+    }
+
     fn txid(&self) -> i32 {
         self.txid
     }
@@ -33,19 +44,27 @@ impl Msg for Message {
         self.ver
     }
 
-    fn with_id(&mut self, nodeid: &Id) {
+    fn set_id(&mut self, nodeid: &Id) {
         self.id = Some(nodeid.clone())
     }
 
-    fn with_addr(&mut self, addr: &SocketAddr) {
+    fn set_addr(&mut self, addr: &SocketAddr) {
         self.addr = Some(addr.clone())
     }
 
-    fn with_txid(&mut self, txid: i32) {
+    fn set_remote_id(&mut self, _: &Id) {
+        unimplemented!()
+    }
+
+    fn set_remote_addr(&mut self, _: &SocketAddr) {
+        unimplemented!()
+    }
+
+    fn set_txid(&mut self, txid: i32) {
         self.txid = txid
     }
 
-    fn with_ver(&mut self, ver: i32) {
+    fn set_ver(&mut self, ver: i32) {
         self.ver = ver
     }
 
@@ -62,12 +81,12 @@ impl Msg for Message {
         self
     }
 
-    fn serialize(&self) -> Vec<u8> {
-        unimplemented!()
+    fn ser(&self) -> Vec<u8> {
+        self.ser()
     }
 }
 
-impl lookup::Condition for Message {
+impl lookup::Filter for Message {
     fn target(&self) -> &Id {
         &self.target.as_ref().unwrap()
     }
@@ -105,6 +124,7 @@ impl lookup::Condition for Message {
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
+    _type: i32,
     txid: i32,
     ver: i32,
 
@@ -122,6 +142,7 @@ impl Message {
             addr: None,
             txid: 0,
             ver: 0,
+            _type: msg::msg_type(Kind::Request, Method::FindNode),
             target: None,
             want4: false,
             want6: false,
@@ -131,18 +152,48 @@ impl Message {
 
     fn want(&self) -> i32 {
         let mut want = 0;
-
         if self.want4 {
-            want |= 0x01
+            want |= 0x01;
         }
         if self.want6 {
-            want |= 0x02
+            want |= 0x02;
         }
         if self.want_token {
-            want |= 0x04
+            want |= 0x04;
         }
-
         want
+    }
+
+    fn ser(&self) -> Vec<u8> {
+        let mut value = Value::Map(vec![
+            (
+                Value::Text(String::from(keys::KEY_TYPE)),
+                Value::Integer(self._type.into())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_TXID)),
+                Value::Integer(self.txid.into())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_VERSION)),
+                Value::Integer(self.ver.into())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_REQ_TARGET)),
+                Value::Bytes(self.target.as_ref().unwrap().as_bytes().to_vec())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_REQ_WANT)),
+                Value::Integer(self.want().into())
+            )
+        ]);
+
+        let mut encoded: Vec<u8> = Vec::new();
+        let writer = cbor::Writer::new(encoded.as_mut());
+        let _ = ciborium::ser::into_writer(&mut value, writer);
+
+        println!("encoded => len:{}\n{:02X?}", encoded.len(), &encoded);
+        encoded
     }
 }
 

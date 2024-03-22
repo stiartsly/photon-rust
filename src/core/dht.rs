@@ -37,7 +37,7 @@ use crate::msg::{
     error::{self, ErrorResult},
     find_peer_rsp::{self, PeerResult},
     find_value_rsp::{self, ValueResult},
-    lookup::{self, Result, Condition},
+    lookup::{self, Filter, Result},
     msg::{self, Msg},
 };
 
@@ -51,7 +51,7 @@ use crate::task::{
 };
 
 pub(crate) trait ReqMsg: Msg
-    + lookup::Condition
+    + lookup::Filter
     + find_value_req::ValueOption
     + store_value_req::StoreOption
     + announce_peer_req::AnnounceOption
@@ -143,9 +143,9 @@ impl DHT {
 
         nodes.iter().for_each(|item| {
             let mut req = Box::new(find_node_req::Message::new());
+            req.set_id(item.id());
+            req.set_addr(item.socket_addr());
             req.with_target(&Id::random());
-            req.with_id(item.id());
-            req.with_addr(item.socket_addr());
             match self.is_ipv4() {
                 true  => req.with_want4(),
                 false => req.with_want6(),
@@ -310,10 +310,10 @@ impl DHT {
     fn send_err(&mut self, msg: &dyn Msg, code: i32, str: &str) {
         let mut err = Box::new(error::Message::new());
 
-        err.with_id(msg.id());
-        err.with_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
-        err.with_txid(msg.txid());
-        err.with_addr(msg.addr());
+        err.set_id(msg.id());
+        err.set_addr(msg.addr());
+        err.set_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
+        err.set_txid(msg.txid());
         err.with_msg(str);
         err.with_code(code);
 
@@ -323,22 +323,22 @@ impl DHT {
     fn on_ping(&mut self, request: &dyn Msg) {
         let mut msg = Box::new(ping_req::Message::new());
 
-        msg.with_id(request.id());
-        msg.with_txid(request.txid());
-        msg.with_addr(request.addr());
+        msg.set_id(request.id());
+        msg.set_addr(request.addr());
+        msg.set_txid(request.txid());
 
         self.send_msg(msg);
     }
 
     fn on_find_node<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Condition,
+        T: Msg + lookup::Filter,
     {
         let mut resp = Box::new(find_node_rsp::Message::new());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+        resp.set_id(request.id());
+        resp.set_txid(request.txid());
+        resp.set_addr(request.addr());
 
         resp.populate_closest_nodes4(request.want4(), || {
             Some(
@@ -375,13 +375,13 @@ impl DHT {
 
     fn on_find_value<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Condition + find_value_req::ValueOption,
+        T: Msg + lookup::Filter + find_value_req::ValueOption,
     {
         let mut resp = Box::new(find_value_rsp::Message::new());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+        resp.set_id(request.id());
+        resp.set_txid(request.txid());
+        resp.set_addr(request.addr());
 
         let mut has_value = false;
         resp.populate_value(|| {
@@ -433,7 +433,7 @@ impl DHT {
 
     fn on_store_value<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Condition + store_value_req::StoreOption,
+        T: Msg + lookup::Filter + store_value_req::StoreOption,
     {
         let value = request.value();
         let value_id = value.id();
@@ -463,22 +463,22 @@ impl DHT {
         // TODO: store value.
         let mut resp = Box::new(store_value_rsp::Message::new());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+        resp.set_id(request.id());
+        resp.set_addr(request.addr());
+        resp.set_txid(request.txid());
 
         self.send_msg(resp);
     }
 
     fn on_find_peers<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Condition + find_value_req::ValueOption,
+        T: Msg + lookup::Filter + find_value_req::ValueOption,
     {
         let mut resp = Box::new(find_peer_rsp::Message::new());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+        resp.set_id(request.id());
+        resp.set_addr(request.addr());
+        resp.set_txid(request.txid());
 
         let mut has_peers = false;
         resp.populate_peers(|| {
@@ -525,7 +525,7 @@ impl DHT {
 
     fn on_announce_peer<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Condition + announce_peer_req::AnnounceOption,
+        T: Msg + lookup::Filter + announce_peer_req::AnnounceOption,
     {
         let bogon = false;
 
@@ -571,9 +571,9 @@ impl DHT {
 
         let mut resp = Box::new(announce_peer_rsp::Message::new());
 
-        resp.with_id(request.id());
-        resp.with_txid(request.txid());
-        resp.with_addr(request.addr());
+        resp.set_id(request.id());
+        resp.set_addr(request.addr());
+        resp.set_txid(request.txid());
 
         self.send_msg(resp);
     }
@@ -738,7 +738,7 @@ impl DHT {
         call.set_timeout_fn(|_|{});
 
         let mut req = call.req();
-        req.with_txid(txid);
+        req.set_txid(txid);
         // call.req_mut().with_associated_call(&call);
         self.calls.insert(txid, call);
 

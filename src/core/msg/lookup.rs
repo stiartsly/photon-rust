@@ -1,7 +1,7 @@
 use crate::id::Id;
 use crate::node_info::NodeInfo;
 
-pub(crate) trait Condition {
+pub(crate) trait Filter {
     fn target(&self) -> &Id;
     fn want4(&self) -> bool;
     fn want6(&self) -> bool;

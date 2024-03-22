@@ -2,25 +2,21 @@ use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
 
-//use ciborium::{de::from_reader, Value};
-use ciborium_io::Read;
-use core::result::Result;
-use std::io::Error;
-
 use crate::id::Id;
 use crate::rpccall::RpcCall;
+use crate::error::Error;
 
 #[derive(PartialEq)]
 pub(crate) enum Kind {
-    Error = 0x00,
+    Error = 0,
     Request = 0x20,
     Response = 0x40,
 }
 
 impl Kind {
     const MASK: i32 = 0xE0;
-    fn from(mtype: i32) -> Kind {
-        let kind: i32 = mtype & Self::MASK;
+    pub(crate) fn from(_type: i32) -> Kind {
+        let kind: i32 = _type & Self::MASK;
         match kind {
             0x00 => Kind::Error,
             0x20 => Kind::Request,
@@ -57,7 +53,7 @@ pub(crate) enum Method {
 
 impl Method {
     const MASK: i32 = 0x1F;
-    fn from(_type: i32) -> Self {
+    pub(crate) fn from(_type: i32) -> Self {
         let method: i32 = _type & Self::MASK;
         match method {
             0x00 => Method::Unknown,
@@ -97,23 +93,27 @@ pub(crate) trait Msg {
     fn id(&self) -> &Id;
     fn addr(&self) -> &SocketAddr;
 
+    fn remote_id(&self) -> &Id;
+    fn remote_addr(&self) -> &SocketAddr;
+
     fn txid(&self) -> i32;
     fn version(&self) -> i32;
 
-    fn with_id(&mut self, _: &Id);
-    fn with_addr(&mut self, _: &SocketAddr);
+    fn set_id(&mut self, _: &Id);
+    fn set_addr(&mut self, _: &SocketAddr);
 
-    fn with_txid(&mut self, _: i32);
-    fn with_ver(&mut self, _: i32);
+    fn set_remote_id(&mut self, _: &Id);
+    fn set_remote_addr(&mut self, _: &SocketAddr);
 
-    //fn with_cbor(&mut self, _: &[u8]);
+    fn set_txid(&mut self, _: i32);
+    fn set_ver(&mut self, _: i32);
 
     fn associated_call(&self) -> Option<Box<RpcCall>>;
     fn with_associated_call(&mut self, _: Box<RpcCall>);
 
     fn as_any(&self) -> &dyn Any;
 
-    fn serialize(&self) -> Vec<u8>;
+    fn ser(&self) -> Vec<u8>;
 }
 
 #[allow(dead_code)]
@@ -177,36 +177,9 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Result<Box<dyn Msg>, Er
 
 #[allow(dead_code)]
 pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Option<Vec<u8>> {
-    Some(msg.serialize())
-    // unimplemented!()
-    //Some("todo".to_string().as_bytes().to_vec())
+    Some(msg.ser())
 }
 
-struct Reader<'a> {
-    data: &'a [u8],
-    position: usize,
-}
-
-#[allow(dead_code)]
-impl<'a> Reader<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        Reader { data, position: 0 }
-    }
-}
-
-impl<'a> Read for Reader<'a> {
-    type Error = Error;
-
-    fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
-        let remaining_len = self.data.len() - self.position;
-
-        if remaining_len >= buf.len() {
-            // If there is enough data remaining, copy it to buf
-            buf.copy_from_slice(&self.data[self.position..self.position + buf.len()]);
-            self.position += buf.len();
-            Ok(())
-        } else {
-            Err(Error::from(std::io::ErrorKind::UnexpectedEof))
-        }
-    }
+pub(crate) fn msg_type(kind: Kind, method: Method) -> i32 {
+    kind as i32 | method as i32
 }
