@@ -6,8 +6,8 @@ use ciborium::value::Value;
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::error::Error;
-use crate::msg::cbor;
 
+use super::cbor;
 use super::error;
 use super::ping_req;
 use super::ping_rsp;
@@ -132,19 +132,18 @@ pub(crate) trait Msg {
     fn to_cbor(&self) -> Value;
 }
 
-#[allow(dead_code)]
 pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
-    let mtype: i32 = 0;
+    let _type: i32 = 0;
     let reader = cbor::Reader::new(buf);
     let value: Value = ciborium::de::from_reader(reader).unwrap();
 
-    match Kind::from(mtype) {
+    match Kind::from(_type) {
         Kind::Error => Ok(Box::new(
             error::Message::from_cbor(value)
         )),
-        Kind::Request => match Method::from(mtype) {
+        Kind::Request => match Method::from(_type) {
             Method::Unknown =>  Err(Error::Protocol(
-                format!("Invalid request message method: {}", Method::from(mtype))
+                format!("Invalid request message method: {}", Method::from(_type))
             )),
             Method::Ping => Ok(Box::new(
                 ping_req::Message::from_cbor(value)
@@ -165,9 +164,9 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
                 find_value_req::Message::from_cbor(value)
             )),
         },
-        Kind::Response => match Method::from(mtype) {
+        Kind::Response => match Method::from(_type) {
             Method::Unknown =>  Err(Error::Protocol(
-                format!("Invalid request message method: {}", Method::from(mtype))
+                format!("Invalid request message method: {}", Method::from(_type))
             )),
             Method::Ping => Ok(Box::new(
                 ping_rsp::Message::from_cbor(value)
@@ -191,7 +190,6 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {
     let mut value = msg.to_cbor();
     let mut encoded = Vec::new() as Vec<u8>;

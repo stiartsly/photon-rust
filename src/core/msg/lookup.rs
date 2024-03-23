@@ -19,12 +19,11 @@ pub(crate) trait Result {
     fn token(&self) -> i32;
 
     fn populate_closest_nodes4<F>(&mut self, _: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>;
+    where F: FnOnce() -> Option<Vec<NodeInfo>>;
+
     fn populate_closest_nodes6<F>(&mut self, _: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>;
+    where F: FnOnce() -> Option<Vec<NodeInfo>>;
+
     fn populate_token<F>(&mut self, _: bool, f: F)
-    where
-        F: FnOnce() -> i32;
+    where F: FnOnce() -> i32;
 }

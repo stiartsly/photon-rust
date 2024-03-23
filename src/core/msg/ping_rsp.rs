@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
-use ciborium::value::Value as CborValue;
+use ciborium::value::Value;
 
 use super::msg::{self, Kind, Method, Msg};
 use super::keys;
@@ -78,19 +78,19 @@ impl Msg for Message {
         self
     }
 
-    fn to_cbor(&self) -> CborValue {
-        CborValue::Map(vec![
+    fn to_cbor(&self) -> Value {
+        Value::Map(vec![
             (
-                CborValue::Text(String::from(keys::KEY_TYPE)),
-                CborValue::Integer(self._type.into())
+                Value::Text(String::from(keys::KEY_TYPE)),
+                Value::Integer(self._type.into())
             ),
             (
-                CborValue::Text(String::from(keys::KEY_TXID)),
-                CborValue::Integer(self.txid.into())
+                Value::Text(String::from(keys::KEY_TXID)),
+                Value::Integer(self.txid.into())
             ),
             (
-                CborValue::Text(String::from(keys::KEY_VERSION)),
-                CborValue::Integer(self.ver.into())
+                Value::Text(String::from(keys::KEY_VERSION)),
+                Value::Integer(self.ver.into())
             )
         ])
     }
@@ -117,7 +117,7 @@ impl Message {
         }
     }
 
-    pub(crate) fn from_cbor(_: CborValue) -> Self {
+    pub(crate) fn from_cbor(_: Value) -> Self {
         unimplemented!()
     }
 }
