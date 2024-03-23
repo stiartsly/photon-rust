@@ -99,6 +99,10 @@ impl Msg for Message {
     fn to_cbor(&self) -> Value {
         unimplemented!()
     }
+
+    fn from_cbor(&mut self, _: Value) {
+        unimplemented!()
+    }
 }
 
 impl ErrorResult for Message {
@@ -129,10 +133,6 @@ impl Message {
             code: 0,
             msg: None,
         }
-    }
-
-    pub(crate) fn from_cbor(_: Value) -> Self {
-        unimplemented!()
     }
 }
 

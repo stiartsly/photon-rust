@@ -81,6 +81,10 @@ impl Msg for Message {
     fn to_cbor(&self) -> Value {
         unimplemented!()
     }
+
+    fn from_cbor(&mut self, _: Value) {
+        unimplemented!()
+    }
 }
 
 impl lookup::Filter for Message {
@@ -144,10 +148,6 @@ impl Message {
             want6: false,
             want_token: false,
         }
-    }
-
-    pub(crate) fn from_cbor(_: Value) -> Self {
-        unimplemented!()
     }
 
     fn want(&self) -> i32 {

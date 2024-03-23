@@ -92,6 +92,10 @@ impl Msg for Message {
     fn to_cbor(&self) -> Value {
         unimplemented!()
     }
+
+    fn from_cbor(&mut self, _: Value) {
+        unimplemented!()
+    }
 }
 
 impl lookup::Result for Message {
@@ -181,10 +185,6 @@ impl Message {
             token: 0,
             peers: None,
         }
-    }
-
-    pub(crate) fn from_cbor(_: Value) -> Self {
-        unimplemented!()
     }
 }
 

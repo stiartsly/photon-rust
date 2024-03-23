@@ -94,6 +94,10 @@ impl Msg for Message {
             )
         ])
     }
+
+    fn from_cbor(&mut self, _: Value) {
+        unimplemented!()
+    }
 }
 
 pub(crate) struct Message {
@@ -115,10 +119,6 @@ impl Message {
             txid: 0,
             ver: 0,
         }
-    }
-
-    pub(crate) fn from_cbor(_: Value) -> Self {
-        unimplemented!()
     }
 }
 

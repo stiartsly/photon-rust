@@ -32,14 +32,21 @@ pub(crate) enum Kind {
 impl Kind {
     const MASK: i32 = 0xE0;
     pub(crate) fn from(_type: i32) -> Kind {
-        let kind: i32 = _type & Self::MASK;
+        let kind = _type & Self::MASK;
         match kind {
             0x00 => Kind::Error,
             0x20 => Kind::Request,
             0x40 => Kind::Response,
-            _ => {
-                panic!("invalid msg kind: {}", kind)
-            }
+            _ => panic!("invalid msg kind: {}", kind)
+        }
+    }
+
+    fn is_valid(_type: i32) -> bool {
+        match _type & Self::MASK {
+            0x00 => true,
+            0x20 => true,
+            0x40 => true,
+            _ => false,
         }
     }
 }
@@ -70,8 +77,8 @@ pub(crate) enum Method {
 impl Method {
     const MASK: i32 = 0x1F;
     pub(crate) fn from(_type: i32) -> Self {
-        let method: i32 = _type & Self::MASK;
-        match method {
+        let method = _type & Self::MASK;
+        match _type & Self::MASK {
             0x00 => Method::Unknown,
             0x01 => Method::Ping,
             0x02 => Method::FindNode,
@@ -79,10 +86,13 @@ impl Method {
             0x04 => Method::FindPeer,
             0x05 => Method::StoreValue,
             0x06 => Method::FindValue,
-            _ => {
-                panic!("invalid msg method: {}", method)
-            }
+            _ => panic!("invalid msg method: {}", method)
         }
+    }
+
+    fn is_valid(_type: i32) -> bool {
+        let method = _type & Self::MASK;
+        method >= 0 && method < 0x06
     }
 }
 
@@ -130,6 +140,7 @@ pub(crate) trait Msg {
     fn as_any(&self) -> &dyn Any;
 
     fn to_cbor(&self) -> Value;
+    fn from_cbor(&mut self, _: Value);
 }
 
 pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
@@ -137,57 +148,42 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
     let reader = cbor::Reader::new(buf);
     let value: Value = ciborium::de::from_reader(reader).unwrap();
 
-    match Kind::from(_type) {
-        Kind::Error => Ok(Box::new(
-            error::Message::from_cbor(value)
-        )),
-        Kind::Request => match Method::from(_type) {
-            Method::Unknown =>  Err(Error::Protocol(
-                format!("Invalid request message method: {}", Method::from(_type))
-            )),
-            Method::Ping => Ok(Box::new(
-                ping_req::Message::from_cbor(value)
-            )),
-            Method::FindNode => Ok(Box::new(
-                find_node_req::Message::from_cbor(value)
-            )),
-            Method::AnnouncePeer => Ok(Box::new(
-                announce_peer_req::Message::from_cbor(value)
-            )),
-            Method::FindPeer => Ok(Box::new(
-                find_peer_req::Message::from_cbor(value)
-            )),
-            Method::StoreValue => Ok(Box::new(
-                store_value_req::Message::from_cbor(value)
-            )),
-            Method::FindValue => Ok(Box::new(
-                find_value_req::Message::from_cbor(value)
-            )),
+    if !Kind::is_valid(_type) ||!Method::is_valid(_type) {
+        return Err(Error::Protocol(format!(
+            "Invalid message kind {} or method {}",
+            Kind::from(_type),
+            Method::from(_type)
+        )))
+    }
+
+    let mut msg = match Kind::from(_type) {
+        Kind::Error => {
+            Box::new(error::Message::new()) as Box<dyn Msg>
+        },
+        Kind::Request => {
+            match Method::from(_type) {
+                Method::Ping => Box::new(ping_req::Message::new()) as Box<dyn Msg>,
+                Method::FindNode => Box::new(find_node_req::Message::new()) as Box<dyn Msg>,
+                Method::AnnouncePeer => Box::new(announce_peer_req::Message::new()) as Box<dyn Msg>,
+                Method::FindPeer => Box::new(find_peer_req::Message::new()) as Box<dyn Msg>,
+                Method::StoreValue => Box::new(store_value_req::Message::new()) as Box<dyn Msg>,
+                Method::FindValue => Box::new(find_value_req::Message::new()) as Box<dyn Msg>,
+                _ => panic!("Invalid request message method {}", Method::from(_type)),
+            }
         },
         Kind::Response => match Method::from(_type) {
-            Method::Unknown =>  Err(Error::Protocol(
-                format!("Invalid request message method: {}", Method::from(_type))
-            )),
-            Method::Ping => Ok(Box::new(
-                ping_rsp::Message::from_cbor(value)
-            )),
-            Method::FindNode => Ok(Box::new(
-                find_node_rsp::Message::from_cbor(value)
-            )),
-            Method::AnnouncePeer => Ok(Box::new(
-                announce_peer_rsp::Message::from_cbor(value)
-            )),
-            Method::FindPeer => Ok(Box::new(
-                find_peer_rsp::Message::from_cbor(value)
-            )),
-            Method::StoreValue => Ok(Box::new(
-                store_value_rsp::Message::from_cbor(value)
-            )),
-            Method::FindValue => Ok(Box::new(
-                find_value_rsp::Message::from_cbor(value)
-            )),
-        },
-    }
+            Method::Ping => Box::new(ping_rsp::Message::new()) as Box<dyn Msg>,
+            Method::FindNode => Box::new(find_node_rsp::Message::new()) as Box<dyn Msg>,
+            Method::AnnouncePeer => Box::new(announce_peer_rsp::Message::new()) as Box<dyn Msg>,
+            Method::FindPeer => Box::new(find_peer_rsp::Message::new()) as Box<dyn Msg>,
+            Method::StoreValue => Box::new(store_value_rsp::Message::new()) as Box<dyn Msg>,
+            Method::FindValue => Box::new(find_value_rsp::Message::new()) as Box<dyn Msg>,
+            _ => panic!("Invalid response message method {}", Method::from(_type)),
+        }
+    };
+
+    msg.from_cbor(value);
+    Ok(msg)
 }
 
 pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {
