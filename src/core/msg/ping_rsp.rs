@@ -1,11 +1,10 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
-use ciborium::value::Value;
+use ciborium::value::Value as CborValue;
 
 use super::msg::{self, Kind, Method, Msg};
 use super::keys;
-use super::cbor;
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
@@ -79,8 +78,21 @@ impl Msg for Message {
         self
     }
 
-    fn ser(&self) -> Vec<u8> {
-        self.serialize()
+    fn to_cbor(&self) -> CborValue {
+        CborValue::Map(vec![
+            (
+                CborValue::Text(String::from(keys::KEY_TYPE)),
+                CborValue::Integer(self._type.into())
+            ),
+            (
+                CborValue::Text(String::from(keys::KEY_TXID)),
+                CborValue::Integer(self.txid.into())
+            ),
+            (
+                CborValue::Text(String::from(keys::KEY_VERSION)),
+                CborValue::Integer(self.ver.into())
+            )
+        ])
     }
 }
 
@@ -105,26 +117,8 @@ impl Message {
         }
     }
 
-    fn serialize(&self) -> Vec<u8> {
-        let mut value = Value::Map(vec![
-            (
-                Value::Text(String::from(keys::KEY_TYPE)),
-                Value::Integer(self._type.into())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_TXID)),
-                Value::Integer(self.txid.into())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_VERSION)),
-                Value::Integer(self.ver.into())
-            )
-        ]);
-
-        let mut encoded: Vec<u8> = Vec::new();
-        let writer = cbor::Writer::new(encoded.as_mut());
-        let _ = ciborium::ser::into_writer(&mut value, writer);
-        encoded
+    pub(crate) fn from_cbor(_: CborValue) -> Self {
+        unimplemented!()
     }
 }
 

@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
-use ciborium::value::Value;
+use ciborium::value::Value as CborValue;
 
 use super::lookup;
 use super::msg::{self, Kind, Method, Msg};
@@ -9,7 +9,6 @@ use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
 use crate::msg::keys;
-use crate::msg::cbor;
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -81,8 +80,29 @@ impl Msg for Message {
         self
     }
 
-    fn ser(&self) -> Vec<u8> {
-        self.ser()
+    fn to_cbor(&self) -> CborValue {
+        CborValue::Map(vec![
+            (
+                CborValue::Text(String::from(keys::KEY_TYPE)),
+                CborValue::Integer(self._type.into())
+            ),
+            (
+                CborValue::Text(String::from(keys::KEY_TXID)),
+                CborValue::Integer(self.txid.into())
+            ),
+            (
+                CborValue::Text(String::from(keys::KEY_VERSION)),
+                CborValue::Integer(self.ver.into())
+            ),
+            (
+                CborValue::Text(String::from(keys::KEY_REQ_TARGET)),
+                CborValue::Bytes(self.target.as_ref().unwrap().as_bytes().to_vec())
+            ),
+            (
+                CborValue::Text(String::from(keys::KEY_REQ_WANT)),
+                CborValue::Integer(self.want().into())
+            )
+        ])
     }
 }
 
@@ -150,6 +170,10 @@ impl Message {
         }
     }
 
+    pub(crate) fn from_cbor(_: CborValue) -> Self {
+        unimplemented!()
+    }
+
     fn want(&self) -> i32 {
         let mut want = 0;
         if self.want4 {
@@ -162,38 +186,6 @@ impl Message {
             want |= 0x04;
         }
         want
-    }
-
-    fn ser(&self) -> Vec<u8> {
-        let mut value = Value::Map(vec![
-            (
-                Value::Text(String::from(keys::KEY_TYPE)),
-                Value::Integer(self._type.into())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_TXID)),
-                Value::Integer(self.txid.into())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_VERSION)),
-                Value::Integer(self.ver.into())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_REQ_TARGET)),
-                Value::Bytes(self.target.as_ref().unwrap().as_bytes().to_vec())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_REQ_WANT)),
-                Value::Integer(self.want().into())
-            )
-        ]);
-
-        let mut encoded: Vec<u8> = Vec::new();
-        let writer = cbor::Writer::new(encoded.as_mut());
-        let _ = ciborium::ser::into_writer(&mut value, writer);
-
-        println!("encoded => len:{}\n{:02X?}", encoded.len(), &encoded);
-        encoded
     }
 }
 

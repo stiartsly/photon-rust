@@ -414,7 +414,7 @@ where
 
     match unwrap!(queue).borrow_mut().pop_front() {
         Some(msg) => {
-            let buffer = msg::serialize(&msg).unwrap();
+            let buffer = msg::serialize(&msg);
             _ = unwrap!(socket).send_to(&buffer, msg.addr());
         },
         None => {

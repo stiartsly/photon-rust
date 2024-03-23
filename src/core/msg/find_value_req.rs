@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use ciborium::value::Value as CborValue;
 
 use super::lookup;
 use super::msg::{Kind, Method, Msg};
@@ -82,7 +83,7 @@ impl Msg for Message {
         self
     }
 
-    fn ser(&self) -> Vec<u8> {
+    fn to_cbor(&self) -> CborValue {
         unimplemented!()
     }
 }
@@ -160,6 +161,10 @@ impl Message {
             want_token: false,
             seq: -1,
         }
+    }
+
+    pub(crate) fn from_cbor(_: CborValue) -> Self {
+        unimplemented!()
     }
 
     fn want(&self) -> i32 {

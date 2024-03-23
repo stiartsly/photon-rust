@@ -1,10 +1,26 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use ciborium::value::Value;
 
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::error::Error;
+use crate::msg::cbor;
+
+use super::error;
+use super::ping_req;
+use super::ping_rsp;
+use super::find_node_req;
+use super::find_node_rsp;
+use super::announce_peer_req;
+use super::announce_peer_rsp;
+use super::find_peer_req;
+use super::find_peer_rsp;
+use super::store_value_req;
+use super::store_value_rsp;
+use super::find_value_req;
+use super::find_value_rsp;
 
 #[derive(PartialEq)]
 pub(crate) enum Kind {
@@ -113,71 +129,75 @@ pub(crate) trait Msg {
 
     fn as_any(&self) -> &dyn Any;
 
-    fn ser(&self) -> Vec<u8>;
+    fn to_cbor(&self) -> Value;
 }
 
 #[allow(dead_code)]
-pub(crate) fn deser(_: &Id, _: &SocketAddr, _: &[u8]) -> Result<Box<dyn Msg>, Error> {
+pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
     let mtype: i32 = 0;
-    //let reader = Reader::new(cbor);
-    //let value: Value = from_reader(reader).unwrap();
+    let reader = cbor::Reader::new(buf);
+    let value: Value = ciborium::de::from_reader(reader).unwrap();
 
     match Kind::from(mtype) {
-        Kind::Error => {
-            panic!("TODO")
-        }
+        Kind::Error => Ok(Box::new(
+            error::Message::from_cbor(value)
+        )),
         Kind::Request => match Method::from(mtype) {
-            Method::Unknown => {
-                panic!("TODO")
-            }
-            Method::Ping => {
-                panic!("TODO")
-            }
-            Method::FindNode => {
-                panic!("TODO")
-            }
-            Method::AnnouncePeer => {
-                panic!("TODO")
-            }
-            Method::FindPeer => {
-                panic!("TODO")
-            }
-            Method::StoreValue => {
-                panic!("TODO")
-            }
-            Method::FindValue => {
-                panic!("TODO")
-            }
+            Method::Unknown =>  Err(Error::Protocol(
+                format!("Invalid request message method: {}", Method::from(mtype))
+            )),
+            Method::Ping => Ok(Box::new(
+                ping_req::Message::from_cbor(value)
+            )),
+            Method::FindNode => Ok(Box::new(
+                find_node_req::Message::from_cbor(value)
+            )),
+            Method::AnnouncePeer => Ok(Box::new(
+                announce_peer_req::Message::from_cbor(value)
+            )),
+            Method::FindPeer => Ok(Box::new(
+                find_peer_req::Message::from_cbor(value)
+            )),
+            Method::StoreValue => Ok(Box::new(
+                store_value_req::Message::from_cbor(value)
+            )),
+            Method::FindValue => Ok(Box::new(
+                find_value_req::Message::from_cbor(value)
+            )),
         },
         Kind::Response => match Method::from(mtype) {
-            Method::Unknown => {
-                panic!("TODO")
-            }
-            Method::Ping => {
-                panic!("TODO")
-            }
-            Method::FindNode => {
-                panic!("TODO")
-            }
-            Method::AnnouncePeer => {
-                panic!("TODO")
-            }
-            Method::FindPeer => {
-                panic!("TODO")
-            }
-            Method::StoreValue => {
-                panic!("TODO")
-            }
-            Method::FindValue => {
-                panic!("TODO")
-            }
+            Method::Unknown =>  Err(Error::Protocol(
+                format!("Invalid request message method: {}", Method::from(mtype))
+            )),
+            Method::Ping => Ok(Box::new(
+                ping_rsp::Message::from_cbor(value)
+            )),
+            Method::FindNode => Ok(Box::new(
+                find_node_rsp::Message::from_cbor(value)
+            )),
+            Method::AnnouncePeer => Ok(Box::new(
+                announce_peer_rsp::Message::from_cbor(value)
+            )),
+            Method::FindPeer => Ok(Box::new(
+                find_peer_rsp::Message::from_cbor(value)
+            )),
+            Method::StoreValue => Ok(Box::new(
+                store_value_rsp::Message::from_cbor(value)
+            )),
+            Method::FindValue => Ok(Box::new(
+                find_value_rsp::Message::from_cbor(value)
+            )),
         },
     }
 }
 
 #[allow(dead_code)]
-pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Option<Vec<u8>> {
-    Some(msg.ser())
+pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {
+    let mut value = msg.to_cbor();
+    let mut encoded = Vec::new() as Vec<u8>;
+    let writer = cbor::Writer::new(encoded.as_mut());
+    let _ = ciborium::ser::into_writer(&mut value, writer);
+    encoded
 }
 
 pub(crate) fn msg_type(kind: Kind, method: Method) -> i32 {

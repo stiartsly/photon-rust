@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use ciborium::value::Value as CborValue;
 
 use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
@@ -84,7 +85,7 @@ impl Msg for Message {
         self
     }
 
-    fn ser(&self) -> Vec<u8> {
+    fn to_cbor(&self) -> CborValue {
         unimplemented!()
     }
 }
@@ -128,6 +129,10 @@ impl Message {
             token: 0,
             value: None,
         }
+    }
+
+    pub(crate) fn from_cbor(_: CborValue) -> Self {
+        unimplemented!()
     }
 }
 
