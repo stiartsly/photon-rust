@@ -140,7 +140,7 @@ pub(crate) trait Msg {
     fn as_any(&self) -> &dyn Any;
 
     fn to_cbor(&self) -> Value;
-    fn from_cbor(&mut self, _: Value);
+    fn from_cbor(&mut self, _: &Value) -> bool;
 }
 
 pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
@@ -160,16 +160,16 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
         Kind::Error => {
             Box::new(error::Message::new()) as Box<dyn Msg>
         },
-        Kind::Request => {
-            match Method::from(_type) {
-                Method::Ping => Box::new(ping_req::Message::new()) as Box<dyn Msg>,
-                Method::FindNode => Box::new(find_node_req::Message::new()) as Box<dyn Msg>,
-                Method::AnnouncePeer => Box::new(announce_peer_req::Message::new()) as Box<dyn Msg>,
-                Method::FindPeer => Box::new(find_peer_req::Message::new()) as Box<dyn Msg>,
-                Method::StoreValue => Box::new(store_value_req::Message::new()) as Box<dyn Msg>,
-                Method::FindValue => Box::new(find_value_req::Message::new()) as Box<dyn Msg>,
-                _ => panic!("Invalid request message method {}", Method::from(_type)),
-            }
+        Kind::Request => match Method::from(_type) {
+            Method::Ping => Box::new(ping_req::Message::new()) as Box<dyn Msg>,
+            Method::FindNode => Box::new(find_node_req::Message::new()) as Box<dyn Msg>,
+            Method::AnnouncePeer => Box::new(announce_peer_req::Message::new()) as Box<dyn Msg>,
+            Method::FindPeer => Box::new(find_peer_req::Message::new()) as Box<dyn Msg>,
+            Method::StoreValue => Box::new(store_value_req::Message::new()) as Box<dyn Msg>,
+            Method::FindValue => Box::new(find_value_req::Message::new()) as Box<dyn Msg>,
+            _ => { return Err(Error::Protocol(
+                format!("Invalid request message: {}", Method::from(_type))
+            ))}
         },
         Kind::Response => match Method::from(_type) {
             Method::Ping => Box::new(ping_rsp::Message::new()) as Box<dyn Msg>,
@@ -178,12 +178,17 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
             Method::FindPeer => Box::new(find_peer_rsp::Message::new()) as Box<dyn Msg>,
             Method::StoreValue => Box::new(store_value_rsp::Message::new()) as Box<dyn Msg>,
             Method::FindValue => Box::new(find_value_rsp::Message::new()) as Box<dyn Msg>,
-            _ => panic!("Invalid response message method {}", Method::from(_type)),
+            _ => { return Err(Error::Protocol(
+                format!("Invalid response message: {}", Method::from(_type))
+            ))}
         }
     };
-
-    msg.from_cbor(value);
-    Ok(msg)
+    match msg.from_cbor(&value) {
+        true => Ok(msg),
+        false => Err(Error::Protocol(
+            format!("Invalid CBOR object as message {:?}", value)
+        ))
+    }
 }
 
 pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {

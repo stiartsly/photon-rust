@@ -87,7 +87,7 @@ impl Msg for Message {
         unimplemented!()
     }
 
-    fn from_cbor(&mut self, _: CborValue) {
+    fn from_cbor(&mut self, _: &CborValue) -> bool {
         unimplemented!()
     }
 }

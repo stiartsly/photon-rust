@@ -3,11 +3,11 @@ use std::fmt;
 use std::net::SocketAddr;
 use ciborium::value::Value;
 
-use super::msg::{self, Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
-use crate::msg::keys;
+use super::keys;
+use super::msg::{self, Kind, Method, Msg};
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -95,8 +95,35 @@ impl Msg for Message {
         ])
     }
 
-    fn from_cbor(&mut self, _: Value) {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &Value) -> bool {
+        if !input.is_map() {
+            return false;
+        }
+
+        let root = input.as_map().unwrap().iter();
+        for (key_cbor, val_cbor) in root {
+            if !key_cbor.is_text()|| !val_cbor.is_integer(){
+                return false;
+            }
+
+            let key = key_cbor.as_text().unwrap();
+            let val = val_cbor.as_integer().unwrap();
+            match key {
+                keys::KEY_TYPE => {
+                    self._type = val.try_into().unwrap()
+                },
+                keys::KEY_TXID => {
+                    self.txid = val.try_into().unwrap()
+                },
+                keys::KEY_VERSION => {
+                    self.ver = val.try_into().unwrap()
+                },
+                _ => {
+                    return false;
+                },
+            }
+        }
+        true
     }
 }
 
