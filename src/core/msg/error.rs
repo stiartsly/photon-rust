@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
 use ciborium::value::Value;
 
 use super::msg::{Kind, Method, Msg};
@@ -16,6 +17,7 @@ pub(crate) trait ErrorResult {
     fn with_code(&mut self, _: i32);
 }
 
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,

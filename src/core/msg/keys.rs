@@ -3,17 +3,14 @@
 //const KEY_REQ_NODES6: &str = "n6";
 
 pub(crate) const KEY_TYPE: &str       = "y";
-//pub(crate) const KEY_ID: &str         = "i";
 pub(crate) const KEY_TXID: &str       = "t";
 pub(crate) const KEY_VERSION: &str    = "v";
 
-//pub(crate) const KEY_REQUEST: &str    = "q";
+pub(crate) const KEY_REQUEST: &str    = "q";
 pub(crate) const KEY_REQ_TARGET: &str = "t";
 pub(crate) const KEY_REQ_WANT: &str   = "w";
 /*
 
-
-const KEY_REQ_WANT: &str   = "w";
 const KEY_REQ_PORT: &str   = "p";
 const KEY_REQ_TOKEN: &str       = "tok";
 const KEY_REQ_PUBLICKEY: &str   = "k";

@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
 use ciborium::value::Value as CborValue;
 
 use super::msg::{Kind, Method, Msg};
@@ -111,7 +112,7 @@ impl StoreOption for Message {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -122,7 +123,6 @@ pub(crate) struct Message {
     value: Option<Box<Value>>,
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {

@@ -186,7 +186,7 @@ pub(crate) fn bits_copy(src: &Id, dst: &mut Id, depth: i32) {
 
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", self.into_base58())?;
+        write!(f, "{}", self.into_base58())?;
         Ok(())
     }
 }

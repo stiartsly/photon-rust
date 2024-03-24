@@ -20,7 +20,6 @@ impl TaskManager {
     }
 
     pub(crate) fn dequeue(&mut self) {
-        println!("Task manager: dequeue a task");
         // unimplemented!()
     }
 }

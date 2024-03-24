@@ -8,7 +8,7 @@ use super::msg::{self, Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
-use crate::msg::keys;
+use super::keys;
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -95,18 +95,49 @@ impl Msg for Message {
                 Value::Integer(self.ver.into())
             ),
             (
-                Value::Text(String::from(keys::KEY_REQ_TARGET)),
-                Value::Bytes(self.target.as_ref().unwrap().as_bytes().to_vec())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_REQ_WANT)),
-                Value::Integer(self.want().into())
+                Value::Text(Kind::from(self._type).to_key().to_string()),
+                lookup::Filter::to_cbor(self)
             )
         ])
     }
 
-    fn from_cbor(&mut self, _: &Value) -> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &Value) -> bool {
+        if let Some(root) = input.as_map() {
+            for (key, val) in root {
+                if !key.is_text() {
+                    return false;
+                }
+                if let Some(_key) = key.as_text() {
+                    match _key {
+                        keys::KEY_TYPE => {
+                            if let Some(_val) = val.as_integer() {
+                                self._type = _val.try_into().unwrap()
+                            }
+                        },
+                        keys::KEY_TXID => {
+                            if let Some(_val) = val.as_integer() {
+                                self.txid = _val.try_into().unwrap()
+                            }
+                        },
+                        keys::KEY_VERSION => {
+                            if let Some(_val) = val.as_integer() {
+                                self.ver = _val.try_into().unwrap()
+                            }
+                        },
+
+                        keys::KEY_REQUEST => {
+                            lookup::Filter::from_cbor(self, val);
+                        },
+
+                        &_ => {
+                            println!("_key: {}", _key);
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
     }
 }
 
@@ -142,9 +173,53 @@ impl lookup::Filter for Message {
     fn with_token(&mut self) {
         self.want_token = true
     }
+
+    fn to_cbor(&self) -> Value {
+        Value::Map(vec![
+            (
+                Value::Text(String::from(keys::KEY_REQ_TARGET)),
+                Value::Bytes(self.target.as_ref().unwrap().as_bytes().to_vec())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_REQ_WANT)),
+                Value::Integer(self.want().into())
+            )
+        ])
+    }
+
+    fn from_cbor(&mut self, input: &Value) -> bool {
+        if let Some(item) = input.as_map() {
+            for (key, val) in item {
+                if !key.is_text() {
+                    return false;
+                }
+                if let Some(_key) = key.as_text() {
+                    match _key {
+                        keys::KEY_REQ_WANT => {
+                            if let Some(_val) = val.as_integer() {
+                                let _want: i32 = _val.try_into().unwrap();
+                                self.want4 = (_want & 0x01) != 0;
+                                self.want6 = (_want & 0x02) != 0;
+                            }
+                        },
+                        keys::KEY_REQ_TARGET => {
+                            if let Some(_val) = val.as_bytes() {
+                                self.target = Some(Id::from_bytes(_val));
+                            }
+                        },
+                        &_ => {
+                            println!("_key: {}", _key);
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
+    }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -158,7 +233,6 @@ pub(crate) struct Message {
     want_token: bool,
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {

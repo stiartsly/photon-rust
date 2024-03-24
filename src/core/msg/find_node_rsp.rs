@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
 use ciborium::value::Value;
 
 use super::lookup;
@@ -132,6 +133,7 @@ impl lookup::Result for Message {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,

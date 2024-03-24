@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
 use ciborium::value::Value;
 
 use crate::id::Id;
@@ -96,10 +97,6 @@ impl Msg for Message {
     }
 
     fn from_cbor(&mut self, input: &Value) -> bool {
-        if !input.is_map() {
-            return false;
-        }
-
         let root = input.as_map().unwrap().iter();
         for (key_cbor, val_cbor) in root {
             if !key_cbor.is_text()|| !val_cbor.is_integer(){
@@ -127,7 +124,7 @@ impl Msg for Message {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,

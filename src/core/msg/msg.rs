@@ -2,11 +2,14 @@ use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
 use ciborium::value::Value;
+use std::fmt::Debug;
+use std::fmt::Display;
 
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::error::Error;
 
+use super::keys;
 use super::cbor;
 use super::error;
 use super::ping_req;
@@ -47,6 +50,14 @@ impl Kind {
             0x20 => true,
             0x40 => true,
             _ => false,
+        }
+    }
+
+    pub(crate) fn to_key(&self) -> &'static str {
+        match self {
+            Kind::Error => "e",
+            Kind::Request => "q",
+            Kind::Response => "r",
         }
     }
 }
@@ -112,7 +123,7 @@ impl fmt::Display for Method {
     }
 }
 
-pub(crate) trait Msg {
+pub(crate) trait Msg: Debug + Display {
     fn kind(&self) -> Kind;
     fn method(&self) -> Method;
 
@@ -144,9 +155,20 @@ pub(crate) trait Msg {
 }
 
 pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
-    let _type: i32 = 0;
+    let mut _type: i32 = 0;
     let reader = cbor::Reader::new(buf);
+    println!("desr buf len: {}", buf.len());
     let value: Value = ciborium::de::from_reader(reader).unwrap();
+
+    if let Some(root) = value.as_map() {
+        for (key, val) in root.iter() {
+            if key.as_text().unwrap() == keys::KEY_TYPE {
+                _type = val.as_integer().unwrap().try_into().unwrap();
+            }
+        }
+    } else {
+        // TODO:
+    }
 
     if !Kind::is_valid(_type) ||!Method::is_valid(_type) {
         return Err(Error::Protocol(format!(
@@ -168,7 +190,7 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
             Method::StoreValue => Box::new(store_value_req::Message::new()) as Box<dyn Msg>,
             Method::FindValue => Box::new(find_value_req::Message::new()) as Box<dyn Msg>,
             _ => { return Err(Error::Protocol(
-                format!("Invalid request message: {}", Method::from(_type))
+                format!("Invalid request message: {}, ignored it", Method::from(_type))
             ))}
         },
         Kind::Response => match Method::from(_type) {
@@ -179,14 +201,14 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
             Method::StoreValue => Box::new(store_value_rsp::Message::new()) as Box<dyn Msg>,
             Method::FindValue => Box::new(find_value_rsp::Message::new()) as Box<dyn Msg>,
             _ => { return Err(Error::Protocol(
-                format!("Invalid response message: {}", Method::from(_type))
+                format!("Invalid response message: {}, ignored it", Method::from(_type))
             ))}
         }
     };
     match msg.from_cbor(&value) {
         true => Ok(msg),
         false => Err(Error::Protocol(
-            format!("Invalid CBOR object as message {:?}", value)
+            format!("Invalid CBOR object as message {:?}, ignored it", value)
         ))
     }
 }
@@ -196,6 +218,8 @@ pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {
     let mut encoded = Vec::new() as Vec<u8>;
     let writer = cbor::Writer::new(encoded.as_mut());
     let _ = ciborium::ser::into_writer(&mut value, writer);
+    println!("serializer, len: {}", encoded.len());
+    encoded.push(0x0);
     encoded
 }
 

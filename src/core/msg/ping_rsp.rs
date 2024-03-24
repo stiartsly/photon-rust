@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
 use ciborium::value::Value;
 
 use super::msg::{self, Kind, Method, Msg};
@@ -100,6 +101,7 @@ impl Msg for Message {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -109,7 +111,6 @@ pub(crate) struct Message {
     ver: i32,
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {

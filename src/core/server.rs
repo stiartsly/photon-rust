@@ -295,8 +295,8 @@ pub(crate) fn run_loop(
         );
         while running {
             tokio::select! {
-                data = read_socket(sock4.as_ref(), Rc::clone(&buffer), move |_, _| {
-                    Some(Vec::new() as Vec<u8>)
+                data = read_socket(sock4.as_ref(), Rc::clone(&buffer), move |_, buf| {
+                   Some(buf.to_vec())
                 }) => {
                     match data {
                         Ok(_) => {
@@ -307,8 +307,8 @@ pub(crate) fn run_loop(
                     }
                 }
 
-                msg = read_socket(sock6.as_ref(), Rc::clone(&buffer), move |_, _| {
-                    Some(Vec::new() as Vec<u8>)
+                msg = read_socket(sock6.as_ref(), Rc::clone(&buffer), move |_, buf| {
+                    Some(buf.to_vec())
                 }) => {
                     match msg {
                         Ok(_) => {println!("Received data from ipv6 socket.")},
@@ -319,13 +319,13 @@ pub(crate) fn run_loop(
                 _ = write_socket(sock4.as_ref(), queue4.as_ref(),  move |_, _| {
                     Some(Vec::new() as Vec<u8>)
                 }) => {
-                    println!("Write data to ipv4 socket");
+                    // println!("Write data to ipv4 socket");
                 }
 
                 _ = write_socket(sock6.as_ref(), queue6.as_ref(),  move |_, _| {
                     Some(Vec::new() as Vec<u8>)
                 }) => {
-                    println!("Write data to ipv6 socket");
+                    // println!("Write data to ipv6 socket");
                 }
 
                 _ = interval.tick() => {
@@ -362,7 +362,7 @@ async fn read_socket<F>(
     let mut buf = buffer.borrow_mut();
     let (size, from_addr) = unwrap!(socket).recv_from(&mut buf).await?;
     let fromid = Id::from_bytes(&buf[.. id::ID_BYTES]);
-    let plain = decrypt(&fromid, &mut buf[id::ID_BYTES .. size - id::ID_BYTES]);
+    let plain = decrypt(&fromid, &mut buf[0 .. size]);
     if plain.is_none() {
         //self.stats.borrow_mut().on_dropped_packet(size);
         warn!("Decrypt packet error from {}, ignored: len {}", from_addr, size);
@@ -380,7 +380,7 @@ async fn read_socket<F>(
     msg.set_id(&fromid);
     msg.set_addr(&from_addr);
 
-    debug!("Received {}/{} from {}:[{}] {}", msg.method(), msg.kind(), from_addr, size, "msg"); // TODO:
+    info!("Received message: {}/{} from {}:[size: {}] {}", msg.method(), msg.kind(), from_addr, size, msg);
 
     // transaction id should be a non-zero integer as a normal message.
     if msg.kind() != msg::Kind::Error && msg.txid() == 0 {
@@ -415,10 +415,10 @@ where
     match unwrap!(queue).borrow_mut().pop_front() {
         Some(msg) => {
             let buffer = msg::serialize(&msg);
-            _ = unwrap!(socket).send_to(&buffer, msg.addr());
+            println!("sent cbor (len:{}): {:02X?} to {}", buffer.len(), buffer, msg.addr());
+            _ = unwrap!(socket).send_to(&buffer, msg.addr()).await?;
         },
         None => {
-            println!(">>>>>>>>> write_socket");
             sleep(Duration::from_millis(500)).await;
         }
     }

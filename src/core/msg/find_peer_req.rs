@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
 use ciborium::value::Value;
 
 use super::lookup;
@@ -119,9 +120,17 @@ impl lookup::Filter for Message {
     fn with_token(&mut self) {
         self.want_token = true
     }
+
+    fn to_cbor(&self) -> Value {
+        unimplemented!()
+    }
+
+    fn from_cbor(&mut self, _: &Value) -> bool {
+        unimplemented!()
+    }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -135,7 +144,6 @@ pub(crate) struct Message {
     want_token: bool,
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {

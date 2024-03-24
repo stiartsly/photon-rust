@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
+use std::fmt::Debug;
 use ciborium::value::Value;
 
 use super::msg::{Kind, Method, Msg};
@@ -112,7 +113,7 @@ impl AnnounceOption for Message {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) struct Message {
     id: Option<Id>,
     addr: Option<SocketAddr>,
@@ -123,7 +124,6 @@ pub(crate) struct Message {
     peers: Vec<Box<Peer>>,
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Message {
@@ -137,7 +137,6 @@ impl Message {
     }
 }
 
-#[allow(dead_code)]
 impl fmt::Display for Message {
     fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
         unimplemented!();

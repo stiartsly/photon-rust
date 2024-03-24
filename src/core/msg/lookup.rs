@@ -1,3 +1,4 @@
+use ciborium::value::Value;
 use crate::id::Id;
 use crate::node_info::NodeInfo;
 
@@ -11,6 +12,9 @@ pub(crate) trait Filter {
     fn with_want4(&mut self);
     fn with_want6(&mut self);
     fn with_token(&mut self);
+
+    fn to_cbor(&self) -> Value;
+    fn from_cbor(&mut self, _: &Value) -> bool;
 }
 
 pub(crate) trait Result {
