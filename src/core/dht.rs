@@ -55,7 +55,7 @@ pub(crate) trait ReqMsg: Msg
     + find_value_req::ValueOption
     + store_value_req::StoreOption
     + announce_peer_req::AnnounceOption
-    + error::ErrorResult {}
+    + error::ErrorResult + 'static  {}
 
 pub(crate) struct DHT {
     addr: SocketAddr,
@@ -271,7 +271,7 @@ impl DHT {
         match msg.kind() {
             msg::Kind::Error => self.on_error(msg),
             msg::Kind::Request => self.on_request(msg),
-            msg::Kind::Response => self.on_response(msg.as_ref()),
+            msg::Kind::Response => self.on_response(msg),
         }
     }
 
@@ -279,19 +279,19 @@ impl DHT {
     where T: ReqMsg
     {
         match msg.method() {
-            msg::Method::Ping => self.on_ping(msg.as_ref()),
+            msg::Method::Ping => self.on_ping(msg),
             msg::Method::FindNode => self.on_find_node(msg),
             msg::Method::FindValue => self.on_find_value(msg),
             msg::Method::StoreValue => self.on_store_value(msg),
             msg::Method::FindPeer => self.on_find_peers(msg),
             msg::Method::AnnouncePeer => self.on_announce_peer(msg),
             msg::Method::Unknown => {
-                self.send_err(msg.as_ref(), 203, "Invalid request method");
+                self.send_err(msg, 203, "Invalid request method");
             }
         }
     }
 
-    fn on_response(&mut self, _: &dyn Msg) {}
+    fn on_response(&mut self, _: Box<dyn Msg>) {}
 
     fn on_error<T>(&mut self, msg: Box<T>)
     where
@@ -307,7 +307,7 @@ impl DHT {
         );
     }
 
-    fn send_err(&mut self, msg: &dyn Msg, code: i32, str: &str) {
+    fn send_err(&mut self, msg: Box<dyn Msg>, code: i32, str: &str) {
         let mut err = Box::new(error::Message::new());
 
         err.set_id(msg.id());
@@ -320,7 +320,7 @@ impl DHT {
         self.send_msg(err);
     }
 
-    fn on_ping(&mut self, request: &dyn Msg) {
+    fn on_ping(&mut self, request: Box<dyn Msg>) {
         let mut msg = Box::new(ping_req::Message::new());
 
         msg.set_id(request.id());
@@ -332,7 +332,7 @@ impl DHT {
 
     fn on_find_node<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Filter,
+        T: Msg + lookup::Filter + 'static
     {
         let mut resp = Box::new(find_node_rsp::Message::new());
 
@@ -375,7 +375,7 @@ impl DHT {
 
     fn on_find_value<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Filter + find_value_req::ValueOption,
+        T: Msg + lookup::Filter + find_value_req::ValueOption + 'static
     {
         let mut resp = Box::new(find_value_rsp::Message::new());
 
@@ -433,7 +433,7 @@ impl DHT {
 
     fn on_store_value<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Filter + store_value_req::StoreOption,
+        T: Msg + lookup::Filter + store_value_req::StoreOption + 'static
     {
         let value = request.value();
         let value_id = value.id();
@@ -449,7 +449,7 @@ impl DHT {
                 request.addr()
             );
             self.send_err(
-                request.as_ref(),
+                request,
                 203,
                 "Invalid token for STORE VALUE request",
             );
@@ -457,7 +457,7 @@ impl DHT {
         }
 
         if !value.is_valid() {
-            self.send_err(request.as_ref(), 203, "Invalid value");
+            self.send_err(request, 203, "Invalid value");
             return;
         }
         // TODO: store value.
@@ -525,7 +525,7 @@ impl DHT {
 
     fn on_announce_peer<T>(&mut self, request: Box<T>)
     where
-        T: Msg + lookup::Filter + announce_peer_req::AnnounceOption,
+        T: Msg + lookup::Filter + announce_peer_req::AnnounceOption + 'static
     {
         let bogon = false;
 
@@ -547,7 +547,7 @@ impl DHT {
                 request.addr()
             );
             self.send_err(
-                request.as_ref(),
+                request,
                 203,
                 "Invalid token for ANNOUNCE PEER request",
             );
@@ -557,7 +557,7 @@ impl DHT {
         let peers = request.peers();
         for peer in peers.iter() {
             if !peer.is_valid() {
-                self.send_err(request.as_ref(), 203, "One peer is invalid peer");
+                self.send_err(request, 203, "One peer is invalid peer");
                 return;
             }
         }
