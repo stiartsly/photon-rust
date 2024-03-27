@@ -126,15 +126,10 @@ impl Message {
         }
     }
 
-    pub(crate) fn from(_: &ciborium::value::Value) -> Self {
-        Message {
-            id: None,
-            addr: None,
-            txid: 0,
-            ver: 0,
-            code: 0,
-            msg: None,
-        }
+    pub(crate) fn from(input: &ciborium::value::Value ) -> Self {
+        let mut msg = Self::new();
+        msg.from_cbor(input);
+        msg
     }
 }
 

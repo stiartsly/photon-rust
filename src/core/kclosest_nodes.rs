@@ -1,9 +1,8 @@
-use std::rc::Rc;
+//use std::rc::Rc;
 use std::vec::Vec;
 use std::collections::LinkedList;
 
 use crate::{
-    dht::DHT,
     id::Id,
     node_info::NodeInfo,
     kbucket::KBucket,
@@ -33,7 +32,7 @@ impl<'a> KClosestNodes<'a> {
     }
 
     pub(crate) fn with_filter<F>(
-        dht: Rc<&'a DHT>,
+        //dht: Rc<&'a DHT>,
         target: &'a Id,
         max_entries: usize,
         filter: F,

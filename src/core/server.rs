@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
 use std::collections::{HashMap, LinkedList};
 
-use log::{debug, info, warn, error};
+use log::{info, warn, error};
 use tokio::io;
 use tokio::runtime;
 use tokio::net::UdpSocket;
@@ -369,7 +369,7 @@ async fn read_socket<F>(
         return Ok(None);
     };
 
-    let mut msg = msg::deser(&fromid, &from_addr, &unwrap!(plain)).map_err(|err| {
+    let msg = msg::deser(&fromid, &from_addr, &unwrap!(plain)).map_err(|err| {
         //self.stats.borrow_mut().on_dropped_packet(size);
         warn!("Got a wrong packet from {}, ignored. {}", from_addr, err);
     }).unwrap();

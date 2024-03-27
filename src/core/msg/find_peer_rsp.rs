@@ -167,8 +167,10 @@ impl Message {
         }
     }
 
-    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
-        unimplemented!()
+    pub(crate) fn from(input: &ciborium::value::Value ) -> Self {
+        let mut msg = Self::new();
+        msg.from_cbor(input);
+        msg
     }
 }
 

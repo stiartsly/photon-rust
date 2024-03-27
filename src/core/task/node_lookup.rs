@@ -12,8 +12,7 @@ use crate::{
 };
 
 use crate::msg::{
-    find_node_rsp::{self},
-    lookup::Result as MsgResult,
+    find_node_rsp,
     msg::{self, Msg},
 };
 
