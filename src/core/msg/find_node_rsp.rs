@@ -99,18 +99,12 @@ impl Msg for Message {
         self.token
     }
 
-    fn populate_closest_nodes4(&mut self, want4: bool, f: Box<dyn FnOnce() -> Option<Vec<NodeInfo>>>) {
-        match want4 {
-            true => self.nodes4 = f(),
-            false => {}
-        }
+    fn populate_closest_nodes4(&mut self, f: Box<dyn FnOnce() -> Vec<NodeInfo>>) {
+        self.nodes4 = Some(f())
     }
 
-    fn populate_closest_nodes6(&mut self, want6: bool, f: Box<dyn FnOnce() -> Option<Vec<NodeInfo>> +'static>) {
-        match want6 {
-            true => self.nodes6 = f(),
-            false => {}
-        }
+    fn populate_closest_nodes6(&mut self, f: Box<dyn FnOnce() -> Vec<NodeInfo>>) {
+        self.nodes6 = Some(f())
     }
 
     fn populate_token(&mut self, want_token: bool, f: Box<dyn  FnOnce() -> i32>)

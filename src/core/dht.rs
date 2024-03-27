@@ -322,35 +322,35 @@ impl DHT {
         resp.set_txid(request.txid());
         resp.set_addr(request.addr());
 
-        println!(">>>> on_find_node: {}", request);
-        let target = request.target().clone();
+        if request.want4() {
+            let cloned = Rc::clone(&request);
+            resp.populate_closest_nodes4(Box::new(move || {
+                let mut knodes = KClosestNodes::new(
+                    cloned.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                );
+                knodes.fill(true);
+                knodes.as_nodes()
+            }));
+        }
+        if request.want6() {
+            let cloned = Rc::clone(&request);
+            resp.populate_closest_nodes6(Box::new(move || {
+                let mut knodes = KClosestNodes::new(
+                    cloned.target(),
+                    constants::MAX_ENTRIES_PER_BUCKET,
+                );
+                knodes.fill(true);
+                knodes.as_nodes()
+            }));
+        }
 
-        resp.populate_closest_nodes4(request.want4(), Box::new(move || {
-            let mut knodes = KClosestNodes::new(
-                &target,
-                constants::MAX_ENTRIES_PER_BUCKET,
-            );
-            knodes.fill(true);
-            Some(knodes.as_nodes())
-        }));
-
-        let target1 = request.target().clone();
-        resp.populate_closest_nodes6(request.want6(), Box::new(move || {
-            let mut knodes = KClosestNodes::new(
-                &target1,
-                constants::MAX_ENTRIES_PER_BUCKET,
-            );
-            knodes.fill(true);
-            Some(knodes.as_nodes())
-        }));
-
-        let token_man = Rc::clone(&self.token_man);
+        let cloned = Rc::clone(&self.token_man);
         resp.populate_token(request.want_token(), Box::new(move || {
-            token_man.borrow()
+            cloned.borrow()
                 .generate_token(request.id(), request.addr(), request.target())
         }));
 
-        println!(">>>> end >>>>>");
         self.send_msg(resp)
     }
 
@@ -363,50 +363,50 @@ impl DHT {
         resp.set_addr(request.addr());
 
         let has_value = RefCell::new(false);
-        let has_value_rc = RefCell::clone(&has_value);
+        let cloned_has_value = RefCell::clone(&has_value);
+        let cloned_request = Rc::clone(&request);
         resp.populate_value(Box::new(move || {
-            // TODO;
             let value: Option<Box<Value>> = None;
             if value.is_some() {
-                if request.seq() < 0
+                if cloned_request.seq() < 0
                     || value.as_ref().unwrap().sequence_number() < 0
-                    || request.seq() <= value.as_ref().unwrap().sequence_number()
+                    || cloned_request.seq() <= value.as_ref().unwrap().sequence_number()
                 {
-                    *has_value_rc.borrow_mut() = true;
+                    *cloned_has_value.borrow_mut() = true;
                 }
             }
             value
         }));
 
-        /*
-        resp.populate_closest_nodes4(request.want4() && *has_value.borrow(), Box::new(|| {
-            Some(
+        if request.want4() && *has_value.borrow() {
+            let cloned = Rc::clone(&request);
+            resp.populate_closest_nodes4(Box::new(move || {
                 KClosestNodes::new(
-                    request.target(),
+                    cloned.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
-                .as_nodes(),
-            )
-        }));
+                .as_nodes()
+            }));
+        }
 
-        resp.populate_closest_nodes6(request.want6() && *has_value.borrow(), Box::new(|| {
-            Some(
+        if request.want6() && *has_value.borrow() {
+            let cloned = Rc::clone(&request);
+            resp.populate_closest_nodes4(Box::new(move || {
                 KClosestNodes::new(
-                    request.target(),
+                    cloned.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
-                .as_nodes(),
-            )
-        }));
+                .as_nodes()
+            }));
+        }
 
-        let tokenman = Rc::clone(&self.token_man);
+        let cloned = Rc::clone(&self.token_man);
         resp.populate_token(request.want_token(), Box::new(move || {
-            tokenman.borrow()
+            cloned.borrow()
                 .generate_token(request.id(), request.addr(), request.target())
         }));
-        */
 
         self.send_msg(resp);
     }
@@ -457,46 +457,45 @@ impl DHT {
         resp.set_txid(request.txid());
 
         let has_peers = RefCell::new(false);
-        let has_peers_rc = RefCell::clone(&has_peers);
-
+        let cloned_has_peers = RefCell::clone(&has_peers);
         resp.populate_peers(Box::new(move || {
             // TODO;
             let peers: Vec<Box<Peer>> = Vec::new();
             if !peers.is_empty() {
-                *has_peers_rc.borrow_mut() = true;
+                *cloned_has_peers.borrow_mut() = true;
             };
             Some(peers)
         }));
 
-        /*
-        resp.populate_closest_nodes4(request.want4() && *has_peers.borrow(), Box::new(|| {
-            Some(
+        if request.want4() && *has_peers.borrow() {
+            let cloned = Rc::clone(&request);
+            resp.populate_closest_nodes4(Box::new(move || {
                 KClosestNodes::new(
-                    request.target(),
+                    cloned.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
-                .as_nodes(),
-            )
-        }));
+                .as_nodes()
+            }));
+        }
 
-        resp.populate_closest_nodes6(request.want6() && *has_peers.borrow(), Box::new(|| {
-            Some(
+        if request.want6() && *has_peers.borrow() {
+            let cloned = Rc::clone(&request);
+            resp.populate_closest_nodes4(Box::new(move || {
                 KClosestNodes::new(
-                    request.target(),
+                    cloned.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
-                .as_nodes(),
-            )
-        }));
-        */
+                .as_nodes()
+            }));
+        }
 
-        //let tokenman = Rc::clone(&self.token_man);
-        //resp.populate_token(request.want_token(), Box::new(move || {
-            //tokenman.borrow()
-            //    .generate_token(request.id(), request.addr(), request.target())
-        //}));
+        let cloned = Rc::clone(&self.token_man);
+        resp.populate_token(request.want_token(), Box::new(move || {
+            cloned.borrow()
+                .generate_token(request.id(), request.addr(), request.target())
+        }));
 
         self.send_msg(resp);
     }

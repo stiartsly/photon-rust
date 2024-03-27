@@ -163,8 +163,8 @@ pub(crate) trait Msg: Debug + Display {
     fn token(&self) -> i32 { panic!() }
 
     // Common methos for Node/Value/Peer Lookup as query result.
-    fn populate_closest_nodes4(&mut self, _: bool, _: Box<dyn FnOnce() -> Option<Vec<NodeInfo>> +'static>) { panic!() }
-    fn populate_closest_nodes6(&mut self, _: bool, _: Box<dyn FnOnce() -> Option<Vec<NodeInfo>> +'static>) { panic!() }
+    fn populate_closest_nodes4(&mut self, _: Box<dyn FnOnce() -> Vec<NodeInfo> +'static>) { panic!() }
+    fn populate_closest_nodes6(&mut self, _: Box<dyn FnOnce() -> Vec<NodeInfo> +'static>) { panic!() }
     fn populate_token(&mut self, _: bool, _: Box<dyn FnOnce() -> i32>) { panic!() }
 
     // Methods for FindValue as query condition
