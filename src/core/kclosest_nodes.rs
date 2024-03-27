@@ -1,4 +1,3 @@
-//use std::rc::Rc;
 use std::vec::Vec;
 use std::collections::LinkedList;
 
@@ -9,9 +8,7 @@ use crate::{
     kbucket_entry::KBucketEntry
 };
 
-#[allow(dead_code)]
 pub(crate) struct KClosestNodes<'a> {
-    // dht: Rc<&'a DHT>,
     target: &'a Id,
 
     entries: LinkedList<Box<KBucketEntry>>,
@@ -23,25 +20,20 @@ pub(crate) struct KClosestNodes<'a> {
 #[allow(dead_code)]
 impl<'a> KClosestNodes<'a> {
     pub(crate) fn new(target: &'a Id, max_entries: usize) -> Self {
-        KClosestNodes {
+        Self {
             target,
             entries: LinkedList::new(),
             max_entries,
-            filter: Box::new(|_| true),
+            filter: Box::new(|entry| {
+                entry.is_eligible_for_nodes_list()
+            })
         }
     }
 
-    pub(crate) fn with_filter<F>(
-        //dht: Rc<&'a DHT>,
-        target: &'a Id,
-        max_entries: usize,
-        filter: F,
-    ) -> Self
-    where
-        F: Fn(&Box<KBucketEntry>) -> bool + 'static,
+    pub(crate) fn with_filter<F>(target: &'a Id,  max_entries: usize, filter: F) -> Self
+    where F: Fn(&Box<KBucketEntry>) -> bool + 'static,
     {
-        KClosestNodes {
-            // dht,
+        Self {
             target,
             entries: LinkedList::new(),
             max_entries,

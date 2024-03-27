@@ -314,8 +314,7 @@ impl DHT {
         self.send_msg(msg);
     }
 
-    fn on_find_node<'a>(&mut self, request: Rc<dyn Msg>)
-    {
+    fn on_find_node<'a>(&mut self, request: Rc<dyn Msg>) {
         let mut resp = Box::new(find_node_rsp::Message::new());
 
         resp.set_id(request.id());
@@ -354,8 +353,7 @@ impl DHT {
         self.send_msg(resp)
     }
 
-    fn on_find_value(&mut self, request: Rc<dyn Msg>)
-    {
+    fn on_find_value(&mut self, request: Rc<dyn Msg>) {
         let mut resp = Box::new(find_value_rsp::Message::new());
 
         resp.set_id(request.id());
@@ -411,8 +409,7 @@ impl DHT {
         self.send_msg(resp);
     }
 
-    fn on_store_value(&mut self, request: Rc<dyn Msg>)
-    {
+    fn on_store_value(&mut self, request: Rc<dyn Msg>) {
         let value = request.value();
         let value_id = value.as_ref().unwrap().id();
 
@@ -448,8 +445,7 @@ impl DHT {
         self.send_msg(resp);
     }
 
-    fn on_find_peers(&mut self, request: Rc<dyn Msg>)
-    {
+    fn on_find_peers(&mut self, request: Rc<dyn Msg>) {
         let mut resp = Box::new(find_peer_rsp::Message::new());
 
         resp.set_id(request.id());
@@ -500,8 +496,7 @@ impl DHT {
         self.send_msg(resp);
     }
 
-    fn on_announce_peer(&mut self, request: Rc<dyn Msg>)
-    {
+    fn on_announce_peer(&mut self, request: Rc<dyn Msg>) {
         let bogon = false;
 
         if bogon {
