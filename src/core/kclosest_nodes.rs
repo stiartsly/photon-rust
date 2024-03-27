@@ -12,7 +12,7 @@ use crate::{
 
 #[allow(dead_code)]
 pub(crate) struct KClosestNodes<'a> {
-    dht: Rc<&'a DHT>,
+    // dht: Rc<&'a DHT>,
     target: &'a Id,
 
     entries: LinkedList<Box<KBucketEntry>>,
@@ -23,9 +23,8 @@ pub(crate) struct KClosestNodes<'a> {
 
 #[allow(dead_code)]
 impl<'a> KClosestNodes<'a> {
-    pub(crate) fn new(dht: Rc<&'a DHT>, target: &'a Id, max_entries: usize) -> Self {
+    pub(crate) fn new(target: &'a Id, max_entries: usize) -> Self {
         KClosestNodes {
-            dht,
             target,
             entries: LinkedList::new(),
             max_entries,
@@ -43,7 +42,7 @@ impl<'a> KClosestNodes<'a> {
         F: Fn(&Box<KBucketEntry>) -> bool + 'static,
     {
         KClosestNodes {
-            dht,
+            // dht,
             target,
             entries: LinkedList::new(),
             max_entries,

@@ -4,7 +4,6 @@ use std::collections::{LinkedList, HashMap};
 use std::cell::RefCell;
 use std::time::SystemTime;
 use std::net::SocketAddr;
-// use std::sync::atomic::{AtomicBool};
 use log::{debug, info, warn, trace};
 
 use crate::{
@@ -27,17 +26,13 @@ use crate::{
 
 use crate::msg::{
     ping_req,
-    announce_peer_req,
-    announce_peer_rsp,
     find_node_req,
     find_node_rsp,
-    find_value_req,
-    store_value_req,
+    find_peer_rsp,
     store_value_rsp,
-    error::{self, ErrorResult},
-    find_peer_rsp::{self, PeerResult},
-    find_value_rsp::{self, ValueResult},
-    lookup::{self, Filter, Result},
+    find_value_rsp,
+    announce_peer_rsp,
+    error,
     msg::{self, Msg},
 };
 
@@ -49,13 +44,6 @@ use crate::task::{
     task_manager::TaskManager,
     value_lookup::ValueLookupTask,
 };
-
-pub(crate) trait ReqMsg: Msg
-    + lookup::Filter
-    + find_value_req::ValueOption
-    + store_value_req::StoreOption
-    + announce_peer_req::AnnounceOption
-    + error::ErrorResult + 'static  {}
 
 pub(crate) struct DHT {
     addr: SocketAddr,
@@ -265,8 +253,7 @@ impl DHT {
         self.running
     }
 
-    pub(crate) fn on_msg<T>(&mut self, msg: Box<T>)
-    where T: ReqMsg
+    pub(crate) fn on_msg(&mut self, msg: Rc<dyn Msg>)
     {
         match msg.kind() {
             msg::Kind::Error => self.on_error(msg),
@@ -275,8 +262,7 @@ impl DHT {
         }
     }
 
-    fn on_request<T>(&mut self, msg: Box<T>)
-    where T: ReqMsg
+    fn on_request(&mut self, msg: Rc<dyn Msg>)
     {
         match msg.method() {
             msg::Method::Ping => self.on_ping(msg),
@@ -291,11 +277,9 @@ impl DHT {
         }
     }
 
-    fn on_response(&mut self, _: Box<dyn Msg>) {}
+    fn on_response(&mut self, _: Rc<dyn Msg>) {}
 
-    fn on_error<T>(&mut self, msg: Box<T>)
-    where
-        T: Msg + error::ErrorResult,
+    fn on_error(&mut self, msg: Rc<dyn Msg>)
     {
         warn!(
             "Error from {}/{} - {}:{}, txid {}",
@@ -307,7 +291,7 @@ impl DHT {
         );
     }
 
-    fn send_err(&mut self, msg: Box<dyn Msg>, code: i32, str: &str) {
+    fn send_err(&mut self, msg: Rc<dyn Msg>, code: i32, str: &str) {
         let mut err = Box::new(error::Message::new());
 
         err.set_id(msg.id());
@@ -320,7 +304,7 @@ impl DHT {
         self.send_msg(err);
     }
 
-    fn on_ping(&mut self, request: Box<dyn Msg>) {
+    fn on_ping(&mut self, request: Rc<dyn Msg>) {
         let mut msg = Box::new(ping_req::Message::new());
 
         msg.set_id(request.id());
@@ -330,9 +314,7 @@ impl DHT {
         self.send_msg(msg);
     }
 
-    fn on_find_node<T>(&mut self, request: Box<T>)
-    where
-        T: Msg + lookup::Filter + 'static
+    fn on_find_node<'a>(&mut self, request: Rc<dyn Msg>)
     {
         let mut resp = Box::new(find_node_rsp::Message::new());
 
@@ -340,42 +322,39 @@ impl DHT {
         resp.set_txid(request.txid());
         resp.set_addr(request.addr());
 
-        resp.populate_closest_nodes4(request.want4(), || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
+        println!(">>>> on_find_node: {}", request);
+        let target = request.target().clone();
 
-        resp.populate_closest_nodes6(request.want6(), || {
-            Some(
-                KClosestNodes::new(
-                    Rc::new(self),
-                    request.target(),
-                    constants::MAX_ENTRIES_PER_BUCKET,
-                )
-                .fill(true)
-                .as_nodes(),
-            )
-        });
+        resp.populate_closest_nodes4(request.want4(), Box::new(move || {
+            let mut knodes = KClosestNodes::new(
+                &target,
+                constants::MAX_ENTRIES_PER_BUCKET,
+            );
+            knodes.fill(true);
+            Some(knodes.as_nodes())
+        }));
 
-        resp.populate_token(request.want_token(), || {
-            self.token_man
-                .borrow()
+        let target1 = request.target().clone();
+        resp.populate_closest_nodes6(request.want6(), Box::new(move || {
+            let mut knodes = KClosestNodes::new(
+                &target1,
+                constants::MAX_ENTRIES_PER_BUCKET,
+            );
+            knodes.fill(true);
+            Some(knodes.as_nodes())
+        }));
+
+        let token_man = Rc::clone(&self.token_man);
+        resp.populate_token(request.want_token(), Box::new(move || {
+            token_man.borrow()
                 .generate_token(request.id(), request.addr(), request.target())
-        });
+        }));
 
+        println!(">>>> end >>>>>");
         self.send_msg(resp)
     }
 
-    fn on_find_value<T>(&mut self, request: Box<T>)
-    where
-        T: Msg + lookup::Filter + find_value_req::ValueOption + 'static
+    fn on_find_value(&mut self, request: Rc<dyn Msg>)
     {
         let mut resp = Box::new(find_value_rsp::Message::new());
 
@@ -383,8 +362,9 @@ impl DHT {
         resp.set_txid(request.txid());
         resp.set_addr(request.addr());
 
-        let mut has_value = false;
-        resp.populate_value(|| {
+        let has_value = RefCell::new(false);
+        let has_value_rc = RefCell::clone(&has_value);
+        resp.populate_value(Box::new(move || {
             // TODO;
             let value: Option<Box<Value>> = None;
             if value.is_some() {
@@ -392,51 +372,49 @@ impl DHT {
                     || value.as_ref().unwrap().sequence_number() < 0
                     || request.seq() <= value.as_ref().unwrap().sequence_number()
                 {
-                    has_value = true;
+                    *has_value_rc.borrow_mut() = true;
                 }
             }
             value
-        });
+        }));
 
-        resp.populate_closest_nodes4(request.want4() && has_value, || {
+        /*
+        resp.populate_closest_nodes4(request.want4() && *has_value.borrow(), Box::new(|| {
             Some(
                 KClosestNodes::new(
-                    Rc::new(&self),
                     request.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
                 .as_nodes(),
             )
-        });
+        }));
 
-        resp.populate_closest_nodes6(request.want6() && has_value, || {
+        resp.populate_closest_nodes6(request.want6() && *has_value.borrow(), Box::new(|| {
             Some(
                 KClosestNodes::new(
-                    Rc::new(&self),
                     request.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
                 .as_nodes(),
             )
-        });
+        }));
 
-        resp.populate_token(request.want_token(), || {
-            self.token_man
-                .borrow()
+        let tokenman = Rc::clone(&self.token_man);
+        resp.populate_token(request.want_token(), Box::new(move || {
+            tokenman.borrow()
                 .generate_token(request.id(), request.addr(), request.target())
-        });
+        }));
+        */
 
         self.send_msg(resp);
     }
 
-    fn on_store_value<T>(&mut self, request: Box<T>)
-    where
-        T: Msg + lookup::Filter + store_value_req::StoreOption + 'static
+    fn on_store_value(&mut self, request: Rc<dyn Msg>)
     {
         let value = request.value();
-        let value_id = value.id();
+        let value_id = value.as_ref().unwrap().id();
 
         if !self.token_man.borrow_mut().verify_token(
             request.token(),
@@ -456,7 +434,7 @@ impl DHT {
             return;
         }
 
-        if !value.is_valid() {
+        if !value.as_ref().unwrap().is_valid() {
             self.send_err(request, 203, "Invalid value");
             return;
         }
@@ -470,9 +448,7 @@ impl DHT {
         self.send_msg(resp);
     }
 
-    fn on_find_peers<T>(&mut self, request: Box<T>)
-    where
-        T: Msg + lookup::Filter + find_value_req::ValueOption,
+    fn on_find_peers(&mut self, request: Rc<dyn Msg>)
     {
         let mut resp = Box::new(find_peer_rsp::Message::new());
 
@@ -480,52 +456,52 @@ impl DHT {
         resp.set_addr(request.addr());
         resp.set_txid(request.txid());
 
-        let mut has_peers = false;
-        resp.populate_peers(|| {
+        let has_peers = RefCell::new(false);
+        let has_peers_rc = RefCell::clone(&has_peers);
+
+        resp.populate_peers(Box::new(move || {
             // TODO;
             let peers: Vec<Box<Peer>> = Vec::new();
             if !peers.is_empty() {
-                has_peers = true;
+                *has_peers_rc.borrow_mut() = true;
             };
             Some(peers)
-        });
+        }));
 
-        resp.populate_closest_nodes4(request.want4() && has_peers, || {
+        /*
+        resp.populate_closest_nodes4(request.want4() && *has_peers.borrow(), Box::new(|| {
             Some(
                 KClosestNodes::new(
-                    Rc::new(&self),
                     request.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
                 .as_nodes(),
             )
-        });
+        }));
 
-        resp.populate_closest_nodes6(request.want6() && has_peers, || {
+        resp.populate_closest_nodes6(request.want6() && *has_peers.borrow(), Box::new(|| {
             Some(
                 KClosestNodes::new(
-                    Rc::new(&self),
                     request.target(),
                     constants::MAX_ENTRIES_PER_BUCKET,
                 )
                 .fill(true)
                 .as_nodes(),
             )
-        });
+        }));
+        */
 
-        resp.populate_token(request.want_token(), || {
-            self.token_man
-                .borrow()
-                .generate_token(request.id(), request.addr(), request.target())
-        });
+        //let tokenman = Rc::clone(&self.token_man);
+        //resp.populate_token(request.want_token(), Box::new(move || {
+            //tokenman.borrow()
+            //    .generate_token(request.id(), request.addr(), request.target())
+        //}));
 
         self.send_msg(resp);
     }
 
-    fn on_announce_peer<T>(&mut self, request: Box<T>)
-    where
-        T: Msg + lookup::Filter + announce_peer_req::AnnounceOption + 'static
+    fn on_announce_peer(&mut self, request: Rc<dyn Msg>)
     {
         let bogon = false;
 

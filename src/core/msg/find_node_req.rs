@@ -3,7 +3,6 @@ use std::fmt;
 use std::net::SocketAddr;
 use ciborium::value::Value;
 
-use super::lookup;
 use super::msg::{self, Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
@@ -81,7 +80,17 @@ impl Msg for Message {
     }
 
     fn to_cbor(&self) -> Value {
-        Value::Map(vec![
+        let req = Value::Map(vec![
+            (
+                Value::Text(String::from(keys::KEY_REQ_TARGET)),
+                Value::Bytes(self.target.as_ref().unwrap().as_bytes().to_vec())
+            ),
+            (
+                Value::Text(String::from(keys::KEY_REQ_WANT)),
+                Value::Integer(self.want().into())
+            )
+        ]);
+        let a = Value::Map(vec![
             (
                 Value::Text(String::from(keys::KEY_TYPE)),
                 Value::Integer(self._type.into())
@@ -96,9 +105,11 @@ impl Msg for Message {
             ),
             (
                 Value::Text(Kind::from(self._type).to_key().to_string()),
-                lookup::Filter::to_cbor(self)
+                req
             )
-        ])
+        ]);
+        println!(">>>>>>> a: {:?}", a);
+        a
     }
 
     fn from_cbor(&mut self, input: &Value) -> bool {
@@ -126,7 +137,33 @@ impl Msg for Message {
                         },
 
                         keys::KEY_REQUEST => {
-                            lookup::Filter::from_cbor(self, val);
+                            if let Some(item) = val.as_map() {
+                                for (__key, _val) in item {
+                                    if !__key.is_text() {
+                                        return false;
+                                    }
+                                    if let Some(__key) = __key.as_text() {
+                                        match __key {
+                                            keys::KEY_REQ_WANT => {
+                                                if let Some(__val) = _val.as_integer() {
+                                                    let _want: i32 = __val.try_into().unwrap();
+                                                    self.want4 = (_want & 0x01) != 0;
+                                                    self.want6 = (_want & 0x02) != 0;
+                                                }
+                                            },
+                                            keys::KEY_REQ_TARGET => {
+                                                if let Some(__val) = _val.as_bytes() {
+                                                    self.target = Some(Id::from_bytes(__val));
+                                                }
+                                            },
+                                            &_ => {
+                                                println!("_key: {}", __key);
+                                                return false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         },
 
                         &_ => {
@@ -139,9 +176,7 @@ impl Msg for Message {
         }
         true
     }
-}
 
-impl lookup::Filter for Message {
     fn target(&self) -> &Id {
         &self.target.as_ref().unwrap()
     }
@@ -172,50 +207,6 @@ impl lookup::Filter for Message {
 
     fn with_token(&mut self) {
         self.want_token = true
-    }
-
-    fn to_cbor(&self) -> Value {
-        Value::Map(vec![
-            (
-                Value::Text(String::from(keys::KEY_REQ_TARGET)),
-                Value::Bytes(self.target.as_ref().unwrap().as_bytes().to_vec())
-            ),
-            (
-                Value::Text(String::from(keys::KEY_REQ_WANT)),
-                Value::Integer(self.want().into())
-            )
-        ])
-    }
-
-    fn from_cbor(&mut self, input: &Value) -> bool {
-        if let Some(item) = input.as_map() {
-            for (key, val) in item {
-                if !key.is_text() {
-                    return false;
-                }
-                if let Some(_key) = key.as_text() {
-                    match _key {
-                        keys::KEY_REQ_WANT => {
-                            if let Some(_val) = val.as_integer() {
-                                let _want: i32 = _val.try_into().unwrap();
-                                self.want4 = (_want & 0x01) != 0;
-                                self.want6 = (_want & 0x02) != 0;
-                            }
-                        },
-                        keys::KEY_REQ_TARGET => {
-                            if let Some(_val) = val.as_bytes() {
-                                self.target = Some(Id::from_bytes(_val));
-                            }
-                        },
-                        &_ => {
-                            println!("_key: {}", _key);
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-        true
     }
 }
 
@@ -248,6 +239,14 @@ impl Message {
         }
     }
 
+    pub(crate) fn from(id:&Id, from:&SocketAddr, input: &ciborium::value::Value ) -> Self {
+        let mut msg = Self::new();
+        msg.set_id(id);
+        msg.set_addr(from);
+        msg.from_cbor(input);
+        msg
+    }
+
     fn want(&self) -> i32 {
         let mut want = 0;
         if self.want4 {
@@ -261,6 +260,7 @@ impl Message {
         }
         want
     }
+
 }
 
 impl fmt::Display for Message {

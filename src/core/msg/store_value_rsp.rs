@@ -103,6 +103,10 @@ impl Message {
             ver: 0,
         }
     }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
+    }
 }
 
 impl fmt::Display for Message {

@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::fmt::Debug;
 use ciborium::value::Value;
 
-use super::lookup;
 use super::msg::{self, Kind, Method, Msg};
 use crate::id::Id;
 use crate::node_info::NodeInfo;
@@ -87,9 +86,7 @@ impl Msg for Message {
     fn from_cbor(&mut self, _: &Value) -> bool {
         unimplemented!()
     }
-}
 
-impl lookup::Result for Message {
     fn nodes4(&self) -> &[NodeInfo] {
         &self.nodes4.as_ref().unwrap()
     }
@@ -102,29 +99,21 @@ impl lookup::Result for Message {
         self.token
     }
 
-    fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>,
-    {
+    fn populate_closest_nodes4(&mut self, want4: bool, f: Box<dyn FnOnce() -> Option<Vec<NodeInfo>>>) {
         match want4 {
             true => self.nodes4 = f(),
             false => {}
         }
     }
 
-    fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>,
-    {
+    fn populate_closest_nodes6(&mut self, want6: bool, f: Box<dyn FnOnce() -> Option<Vec<NodeInfo>> +'static>) {
         match want6 {
             true => self.nodes6 = f(),
             false => {}
         }
     }
 
-    fn populate_token<F>(&mut self, want_token: bool, f: F)
-    where
-        F: FnOnce() -> i32,
+    fn populate_token(&mut self, want_token: bool, f: Box<dyn  FnOnce() -> i32>)
     {
         match want_token {
             true => self.token = f(),
@@ -159,6 +148,10 @@ impl Message {
             nodes6: None,
             token: 0,
         }
+    }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
     }
 }
 

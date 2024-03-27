@@ -2,21 +2,13 @@ use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
 use std::fmt::Debug;
-use ciborium::value::Value as CborValue;
+use ciborium;
 
-use super::lookup;
 use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::node_info::NodeInfo;
 use crate::rpccall::RpcCall;
 use crate::value::Value;
-
-pub(crate) trait ValueResult {
-    fn value(&self) -> &Option<Box<Value>>;
-    fn populate_value<F>(&mut self, f: F)
-    where
-        F: FnMut() -> Option<Box<Value>>;
-}
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -87,16 +79,14 @@ impl Msg for Message {
         self
     }
 
-    fn to_cbor(&self) -> CborValue {
+    fn to_cbor(&self) -> ciborium::value::Value {
         unimplemented!()
     }
 
-    fn from_cbor(&mut self, _: &CborValue) -> bool {
+    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool {
         unimplemented!()
     }
-}
 
-impl lookup::Result for Message {
     fn nodes4(&self) -> &[NodeInfo] {
         &self.nodes4.as_ref().unwrap()
     }
@@ -109,9 +99,7 @@ impl lookup::Result for Message {
         self.token
     }
 
-    fn populate_closest_nodes4<F>(&mut self, want4: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>,
+    fn populate_closest_nodes4(&mut self, want4: bool, f: Box<dyn FnOnce() -> Option<Vec<NodeInfo>>>)
     {
         match want4 {
             true => self.nodes4 = f(),
@@ -119,9 +107,7 @@ impl lookup::Result for Message {
         }
     }
 
-    fn populate_closest_nodes6<F>(&mut self, want6: bool, f: F)
-    where
-        F: FnOnce() -> Option<Vec<NodeInfo>>,
+    fn populate_closest_nodes6(&mut self, want6: bool, f: Box<dyn FnOnce() -> Option<Vec<NodeInfo>>>)
     {
         match want6 {
             true => self.nodes6 = f(),
@@ -129,25 +115,19 @@ impl lookup::Result for Message {
         }
     }
 
-    fn populate_token<F>(&mut self, want_token: bool, f: F)
-    where
-        F: FnOnce() -> i32,
+    fn populate_token(&mut self, want_token: bool, f: Box<dyn FnOnce() -> i32>)
     {
         match want_token {
             true => self.token = f(),
             false => {}
         }
     }
-}
 
-impl ValueResult for Message {
-    fn value(&self) -> &Option<Box<Value>> {
+    fn value(&self) -> &Option<Box<crate::value::Value>> {
         &self.value
     }
 
-    fn populate_value<F>(&mut self, mut f: F)
-    where
-        F: FnMut() -> Option<Box<Value>>,
+    fn populate_value(&mut self, mut f: Box<dyn FnMut() -> Option<Box<crate::value::Value>>>)
     {
         self.value = f()
     }
@@ -180,6 +160,10 @@ impl Message {
             token: 0,
             value: None,
         }
+    }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
     }
 }
 

@@ -4,16 +4,10 @@ use std::net::SocketAddr;
 use std::fmt::Debug;
 use ciborium::value::Value as CborValue;
 
-use super::lookup;
 use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
-
-pub(crate) trait ValueOption {
-    fn seq(&self) -> i32;
-    fn with_seq(&mut self, _: i32);
-}
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -91,9 +85,7 @@ impl Msg for Message {
     fn from_cbor(&mut self, _: &CborValue) -> bool {
         unimplemented!()
     }
-}
 
-impl lookup::Filter for Message {
     fn target(&self) -> &Id {
         &self.target.as_ref().unwrap()
     }
@@ -126,16 +118,6 @@ impl lookup::Filter for Message {
         self.want_token = true
     }
 
-    fn to_cbor(&self) -> CborValue {
-        unimplemented!()
-    }
-
-    fn from_cbor(&mut self, _: &CborValue) -> bool {
-        unimplemented!()
-    }
-}
-
-impl ValueOption for Message {
     fn seq(&self) -> i32 {
         self.seq
     }
@@ -175,6 +157,10 @@ impl Message {
             want_token: false,
             seq: -1,
         }
+    }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
     }
 
     fn want(&self) -> i32 {

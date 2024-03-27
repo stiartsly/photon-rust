@@ -2,20 +2,11 @@ use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
 use std::fmt::Debug;
-use ciborium::value::Value as CborValue;
 
 use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::value::Value;
-
-pub(crate) trait StoreOption {
-    fn token(&self) -> i32;
-    fn value(&self) -> &Box<Value>;
-
-    fn with_token(&mut self, _: i32);
-    fn with_value(&mut self, _: Box<Value>);
-}
 
 impl Msg for Message {
     fn kind(&self) -> Kind {
@@ -86,27 +77,25 @@ impl Msg for Message {
         self
     }
 
-    fn to_cbor(&self) -> CborValue {
+    fn to_cbor(&self) -> ciborium::value::Value {
         unimplemented!()
     }
 
-    fn from_cbor(&mut self, _: &CborValue) -> bool {
+    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool {
         unimplemented!()
     }
-}
 
-impl StoreOption for Message {
     fn token(&self) -> i32 {
         self.token
     }
 
-    fn value(&self) -> &Box<Value> {
-        &self.value.as_ref().unwrap()
+    fn value(&self) -> &Option<Box<Value>> {
+        &self.value
     }
 
-    fn with_token(&mut self, token: i32) {
-        self.token = token
-    }
+    //fn with_token(&mut self, token: i32) {
+    //    self.token = token
+    //}
     fn with_value(&mut self, value: Box<Value>) {
         self.value = Some(value)
     }
@@ -133,6 +122,10 @@ impl Message {
             token: 0,
             value: None,
         }
+    }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
     }
 }
 

@@ -2,20 +2,11 @@ use std::any::Any;
 use std::fmt;
 use std::net::SocketAddr;
 use std::fmt::Debug;
-use ciborium::value::Value;
 
 use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::version;
-
-pub(crate) trait ErrorResult {
-    fn msg(&self) -> &str;
-    fn code(&self) -> i32;
-
-    fn with_msg(&mut self, _: &str);
-    fn with_code(&mut self, _: i32);
-}
 
 #[derive(Debug)]
 pub(crate) struct Message {
@@ -98,16 +89,14 @@ impl Msg for Message {
         self
     }
 
-    fn to_cbor(&self) -> Value {
+    fn to_cbor(&self) -> ciborium::value::Value {
         unimplemented!()
     }
 
-    fn from_cbor(&mut self, _: &Value) -> bool {
+    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool {
         unimplemented!()
     }
-}
 
-impl ErrorResult for Message {
     fn msg(&self) -> &str {
         &self.msg.as_ref().unwrap()
     }
@@ -127,6 +116,17 @@ impl ErrorResult for Message {
 
 impl Message {
     pub(crate) fn new() -> Self {
+        Message {
+            id: None,
+            addr: None,
+            txid: 0,
+            ver: 0,
+            code: 0,
+            msg: None,
+        }
+    }
+
+    pub(crate) fn from(_: &ciborium::value::Value) -> Self {
         Message {
             id: None,
             addr: None,

@@ -79,7 +79,7 @@ impl Msg for Message {
         self
     }
 
-    fn to_cbor(&self) -> Value {
+    fn to_cbor(&self) -> ciborium::value::Value {
         Value::Map(vec![
             (
                 Value::Text(String::from(keys::KEY_TYPE)),
@@ -96,7 +96,7 @@ impl Msg for Message {
         ])
     }
 
-    fn from_cbor(&mut self, input: &Value) -> bool {
+    fn from_cbor(&mut self, input: &ciborium::value::Value) -> bool {
         let root = input.as_map().unwrap().iter();
         for (key_cbor, val_cbor) in root {
             if !key_cbor.is_text()|| !val_cbor.is_integer(){
@@ -135,7 +135,7 @@ pub(crate) struct Message {
 }
 
 impl Message {
-    pub(crate) fn new<'a>() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             id: None,
             addr: None,
@@ -143,6 +143,10 @@ impl Message {
             txid: 0,
             ver: 0,
         }
+    }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
     }
 }
 

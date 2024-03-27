@@ -299,9 +299,9 @@ pub(crate) fn run_loop(
                    Some(buf.to_vec())
                 }) => {
                     match data {
-                        Ok(_) => {
+                        Ok(mut msg) => {
                             println!("Received data from ipv4 socket.");
-                            //unwrap!(dht4).borrow_mut().on_msg(unwrap!(msg))
+                            unwrap!(dht4).borrow_mut().on_msg(msg.take().unwrap())
                         },
                         Err(_) => {},
                     }
@@ -350,7 +350,7 @@ async fn read_socket<F>(
     socket: Option<&UdpSocket>,
     buffer: Rc<RefCell<Vec<u8>>>,
     mut decrypt: F
-) -> Result<Option<Box<dyn Msg>>, io::Error>
+) -> Result<Option<Rc<dyn Msg>>, io::Error>
     where
     F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
 {
@@ -377,8 +377,8 @@ async fn read_socket<F>(
     //self.stats.borrow_mut().on_received_bytes(size);
     //self.stats.borrow_mut().on_received_msg(&msg);
 
-    msg.set_id(&fromid);
-    msg.set_addr(&from_addr);
+    //msg.set_id(&fromid);
+    //msg.set_addr(&from_addr);
 
     info!("Received message: {}/{} from {}:[size: {}] {}", msg.method(), msg.kind(), from_addr, size, msg);
 

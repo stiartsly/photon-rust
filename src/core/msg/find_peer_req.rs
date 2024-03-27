@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::fmt::Debug;
 use ciborium::value::Value;
 
-use super::lookup;
 use super::msg::{Kind, Method, Msg};
 use crate::id::Id;
 use crate::rpccall::RpcCall;
@@ -86,9 +85,7 @@ impl Msg for Message {
     fn from_cbor(&mut self, _: &Value) -> bool {
         unimplemented!()
     }
-}
 
-impl lookup::Filter for Message {
     fn target(&self) -> &Id {
         &self.target.as_ref().unwrap()
     }
@@ -121,12 +118,12 @@ impl lookup::Filter for Message {
         self.want_token = true
     }
 
-    fn to_cbor(&self) -> Value {
-        unimplemented!()
+    fn seq(&self) -> i32 {
+        panic!("Not support");
     }
 
-    fn from_cbor(&mut self, _: &Value) -> bool {
-        unimplemented!()
+    fn with_seq(&mut self, _: i32) {
+        panic!("Not support");
     }
 }
 
@@ -156,6 +153,10 @@ impl Message {
             want6: false,
             want_token: false,
         }
+    }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
     }
 
     fn want(&self) -> i32 {

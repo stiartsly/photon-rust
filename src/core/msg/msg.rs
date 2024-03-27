@@ -1,13 +1,17 @@
 use std::any::Any;
+use std::rc::Rc;
 use std::fmt;
 use std::net::SocketAddr;
-use ciborium::value::Value;
+use ciborium;
 use std::fmt::Debug;
 use std::fmt::Display;
 
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::error::Error;
+use crate::node_info::NodeInfo;
+use crate::peer::Peer;
+use crate::value::Value;
 
 use super::keys;
 use super::cbor;
@@ -127,38 +131,81 @@ pub(crate) trait Msg: Debug + Display {
     fn kind(&self) -> Kind;
     fn method(&self) -> Method;
 
+    // Common methods
     fn id(&self) -> &Id;
     fn addr(&self) -> &SocketAddr;
-
     fn remote_id(&self) -> &Id;
     fn remote_addr(&self) -> &SocketAddr;
-
     fn txid(&self) -> i32;
     fn version(&self) -> i32;
-
     fn set_id(&mut self, _: &Id);
     fn set_addr(&mut self, _: &SocketAddr);
-
     fn set_remote_id(&mut self, _: &Id);
     fn set_remote_addr(&mut self, _: &SocketAddr);
-
     fn set_txid(&mut self, _: i32);
     fn set_ver(&mut self, _: i32);
-
     fn associated_call(&self) -> Option<Box<RpcCall>>;
     fn with_associated_call(&mut self, _: Box<RpcCall>);
 
+    // Methods for Node/Value/Peer Lookup as query condition.
+    fn target(&self) -> &Id { panic!() }
+    fn want4(&self) -> bool { panic!() }
+    fn want6(&self) -> bool { panic!() }
+    fn want_token(&self) -> bool { panic!() }
+    fn with_target(&mut self, _: &Id) { panic!() }
+    fn with_want4(&mut self) { panic!() }
+    fn with_want6(&mut self) { panic!() }
+    fn with_token(&mut self) { panic!() }
+
+    // Common methods for Node/Value/Peer Lookup as query result.
+    fn nodes4(&self) -> &[NodeInfo] { panic!() }
+    fn nodes6(&self) -> &[NodeInfo] { panic!() }
+    fn token(&self) -> i32 { panic!() }
+
+    // Common methos for Node/Value/Peer Lookup as query result.
+    fn populate_closest_nodes4(&mut self, _: bool, _: Box<dyn FnOnce() -> Option<Vec<NodeInfo>> +'static>) { panic!() }
+    fn populate_closest_nodes6(&mut self, _: bool, _: Box<dyn FnOnce() -> Option<Vec<NodeInfo>> +'static>) { panic!() }
+    fn populate_token(&mut self, _: bool, _: Box<dyn FnOnce() -> i32>) { panic!() }
+
+    // Methods for FindValue as query condition
+    fn seq(&self) -> i32 { panic!() }
+    fn with_seq(&mut self, _: i32) { panic!() }
+
+    // Methods for FindPeer as query result.
+    fn has_peers(&self) -> bool { panic!() }
+    fn peers(&self) -> &[Box<Peer>] { panic!() }
+    fn populate_peers(&mut self, _: Box<dyn FnMut() -> Option<Vec<Box<Peer>>>>) { panic!()}
+
+    // Methods for Lookup Peer as query result.
+    fn value(&self) -> &Option<Box<Value>> { panic!() }
+    fn populate_value(&mut self, _: Box<dyn FnMut() -> Option<Box<Value>>>) { panic!() }
+
+
+    // StoreValue option
+    // fn token(&self) -> i32;
+    //fn value(&self) -> &Box<Value>;
+
+    // Methods for Error Message.
+    fn msg(&self) -> &str { panic!() }
+    fn code(&self) -> i32 { panic!() }
+    fn with_msg(&mut self, _: &str) { panic!() }
+    fn with_code(&mut self, _: i32) { panic!() }
+
+    fn with_value(&mut self, _: Box<Value>) { panic!() }
+
     fn as_any(&self) -> &dyn Any;
 
-    fn to_cbor(&self) -> Value;
-    fn from_cbor(&mut self, _: &Value) -> bool;
+    fn to_cbor(&self) -> ciborium::value::Value;
+    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool;
+
+    //
 }
 
-pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
+pub(crate) fn deser(id: &Id, from: &SocketAddr, buf: &[u8]) -> Result<Rc<dyn Msg>, Error> {
     let mut _type: i32 = 0;
     let reader = cbor::Reader::new(buf);
     println!("desr buf len: {}", buf.len());
-    let value: Value = ciborium::de::from_reader(reader).unwrap();
+    let value: ciborium::value::Value = ciborium::de::from_reader(reader).unwrap();
 
     if let Some(root) = value.as_map() {
         for (key, val) in root.iter() {
@@ -178,39 +225,34 @@ pub(crate) fn deser(_: &Id, _: &SocketAddr, buf: &[u8]) -> Result<Box<dyn Msg>, 
         )))
     }
 
-    let mut msg = match Kind::from(_type) {
+    let msg = match Kind::from(_type) {
         Kind::Error => {
-            Box::new(error::Message::new()) as Box<dyn Msg>
+            Rc::new(error::Message::from(&value)) as Rc<dyn Msg>
         },
         Kind::Request => match Method::from(_type) {
-            Method::Ping => Box::new(ping_req::Message::new()) as Box<dyn Msg>,
-            Method::FindNode => Box::new(find_node_req::Message::new()) as Box<dyn Msg>,
-            Method::AnnouncePeer => Box::new(announce_peer_req::Message::new()) as Box<dyn Msg>,
-            Method::FindPeer => Box::new(find_peer_req::Message::new()) as Box<dyn Msg>,
-            Method::StoreValue => Box::new(store_value_req::Message::new()) as Box<dyn Msg>,
-            Method::FindValue => Box::new(find_value_req::Message::new()) as Box<dyn Msg>,
+            Method::Ping => Rc::new(ping_req::Message::from(&value)) as Rc<dyn Msg>,
+            Method::FindNode => Rc::new(find_node_req::Message::from(id, from, &value)) as Rc<dyn Msg>,
+            Method::AnnouncePeer => Rc::new(announce_peer_req::Message::from(&value)) as Rc<dyn Msg>,
+            Method::FindPeer => Rc::new(find_peer_req::Message::from(&value)) as Rc<dyn Msg>,
+            Method::StoreValue => Rc::new(store_value_req::Message::from(&value)) as Rc<dyn Msg>,
+            Method::FindValue => Rc::new(find_value_req::Message::from(&value)) as Rc<dyn Msg>,
             _ => { return Err(Error::Protocol(
                 format!("Invalid request message: {}, ignored it", Method::from(_type))
             ))}
         },
         Kind::Response => match Method::from(_type) {
-            Method::Ping => Box::new(ping_rsp::Message::new()) as Box<dyn Msg>,
-            Method::FindNode => Box::new(find_node_rsp::Message::new()) as Box<dyn Msg>,
-            Method::AnnouncePeer => Box::new(announce_peer_rsp::Message::new()) as Box<dyn Msg>,
-            Method::FindPeer => Box::new(find_peer_rsp::Message::new()) as Box<dyn Msg>,
-            Method::StoreValue => Box::new(store_value_rsp::Message::new()) as Box<dyn Msg>,
-            Method::FindValue => Box::new(find_value_rsp::Message::new()) as Box<dyn Msg>,
+            Method::Ping => Rc::new(ping_rsp::Message::from(&value)) as Rc<dyn Msg>,
+            Method::FindNode => Rc::new(find_node_rsp::Message::from(&value)) as Rc<dyn Msg>,
+            Method::AnnouncePeer => Rc::new(announce_peer_rsp::Message::from(&value)) as Rc<dyn Msg>,
+            Method::FindPeer => Rc::new(find_peer_rsp::Message::from(&value)) as Rc<dyn Msg>,
+            Method::StoreValue => Rc::new(store_value_rsp::Message::from(&value)) as Rc<dyn Msg>,
+            Method::FindValue => Rc::new(find_value_rsp::Message::from(&value)) as Rc<dyn Msg>,
             _ => { return Err(Error::Protocol(
                 format!("Invalid response message: {}, ignored it", Method::from(_type))
             ))}
         }
     };
-    match msg.from_cbor(&value) {
-        true => Ok(msg),
-        false => Err(Error::Protocol(
-            format!("Invalid CBOR object as message {:?}, ignored it", value)
-        ))
-    }
+    Ok(msg)
 }
 
 pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {

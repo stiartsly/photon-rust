@@ -135,6 +135,10 @@ impl Message {
             peers: Vec::new(),
         }
     }
+
+    pub(crate) fn from(_:&ciborium::value::Value ) -> Self {
+        unimplemented!()
+    }
 }
 
 impl fmt::Display for Message {
