@@ -590,7 +590,7 @@ impl DHT {
         let result = Rc::new(RefCell::new(
             self.routing_table.borrow()
                 .bucket_entry(id)
-                .map(|item| Box::new(item.node().clone())),
+                .map(|item| Box::new(item.into_node())),
         ));
         let result_shadow = Rc::clone(&result);
 

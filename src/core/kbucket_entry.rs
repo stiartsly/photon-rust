@@ -26,7 +26,6 @@ pub(crate) struct KBucketEntry {
     failed_requests: i32,
 }
 
-#[allow(dead_code)]
 impl KBucketEntry {
     pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
         Self {
@@ -47,24 +46,12 @@ impl KBucketEntry {
         self.ni.socket_addr()
     }
 
-    pub(crate) fn node(&self) -> &NodeInfo {
-        &self.ni
+    pub(crate) fn into_node(&self) -> NodeInfo {
+        self.ni.clone()
     }
 
     pub(crate) fn set_version(&mut self, ver: i32) {
         self.ni.set_version(ver)
-    }
-
-    pub(crate) const fn ceated(&self) -> SystemTime {
-        self.created
-    }
-
-    pub(crate) const fn last_seen(&self) -> SystemTime {
-        self.last_seen
-    }
-
-    pub(crate) const fn last_sent(&self) -> SystemTime {
-        self.last_sent
     }
 
     pub(crate) const fn failed_requests(&self) -> i32 {
@@ -91,13 +78,13 @@ impl KBucketEntry {
         self.reachable && self.failed_requests < 3
     }
 
-    pub(crate) const fn is_eligible_for_local_lookup(&self) -> bool {
+    /*pub(crate) const fn is_eligible_for_local_lookup(&self) -> bool {
         // allow implicit initial ping during lookups
         // TODO: make this work now that we don't keep unverified entries
         // in the main bucket
         (self.reachable && self.failed_requests <= 3) ||
             self.failed_requests <= 0
-    }
+    }*/
 
     // Should be called to signal that a request to this node has timed out;
     pub(crate) fn signal_request_timeout(&mut self) {
@@ -110,7 +97,8 @@ impl KBucketEntry {
 
     pub(crate) fn needs_replacement(&self) -> bool {
         (self.failed_requests > 1 && !self.reachable())
-            || (self.failed_requests > constants::KBUCKET_MAX_TIMEOUTS && self.old_and_stale())
+            || (self.failed_requests > constants::KBUCKET_MAX_TIMEOUTS &&
+                self.old_and_stale())
     }
 
     pub(crate) fn needs_ping(&self) -> bool {
@@ -131,7 +119,7 @@ impl KBucketEntry {
             return;
         }
 
-        self.created = self.created.max(other.created);
+        self.created   = self.created.max(other.created);
         self.last_seen = self.last_seen.max(other.last_seen);
         self.last_sent = self.last_sent.max(other.last_sent);
 
@@ -192,8 +180,7 @@ impl PartialEq for KBucketEntry {
 
 impl fmt::Display for KBucketEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
+        write!(f,
             "{}@{};seen:{}; age:{}",
             self.ni.id(),
             self.ni.socket_addr().ip(),
@@ -211,8 +198,7 @@ impl fmt::Display for KBucketEntry {
             write!(f, "; reachable")?;
         }
         if self.ni.version() != 0 {
-            write!(
-                f,
+            write!(f,
                 "; ver: {}",
                 version::formatted_version(self.ni.version())
             )?;
