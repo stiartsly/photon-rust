@@ -7,8 +7,8 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
-    error,
     id::Id,
+    error::Error,
     rpccall::RpcCall
 };
 
@@ -74,6 +74,17 @@ impl Msg for Message {
     }
 
     fn to_cbor(&self) -> CVal {
+        let query_part = CVal::Map(vec![
+            (
+                CVal::Text(String::from(keys::KEY_REQ_TARGET)),
+                self.target.as_ref().unwrap().to_cbor()
+            ),
+            (
+                CVal::Text(String::from(keys::KEY_REQ_WANT)),
+                CVal::Integer(self.want().into())
+            )
+        ]);
+
         CVal::Map(vec![
             (
                 CVal::Text(String::from(keys::KEY_TYPE)),
@@ -89,78 +100,76 @@ impl Msg for Message {
             ),
             (
                 CVal::Text(Kind::from(self._type).to_key().to_string()),
-                CVal::Map(vec![
-                    (
-                        CVal::Text(String::from(keys::KEY_REQ_TARGET)),
-                        self.target.as_ref().unwrap().to_cbor()
-                    ),
-                    (
-                        CVal::Text(String::from(keys::KEY_REQ_WANT)),
-                        CVal::Integer(self.want().into())
-                    )
-                ])
+                query_part,
             )
         ])
     }
 
     fn from_cbor(&mut self, input: &CVal) -> bool {
-        if let Some(root) = input.as_map() {
-            for (key, val) in root {
-                if !key.is_text() {
-                    return false;
-                }
-                if let Some(_key) = key.as_text() {
-                    match _key {
-                        keys::KEY_TYPE => {
-                            if let Some(_val) = val.as_integer() {
-                                self._type = _val.try_into().unwrap()
-                            }
-                        },
-                        keys::KEY_TXID => {
-                            if let Some(_val) = val.as_integer() {
-                                self.txid = _val.try_into().unwrap()
-                            }
-                        },
-                        keys::KEY_VERSION => {
-                            if let Some(_val) = val.as_integer() {
-                                self.ver = _val.try_into().unwrap()
-                            }
-                        },
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
 
-                        keys::KEY_REQUEST => {
-                            if let Some(item) = val.as_map() {
-                                for (__key, _val) in item {
-                                    if !__key.is_text() {
-                                        return false;
-                                    }
-                                    if let Some(__key) = __key.as_text() {
-                                        match __key {
-                                            keys::KEY_REQ_WANT => {
-                                                if let Some(__val) = _val.as_integer() {
-                                                    let _want: i32 = __val.try_into().unwrap();
-                                                    self.want4 = (_want & 0x01) != 0;
-                                                    self.want6 = (_want & 0x02) != 0;
-                                                }
-                                            },
-                                            keys::KEY_REQ_TARGET => {
-                                                self.target = Some(Id::from_cbor(_val).unwrap());
-                                            },
-                                            &_ => {
-                                                println!("_key: {}", __key);
-                                                return false;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-
-                        &_ => {
-                            println!("_key: {}", _key);
-                            return false;
+        for (k, v) in root {
+            let key = match k.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+            match key {
+                keys::KEY_TYPE => {
+                    let val = match v.as_integer() {
+                        Some(val) => val,
+                        None => return false,
+                    };
+                    self._type = val.try_into().unwrap();
+                },
+                keys::KEY_TXID => {
+                    let txid = match v.as_integer() {
+                        Some(txid) => txid,
+                        None => return false,
+                    };
+                    self.txid = txid.try_into().unwrap();
+                },
+                keys::KEY_VERSION => {
+                    let ver = match v.as_integer() {
+                        Some(ver) => ver,
+                        None => return false,
+                    };
+                    self.ver = ver.try_into().unwrap();
+                },
+                keys::KEY_REQUEST => {
+                    let map = match v.as_map() {
+                        Some(map) => map,
+                        None => return false,
+                    };
+                    for (_k, _v) in map {
+                        let _key = match _k.as_text() {
+                            Some(_key) => _key,
+                            None => return false,
+                        };
+                        match _key {
+                            keys::KEY_REQ_WANT => {
+                                let val = match _v.as_integer() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                let _want: i32 = val.try_into().unwrap();
+                                self.want4 = (_want & 0x01) != 0;
+                                self.want6 = (_want & 0x02) != 0;
+                            },
+                            keys::KEY_REQ_TARGET => {
+                                let id = match Id::from_cbor(_v) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                self.target = Some(id)
+                            },
+                            _ => return false,
                         }
                     }
-                }
+                },
+                _ => return false,
             }
         }
         true
@@ -230,10 +239,12 @@ impl Message {
         }
     }
 
-    pub(crate) fn from(input: &CVal) -> Result<Box<dyn Msg>, error::Error> {
+    pub(crate) fn from(input: &CVal) -> Result<Box<dyn Msg>, Error> {
         let mut msg = Box::new(Self::new());
-        msg.from_cbor(input);
-        Ok(msg as Box<dyn Msg>)
+        match msg.from_cbor(input) {
+            true => Ok(msg as Box<dyn Msg>),
+            false => Err(Error::Protocol(format!("Invalid cobor value for find_node_req message"))),
+        }
     }
 
     fn want(&self) -> i32 {
@@ -249,7 +260,6 @@ impl Message {
         }
         want
     }
-
 }
 
 impl fmt::Display for Message {

@@ -31,44 +31,42 @@ impl NodeInfo {
     }
 
     pub(crate) fn try_from_cbor(input: &Value) -> Result<Self, Error> {
-        match input.as_array() {
-            Some(array) => {
-                let id = match Id::from_cbor(&array[0]) {
-                    Ok(v) => v,
-                    Err(e) => return Err(e),
-                };
+        let array = match input.as_array() {
+            Some(array) => array,
+            None => return Err(Error::Protocol(
+                format!("Invalid cobor value for node info")))
+        };
 
-                let port = match array[2].as_integer() {
-                    Some(v) => v.try_into().unwrap(),
-                    None => return Err(Error::Protocol(
-                        format!("Port missing, invalid cobor value")
-                    )),
-                };
+        let id = match Id::from_cbor(&array[0]) {
+            Ok(v) => v,
+            Err(e) => return Err(e),
+        };
 
-                let addr = match array[1].as_bytes() {
-                    Some(v) => {
-                        if v.len() == 4 {
-                            let ip: [u8;4] = v.as_slice().try_into().unwrap();
-                            SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), port)
-                        } else if v.len() == 16 {
-                            let ip: [u8;16] = v.as_slice().try_into().unwrap();
-                            SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port)
-                        } else {
-                            return Err(Error::Protocol(
-                                format!("Parsing socket adddress failed, invalid cobor value")
-                            ));
-                        }
-                    },
-                    None => return Err(Error::Protocol(
-                        format!("Socket address missing, invalid cobor value")
-                    ))
-                };
-                Ok(Self { id, addr, ver: 0 })
+        let port = match array[2].as_integer() {
+            Some(v) => v.try_into().unwrap(),
+            None => return Err(Error::Protocol(
+                format!("Port missing, invalid cobor value"))),
+        };
+
+        let addr = match array[1].as_bytes() {
+            Some(addr) => addr,
+            None => return Err(Error::Protocol(
+                format!("Socket address missing, invalid cobor value"))),
+        };
+
+        let addr = match addr.len() {
+            4 => {
+                let ip: [u8;4] = addr.as_slice().try_into().unwrap();
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), port)
             },
-            None => Err(Error::Protocol(
-                format!("Invalid cobor value for node info")
-            ))
-        }
+            10 => {
+                let ip: [u8;16] = addr.as_slice().try_into().unwrap();
+                SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port)
+            },
+            _ => return Err(Error::Protocol(
+                format!("Parsing socket adddress failed, invalid cobor value"))),
+        };
+        Ok(Self { id, addr, ver: 0 })
     }
 
     pub const fn ip(&self) -> IpAddr {

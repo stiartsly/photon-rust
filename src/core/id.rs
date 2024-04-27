@@ -47,20 +47,21 @@ impl Id {
     }
 
     pub(crate) fn from_cbor(input: &Value) -> Result<Self, Error> {
-        match input.as_bytes() {
-            Some(bytes) => Ok(Self::from_bytes(bytes)),
-            None => Err(Error::Protocol(format!("Invalid cobor value for Id"))),
-        }
+        let bytes = match input.as_bytes() {
+            Some(bytes) => bytes,
+            None => return Err(Error::Protocol(format!("Invalid cobor value for Id"))),
+        };
+        Ok(Self::from_bytes(bytes))
     }
 
     pub fn try_from_hex(input: &str) -> Result<Self, Error> {
         let mut bytes = [0u8; ID_BYTES];
         let _ = hex::decode_to_slice(input, &mut bytes[..]).map_err(|e| match e {
             FromHexError::InvalidHexCharacter { c, index } => {
-                Error::Argument(format!("Invalid cobor value for Id"))
+                Error::Argument(format!("Invalid hex character {} at {}", c, index))
             },
             FromHexError::OddLength => {
-                Error::Argument(format!("Invalid hex character"))
+                Error::Argument(format!("Odd hex string length {}", input.len()))
             },
             FromHexError::InvalidStringLength => {
                 Error::Argument(format!("Invalid hex string length"))
