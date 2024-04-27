@@ -1,4 +1,9 @@
-use log::{Level, LevelFilter, Metadata, Record};
+use log::{
+    Level,
+    LevelFilter,
+    Metadata,
+    Record
+};
 
 static MY_LOGGER: MyLogger = MyLogger;
 struct MyLogger;
@@ -33,10 +38,10 @@ impl log::Log for NullLogger {
 }
 
 pub(crate) fn setup() {
-    _ = log::set_logger(&MY_LOGGER);
-    log::set_max_level(LevelFilter::Info);
+    let _ = log::set_logger(&MY_LOGGER);
+    let _ = log::set_max_level(LevelFilter::Info);
 }
 
 pub(crate) fn teardown() {
-    _ = log::set_logger(&NULL_LOGGER)
+    let _ = log::set_logger(&NULL_LOGGER);
 }

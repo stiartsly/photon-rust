@@ -2,17 +2,16 @@ use std::fmt;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
 use ciborium::value::Value;
 
-use crate::id::Id;
-use crate::version;
+use crate::{
+    version,
+    error::Error,
+    id::Id
+};
 
 pub(crate) trait Reachable {
-    fn reachable(&self) -> bool {
-        false
-    }
-    fn unreachable(&self) -> bool {
-        false
-    }
-    fn set_reachable(&mut self, _: bool) {}
+    fn reachable(&self) -> bool;
+    fn unreachable(&self) -> bool;
+    fn set_reachable(&mut self, _: bool);
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -31,33 +30,45 @@ impl NodeInfo {
         }
     }
 
-    pub(crate) fn try_from_cbor(input: &Value) -> Option<Self> {
-        let mut result = None;
+    pub(crate) fn try_from_cbor(input: &Value) -> Result<Self, Error> {
+        match input.as_array() {
+            Some(array) => {
+                let id = match Id::from_cbor(&array[0]) {
+                    Ok(v) => v,
+                    Err(e) => return Err(e),
+                };
 
-        if let Some(array) = input.as_array().as_ref() {
-            let id = Id::from_cbor(&array[0]);
-            let mut port = 0;
-            if let Some(_port) = array[2].as_integer() {
-                port = _port.try_into().unwrap()
-            }
+                let port = match array[2].as_integer() {
+                    Some(v) => v.try_into().unwrap(),
+                    None => return Err(Error::Protocol(
+                        format!("Port missing, invalid cobor value")
+                    )),
+                };
 
-            let mut addr = None;
-            if let Some(bytes) = array[1].as_bytes() {
-                if bytes.len() == 4 {
-                    let ip: [u8;4] = bytes.as_slice().try_into().unwrap();
-                    addr = Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), port));
-                } else if bytes.len() == 16 {
-                    let ip: [u8;16] = bytes.as_slice().try_into().unwrap();
-                    addr = Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port));
-                } else {
-                    panic!("invalid bytes length");
-                }
-            }
-            result = Some(
-                Self { id, addr: addr.unwrap(), ver: 0}
-            )
+                let addr = match array[1].as_bytes() {
+                    Some(v) => {
+                        if v.len() == 4 {
+                            let ip: [u8;4] = v.as_slice().try_into().unwrap();
+                            SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip)), port)
+                        } else if v.len() == 16 {
+                            let ip: [u8;16] = v.as_slice().try_into().unwrap();
+                            SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip)), port)
+                        } else {
+                            return Err(Error::Protocol(
+                                format!("Parsing socket adddress failed, invalid cobor value")
+                            ));
+                        }
+                    },
+                    None => return Err(Error::Protocol(
+                        format!("Socket address missing, invalid cobor value")
+                    ))
+                };
+                Ok(Self { id, addr, ver: 0 })
+            },
+            None => Err(Error::Protocol(
+                format!("Invalid cobor value for node info")
+            ))
         }
-        result
     }
 
     pub const fn ip(&self) -> IpAddr {
@@ -120,12 +131,15 @@ impl NodeInfo {
     }
 }
 
-impl Reachable for NodeInfo {}
+impl Reachable for NodeInfo {
+    fn reachable(&self) -> bool { false }
+    fn unreachable(&self) -> bool { false }
+    fn set_reachable(&mut self, _: bool) {}
+}
 
 impl fmt::Display for NodeInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
+        write!(f,
             "{},{},{}",
             self.id,
             self.addr,

@@ -4,9 +4,11 @@ use std::cmp::Ordering;
 use std::fmt;
 use ciborium::value::Value;
 
-use crate::cryptobox;
-use crate::signature;
-use crate::error::Error;
+use crate::{
+    cryptobox,
+    signature,
+    error::Error
+};
 
 pub const ID_BYTES: usize = 32;
 pub const ID_BITS: usize = 256;
@@ -18,14 +20,14 @@ impl Id {
     pub fn random() -> Self {
         let mut bytes = [0u8; ID_BYTES];
         unsafe {
-            libsodium_sys::randombytes_buf(bytes.as_mut_ptr() as *mut libc::c_void, ID_BYTES);
+            libsodium_sys::randombytes_buf(bytes.as_mut_ptr()
+                as *mut libc::c_void, ID_BYTES);
         }
         Id(bytes)
     }
 
     pub fn from_signature_key(publick_key: &signature::PublicKey) -> Self {
         let mut bytes = [0u8; ID_BYTES];
-
         bytes.copy_from_slice(publick_key.as_bytes());
         Id(bytes)
     }
@@ -44,10 +46,10 @@ impl Id {
         Id(bytes)
     }
 
-    pub(crate) fn from_cbor(input: &Value) -> Self {
+    pub(crate) fn from_cbor(input: &Value) -> Result<Self, Error> {
         match input.as_bytes() {
-            Some(bytes) => Self::from_bytes(bytes),
-            None => Id([0x0; ID_BYTES])
+            Some(bytes) => Ok(Self::from_bytes(bytes)),
+            None => Err(Error::Protocol(format!("Invalid cobor value for Id"))),
         }
     }
 
@@ -55,11 +57,13 @@ impl Id {
         let mut bytes = [0u8; ID_BYTES];
         let _ = hex::decode_to_slice(input, &mut bytes[..]).map_err(|e| match e {
             FromHexError::InvalidHexCharacter { c, index } => {
-                Error::Argument(format!("Invalid hex character '{}' at index {}", c, index))
-            }
-            FromHexError::OddLength => Error::Argument(format!("Odd length hex string")),
+                Error::Argument(format!("Invalid cobor value for Id"))
+            },
+            FromHexError::OddLength => {
+                Error::Argument(format!("Invalid hex character"))
+            },
             FromHexError::InvalidStringLength => {
-                Error::Argument(format!("Invalid hex string length {}", input.len()))
+                Error::Argument(format!("Invalid hex string length"))
             }
         });
         Ok(Id(bytes))
@@ -72,13 +76,14 @@ impl Id {
             .onto(&mut bytes)
             .map_err(|e| match e {
                 decode::Error::BufferTooSmall => {
-                    Error::Argument(format!("Invalid base58 string length {}", input.len()))
+                    Error::Argument(format!("Invalid base58 string length"))
+                },
+                decode::Error::InvalidCharacter { character, index } => {
+                    Error::Argument(format!("Invalid base58 character {} at {}", character, index))
+                },
+                _ => {
+                    Error::Argument(format!("Invalid base58 with unknown error"))
                 }
-                decode::Error::InvalidCharacter { character, index } => Error::Argument(format!(
-                    "Invalid base58 character '{}' at index {}",
-                    character, index
-                )),
-                _ => Error::Argument(format!("Invalid base58 string with unknown error")),
             });
         Ok(Id(bytes))
     }
@@ -129,7 +134,7 @@ impl Id {
         self.0.as_mut_slice()
     }
 
-    pub fn three_way_compare(&self, id1: &Self, id2: &Self) -> Ordering {
+    pub(crate) fn three_way_compare(&self, id1: &Self, id2: &Self) -> Ordering {
         let mut mmi = usize::MAX;
         for i in 0..ID_BYTES {
             if id1.0[i] != id2.0[i] {

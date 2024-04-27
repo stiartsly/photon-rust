@@ -1,6 +1,6 @@
+use std::fmt;
 use crate::id;
 use crate::id::Id;
-use std::fmt;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Prefix {

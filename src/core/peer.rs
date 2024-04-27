@@ -1,9 +1,14 @@
-use crate::id::{Id, ID_BYTES};
-use crate::signature::{self, KeyPair, PrivateKey, Signature};
-use crate::unwrap;
 use std::fmt;
 use std::mem;
 use unicode_normalization::UnicodeNormalization;
+use ciborium::value::Value;
+
+use crate::{
+    unwrap,
+    id::{Id, ID_BYTES},
+    error::Error,
+    signature::{self, KeyPair, PrivateKey, Signature}
+};
 
 #[derive(Clone, Debug)]
 pub struct Peer {
@@ -34,6 +39,7 @@ impl<'a> Builder<'a> {
             url: None,
         }
     }
+
     pub fn with_keypair(&mut self, keypair: &'a KeyPair) -> &mut Self {
         self.keypair = Some(keypair.clone());
         self
@@ -86,6 +92,11 @@ impl Peer {
         );
         peer.sig = sig;
         peer
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn try_from_cbor(_: &Value) -> Result<Self, Error> {
+        unimplemented!()
     }
 
     pub const fn id(&self) -> &Id {
@@ -161,6 +172,10 @@ impl Peer {
             input.extend_from_slice(unwrap!(self.url).as_ref());
         }
         input
+    }
+
+    pub(crate) fn to_cbor(&self) -> Value {
+        unimplemented!()
     }
 }
 

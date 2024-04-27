@@ -143,7 +143,7 @@ impl Msg for Message {
                                                 }
                                             },
                                             keys::KEY_REQ_TARGET => {
-                                                self.target = Some(Id::from_cbor(_val));
+                                                self.target = Some(Id::from_cbor(_val).unwrap());
                                             },
                                             &_ => {
                                                 println!("_key: {}", __key);

@@ -1,10 +1,14 @@
 use sha2::{Digest, Sha256};
 use std::fmt;
+use ciborium::value::Value as CVal;
 
-use crate::cryptobox;
-use crate::id::{Id, ID_BYTES};
-use crate::signature;
-use crate::unwrap;
+use crate::{
+    unwrap,
+    cryptobox,
+    signature,
+    id::{Id, ID_BYTES},
+    error::Error,
+};
 
 #[derive(Clone, Debug)]
 pub struct Value {
@@ -61,7 +65,7 @@ impl<'a> ValueBuilder<'a> {
 impl<'a> SignedBuidler<'a> {
     pub fn default(value: &'a [u8]) -> Self {
         assert!(!value.is_empty(), "Value data can not be empty");
-        SignedBuidler {
+        Self {
             data: value,
             keypair: None,
             nonce: None,
@@ -99,7 +103,7 @@ impl<'a> SignedBuidler<'a> {
 impl<'a> EncryptedBuilder<'a> {
     pub fn default(value: &'a [u8], recipient: &'a Id) -> Self {
         assert!(!value.is_empty(), "Value data can not be empty");
-        EncryptedBuilder {
+        Self {
             data: value,
             keypair: None,
             nonce: None,
@@ -138,7 +142,7 @@ impl<'a> EncryptedBuilder<'a> {
 #[allow(dead_code)]
 impl<'a> PackBuilder<'a> {
     pub(crate) fn default(value: &'a [u8]) -> Self {
-        PackBuilder {
+        Self {
             pk: None,
             recipient: None,
             nonce: None,
@@ -180,7 +184,7 @@ impl<'a> PackBuilder<'a> {
 
 impl Value {
     fn default(b: &ValueBuilder) -> Value {
-        Value {
+        Self {
             pk: None,
             sk: None,
             recipient: None,
@@ -189,6 +193,11 @@ impl Value {
             data: b.data.to_vec(),
             seq: -1,
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn try_from_cbor(_: &Value) -> Result<Self, Error> {
+        unimplemented!()
     }
 
     fn signed(b: &SignedBuidler) -> Value {
@@ -258,7 +267,7 @@ impl Value {
     }
 
     pub fn id(&self) -> Id {
-        let mut input: Vec<u8> = Vec::new();
+        let mut input = Vec::new();
         match self.pk.as_ref() {
             Some(pk) => {
                 input.extend_from_slice(pk.as_bytes());
@@ -356,7 +365,7 @@ impl Value {
         len += std::mem::size_of::<i32>();
         len += self.data.len();
 
-        let mut input: Vec<u8> = Vec::with_capacity(len);
+        let mut input = Vec::with_capacity(len);
         if self.is_encrypted() {
             input.extend_from_slice(unwrap!(self.recipient).as_bytes());
         }
@@ -365,6 +374,10 @@ impl Value {
         input.extend_from_slice(self.data.as_ref());
 
         input
+    }
+
+    pub(crate) fn to_cbor(&self) -> CVal {
+        unimplemented!()
     }
 }
 
