@@ -7,7 +7,7 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
-    error,
+    error::Error,
     id::Id,
     rpccall::RpcCall
 };
@@ -77,7 +77,7 @@ impl Msg for Message {
         CVal::Map(vec![
             (
                 CVal::Text(String::from(keys::KEY_TYPE)),
-                CVal::Integer(self._type.into())
+                CVal::Integer(self.kind.into())
             ),
             (
                 CVal::Text(String::from(keys::KEY_TXID)),
@@ -90,28 +90,30 @@ impl Msg for Message {
         ])
     }
 
-    fn from_cbor(&mut self, input: &CVal) -> bool {
-        let root = input.as_map().unwrap().iter();
-        for (key_cbor, val_cbor) in root {
-            if !key_cbor.is_text()|| !val_cbor.is_integer(){
-                return false;
-            }
+    fn from_cbor(&mut self, input: &ciborium::value::Value) -> bool {
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
 
-            let key = key_cbor.as_text().unwrap();
-            let val = val_cbor.as_integer().unwrap();
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+            let val = match val.as_integer() {
+                Some(val) => val,
+                None => return false,
+            };
+
             match key {
-                keys::KEY_TYPE => {
-                    self._type = val.try_into().unwrap()
-                },
-                keys::KEY_TXID => {
-                    self.txid = val.try_into().unwrap()
-                },
-                keys::KEY_VERSION => {
-                    self.ver = val.try_into().unwrap()
-                },
-                _ => {
-                    return false;
-                },
+                keys::KEY_TYPE =>
+                    self.kind = val.try_into().unwrap(),
+                keys::KEY_TXID =>
+                    self.txid = val.try_into().unwrap(),
+                keys::KEY_VERSION =>
+                    self.ver = val.try_into().unwrap(),
+                _ => return false,
             }
         }
         true
@@ -124,7 +126,7 @@ pub(crate) struct Message {
 
     associated_call: Option<Rc<RefCell<RpcCall>>>,
 
-    _type: i32,
+    kind: i32,
     txid: i32,
     ver: i32,
 }
@@ -135,16 +137,19 @@ impl Message {
             id: None,
             addr: None,
             associated_call: None,
-            _type: msg::msg_type(Kind::Response, Method::Ping),
+            kind: msg::msg_type(Kind::Response, Method::Ping),
             txid: 0,
             ver: 0,
         }
     }
 
-    pub(crate) fn from(input: &CVal) -> Result<Box<dyn Msg>, error::Error> {
+    pub(crate) fn from(input: &CVal) -> Result<Box<dyn Msg>, Error> {
         let mut msg = Box::new(Self::new());
-        msg.from_cbor(input);
-        Ok(msg as Box<dyn Msg>)
+        match msg.from_cbor(input) {
+            true => Ok(msg as Box<dyn Msg>),
+            false => Err(Error::Protocol(
+                format!("Invalid cobor value for find_node_req message"))),
+        }
     }
 }
 

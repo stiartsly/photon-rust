@@ -111,46 +111,46 @@ impl Msg for Message {
             None => return false,
         };
 
-        for (k, v) in root {
-            let key = match k.as_text() {
+        for (key, val) in root {
+            let key = match key.as_text() {
                 Some(key) => key,
                 None => return false,
             };
             match key {
                 keys::KEY_TYPE => {
-                    let val = match v.as_integer() {
+                    let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
                     self._type = val.try_into().unwrap();
                 },
                 keys::KEY_TXID => {
-                    let txid = match v.as_integer() {
+                    let txid = match val.as_integer() {
                         Some(txid) => txid,
                         None => return false,
                     };
                     self.txid = txid.try_into().unwrap();
                 },
                 keys::KEY_VERSION => {
-                    let ver = match v.as_integer() {
+                    let ver = match val.as_integer() {
                         Some(ver) => ver,
                         None => return false,
                     };
                     self.ver = ver.try_into().unwrap();
                 },
                 keys::KEY_REQUEST => {
-                    let map = match v.as_map() {
+                    let map = match val.as_map() {
                         Some(map) => map,
                         None => return false,
                     };
-                    for (_k, _v) in map {
-                        let _key = match _k.as_text() {
-                            Some(_key) => _key,
+                    for (key, val) in map {
+                        let key = match key.as_text() {
+                            Some(key) => key,
                             None => return false,
                         };
-                        match _key {
+                        match key {
                             keys::KEY_REQ_WANT => {
-                                let val = match _v.as_integer() {
+                                let val = match val.as_integer() {
                                     Some(val) => val,
                                     None => return false,
                                 };
@@ -159,7 +159,7 @@ impl Msg for Message {
                                 self.want6 = (_want & 0x02) != 0;
                             },
                             keys::KEY_REQ_TARGET => {
-                                let id = match Id::from_cbor(_v) {
+                                let id = match Id::from_cbor(val) {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };
