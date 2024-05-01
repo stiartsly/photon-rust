@@ -168,6 +168,6 @@ impl<'a> KClosestNodes<'a> {
     }
 
     pub(crate) fn as_nodes(&self) -> Vec<NodeInfo> {
-        self.entries.iter().map(|x| x.into_node()).collect()
+        self.entries.iter().map(|x| x.inner_node()).collect()
     }
 }

@@ -46,7 +46,7 @@ impl KBucketEntry {
         self.ni.socket_addr()
     }
 
-    pub(crate) fn into_node(&self) -> NodeInfo {
+    pub(crate) fn inner_node(&self) -> NodeInfo {
         self.ni.clone()
     }
 
