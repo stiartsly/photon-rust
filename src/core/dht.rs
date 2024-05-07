@@ -58,7 +58,6 @@ pub(crate) struct DHT {
     bootstrap_nodes: Vec<Box<NodeInfo>>,
     bootstrap_time: Rc<RefCell<SystemTime>>,
 
-    next_tid: i32,
     calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
 
     routing_table: Rc<RefCell<RoutingTable>>,
@@ -85,7 +84,6 @@ impl DHT {
             bootstrap_need: false,
             bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
 
-            next_tid: 0,
             calls: HashMap::new(),
 
             server: Rc::clone(&server),
@@ -140,8 +138,6 @@ impl DHT {
             req.with_target(Id::random());
             req.with_want4(true);
 
-
-
             let call = Rc::new(RefCell::new(RpcCall::new(node.clone(), req)));
             let len = bns.len();
             let cloned_nodes = Rc::clone(&nodes);
@@ -169,9 +165,9 @@ impl DHT {
                             cloned_id.deref(),
                             Rc::clone(&routing_table)
                         ));
-                        task.set_bootstrap(true);
-                        task.set_name("Bootstrap: filling home bucket");
+                        //task.set_bootstrap(true);
                         task.add_candidates(cloned_nodes.borrow().as_slice());
+                        task.set_name("Bootstrap: filling home bucket");
                         task.add_listener(Box::new(move |_| {
                              println!(">>>>>> listener invoked!!!! >>>>");
                         }));
@@ -269,23 +265,19 @@ impl DHT {
         self.taskman.borrow_mut().cancel_all();
     }
 
-    pub(crate) fn on_message(&mut self, msg: Box<dyn Msg>)
-    {
-        let msg = self.pre_process(msg);
-        let msg = match msg.kind() {
-            Kind::Error => self.on_error(msg),
-            Kind::Request => self.on_request(msg),
-            Kind::Response => self.on_response(msg),
+    pub(crate) fn on_message(&mut self, msg: Box<dyn Msg>) {
+        let msg = self.responsed(msg);
+        match msg.kind() {
+            Kind::Error => self.on_error(&msg),
+            Kind::Request => self.on_request(&msg),
+            Kind::Response => self.on_response(&msg),
         };
-        self.post_received(msg);
+        self.received(msg);
     }
 
-    fn pre_process(&mut self, mut msg: Box<dyn Msg>) -> Box<dyn Msg> {
+    fn responsed(&mut self, mut msg: Box<dyn Msg>) -> Box<dyn Msg> {
         match self.calls.remove(&msg.txid()) {
             Some(call) => {
-                // message matches transaction ID and origin == destination
-                // we only check the IP address here. the routing table applies
-                // more strict checks to also verify a stable port
                 msg.with_associated_call(Rc::clone(&call));
                 call.borrow_mut().responsed(msg)
             },
@@ -293,20 +285,18 @@ impl DHT {
         }
     }
 
-    fn post_received(&mut self, msg: Box<dyn Msg>) {
+    fn received(&mut self, msg: Box<dyn Msg>) {
         let from_id = msg.id();
         let from_addr = msg.addr();
 
-        if is_bogon(from_addr) {
+        if is_bogon_address(from_addr) {
             info!("Received a message from bogon address {}, ignored the potential
                   routing table operation", from_addr);
             return;
         }
 
-        //let mut new_entry = Box::new(KBucketEntry::new(msg.id(), addr));
-        // new_entry.set_version(msg.version());
-        let call_opt = msg.associated_call();
-        if let Some(call) = call_opt.as_ref() {
+        let call = msg.associated_call();
+        if let Some(call) = call.as_ref() {
             // we only want remote nodes with stable ports in our routing table,
             // so apply a stricter check here
             if !call.borrow().matches_addr() {
@@ -325,7 +315,7 @@ impl DHT {
         }
 
         let mut new_entry = Box::new(KBucketEntry::new(msg.id(), from_addr));
-        if let Some(call) = call_opt.as_ref() {
+        if let Some(call) = call {
             new_entry.set_version(msg.version());
             new_entry.signal_response();
             new_entry.merge_request_time(call.borrow().sent_time().clone());
@@ -334,42 +324,37 @@ impl DHT {
             req.set_id(msg.id().clone());
             req.set_addr(from_addr.clone());
 
-            let ni  = Box::new(NodeInfo::new(msg.id(), from_addr));
+            let ni = Box::new(new_entry.inner_node());
             let call = Rc::new(RefCell::new(RpcCall::new(ni, req)));
             self.send_call(call);
         }
         self.routing_table.borrow_mut().put(new_entry);
     }
 
-    fn on_request(&mut self, msg: Box<dyn Msg>) -> Box<dyn Msg> {
+    fn on_request(&mut self, msg: &Box<dyn Msg>) {
         match msg.method() {
-            Method::Ping => self.on_ping(&msg),
-            Method::FindNode => self.on_find_node(&msg),
-            Method::FindValue => self.on_find_value(&msg),
-            Method::StoreValue => self.on_store_value(&msg),
-            Method::FindPeer => self.on_find_peers(&msg),
-            Method::AnnouncePeer => self.on_announce_peer(&msg),
+            Method::Ping => self.on_ping(msg),
+            Method::FindNode => self.on_find_node(msg),
+            Method::FindValue => self.on_find_value(msg),
+            Method::StoreValue => self.on_store_value(msg),
+            Method::FindPeer => self.on_find_peers(msg),
+            Method::AnnouncePeer => self.on_announce_peer(msg),
             Method::Unknown => {
-                //self.send_err(msg, 203, "Invalid request method");
+                self.send_err(msg, 203, "Invalid request method");
             }
         }
-        msg
     }
 
-    fn on_response(&mut self, msg: Box<dyn Msg>) -> Box<dyn Msg> {
-        msg
-    }
+    fn on_response(&mut self, _: &Box<dyn Msg>) {}
 
-    fn on_error(&mut self, msg: Box<dyn Msg>) -> Box<dyn Msg> {
-        warn!(
-            "Error from {}/{} - {}:{}, txid {}",
+    fn on_error(&mut self, msg: &Box<dyn Msg>) {
+        warn!("Error from {}/{} - {}:{}, txid {}",
             msg.addr(),
             version::formatted_version(msg.version()),
             msg.code(),
             msg.msg(),
             msg.txid()
         );
-        msg
     }
 
     fn send_err(&mut self, msg: &Box<dyn Msg>, code: i32, str: &str) {
@@ -525,7 +510,7 @@ impl DHT {
     }
 
     fn on_announce_peer(&mut self, req: &Box<dyn Msg>) {
-        if is_bogon(req.addr()) {
+        if is_bogon_address(req.addr()) {
             info!(
                 "Received an announce peer request from bogon address {}, ignored ",
                 req.addr()
@@ -707,12 +692,6 @@ impl DHT {
         // Handle associated call if it exists:
         // - Notify Kademlia DHT of being interacting with a neighboring node;
         // - Process some internal state for this RPC call.
-        /*if let Some(call) = msg.associated_call() {
-            self.on_send(call.borrow().target_id());
-            call.borrow_mut().send(&self.scheduler);
-            self.scheduler
-        }*/
-
         if let Some(call) = msg.associated_call() {
             self.on_send(msg.id());
             call.borrow_mut().send();
@@ -727,24 +706,17 @@ impl DHT {
     }
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
-        self.next_tid += 1;
-        let mut txid = self.next_tid;
-        if txid == 0 {
-            txid += 1;
-        }
-
-        call.borrow_mut().set_responsed_fn(|_,_| {
-            println!("in responsed_fn");
-        });
-        call.borrow_mut().set_timeout_fn(|_|{
-            println!("in timeout_fn");
+        call.borrow_mut().set_responsed_fn(|_,_| {});
+        call.borrow_mut().set_timeout_fn(|_call| {
+            // self.on_timeout(_call);
         });
 
-        let msg_opt = call.borrow_mut().req();
         let cloned_call = Rc::clone(&call);
+        let msg = call.borrow_mut().req();
+        let txid = call.borrow_mut().hash();
         self.calls.insert(txid, call);
 
-        if let Some(mut msg) = msg_opt {
+        if let Some(mut msg) = msg {
             msg.set_txid(txid);
             msg.with_associated_call(cloned_call);
             self.send_msg(msg);
@@ -752,6 +724,6 @@ impl DHT {
     }
 }
 
-fn is_bogon(_: &SocketAddr) -> bool {
+fn is_bogon_address(_: &SocketAddr) -> bool {
     false
 }
