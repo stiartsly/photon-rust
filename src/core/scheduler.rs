@@ -1,27 +1,28 @@
 use std::collections::BTreeMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use tokio::time::{Duration, Instant};
 
-#[allow(dead_code)]
 struct Job {
     cb: Box<dyn FnMut()>,
     duration: Duration,
 }
 
-#[allow(dead_code)]
 impl Job {
-    fn new<F>(f: F, delay: u64 /* ms */) -> Self where F: FnMut() + 'static {
-        Job {
+    fn new<F>(f: F, delay: u64 /* ms */) -> Self
+    where F: FnMut() + 'static {
+        Self {
             cb: Box::new(f),
             duration: Duration::from_millis(delay),
         }
     }
 
-    fn cancel(&mut self) {
+    /*fn cancel(&mut self) {
         self.cb = Box::new(||{});
-    }
+    }*/
 
-    fn handle(&mut self) {
+    pub(crate) fn cb(&mut self) {
         (self.cb)()
     }
 }
@@ -32,7 +33,6 @@ pub(crate) struct Scheduler {
     timers: BTreeMap<Instant, Vec<Box<Job>>>,
 }
 
-#[allow(dead_code)]
 impl Scheduler {
     pub(crate) fn new() -> Self {
         Scheduler {
@@ -42,7 +42,8 @@ impl Scheduler {
         }
     }
 
-    pub(crate) fn add<F>(&mut self, cb: F, start: u64, delay: u64) where F: FnMut() + 'static {
+    pub(crate) fn add<F>(&mut self, cb: F, start: u64, delay: u64)
+    where F: FnMut() + 'static {
         self.add_job(
             Duration::from_millis(start),
             Box::new(Job::new(cb, delay))
@@ -65,26 +66,11 @@ impl Scheduler {
         self.updated = true;
     }
 
-    pub(crate) fn run(&mut self) {
-        let mut to_remove = Option::default() as Option<Instant>;
-        if let Some((time, jobs)) = self.timers.iter_mut().next() {
-            jobs.iter_mut().for_each(|job | {
-                (job.cb)()
-            });
-            to_remove = Some(time.clone());
-        }
-
-        if let Some(item) = to_remove {
-            if let Some(mut jobs) = self.timers.remove(&item) {
-                while !jobs.is_empty() {
-                    let job = jobs.pop().unwrap();
-                    self.add_job(job.duration.clone(), job);
-                }
-            }
-        }
+    fn pop_jobs(&mut self) -> Option<Vec<Box<Job>>> {
+        self.timers.pop_first().map(|(_,v)| v)
     }
 
-    pub(crate) fn sync_time(&mut self) {
+    fn sync_time(&mut self) {
         self.now = Instant::now();
     }
 
@@ -100,6 +86,21 @@ impl Scheduler {
             None => {
                 self.now + Duration::from_secs(60*60)
             }
+        }
+    }
+}
+
+pub(crate) fn run_jobs(scheduler: &Rc<RefCell<Scheduler>>) {
+    let scheduler = Rc::clone(scheduler);
+    let jobs = {
+        scheduler.borrow_mut().sync_time();
+        scheduler.borrow_mut().pop_jobs()
+    };
+
+    if let Some(mut jobs) = jobs {
+        while let Some(mut job) = jobs.pop() {
+            job.cb();
+            scheduler.borrow_mut().add_job(job.duration.clone(),job);
         }
     }
 }

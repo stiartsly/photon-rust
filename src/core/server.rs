@@ -23,7 +23,7 @@ use crate::{
     token_man::TokenManager,
     data_storage::DataStorage,
     lookup_option::LookupOption,
-    scheduler::Scheduler,
+    scheduler::{self, Scheduler},
     crypto_cache,
     crypto_cache::CryptoCache,
     stats::Stats,
@@ -245,10 +245,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                 }
 
                 _ = interval.tick() => {
-                    server.borrow().scheduler.borrow_mut().sync_time();
-                    server.borrow().scheduler.borrow_mut().run();
-
-                    interval.reset_at(server.borrow().scheduler.borrow().next_time());
+                    scheduler::run_jobs(&server.borrow().scheduler);
                 }
             }
 
