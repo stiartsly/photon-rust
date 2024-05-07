@@ -309,7 +309,7 @@ impl DHT {
         if let Some(call) = call_opt.as_ref() {
             // we only want remote nodes with stable ports in our routing table,
             // so apply a stricter check here
-            if !call.borrow().matches_address() {
+            if !call.borrow().matches_addr() {
                 return;
             }
         }
@@ -707,9 +707,20 @@ impl DHT {
         // Handle associated call if it exists:
         // - Notify Kademlia DHT of being interacting with a neighboring node;
         // - Process some internal state for this RPC call.
-        if let Some(call) = msg.associated_call() {
+        /*if let Some(call) = msg.associated_call() {
             self.on_send(call.borrow().target_id());
             call.borrow_mut().send(&self.scheduler);
+            self.scheduler
+        }*/
+
+        if let Some(call) = msg.associated_call() {
+            self.on_send(msg.id());
+            call.borrow_mut().send();
+
+            let call = Rc::clone(&call);
+            self.scheduler.borrow_mut().add(move || {
+                call.borrow_mut().check_timeout()
+            }, 2000, 10);
         }
 
         self.queue.borrow_mut().push_back(msg);
@@ -729,7 +740,7 @@ impl DHT {
             println!("in timeout_fn");
         });
 
-        let msg_opt = call.borrow_mut().req_take();
+        let msg_opt = call.borrow_mut().req();
         let cloned_call = Rc::clone(&call);
         self.calls.insert(txid, call);
 
