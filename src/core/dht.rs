@@ -698,7 +698,7 @@ impl DHT {
 
             let call = Rc::clone(&call);
             self.scheduler.borrow_mut().add(move || {
-                call.borrow_mut().check_timeout()
+               call.borrow_mut().check_timeout()
             }, 2000, 10);
         }
 
