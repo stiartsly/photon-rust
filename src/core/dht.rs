@@ -40,7 +40,8 @@ use crate::msg::{
 };
 
 use crate::task::{
-    task::{State, Task, Lookup},
+    task::{State, Task},
+    lookup_task::LookupTask,
     node_lookup::NodeLookupTask,
     peer_lookup::PeerLookupTask,
     task_manager::TaskManager,
@@ -165,8 +166,8 @@ impl DHT {
                             cloned_id.deref(),
                             Rc::clone(&routing_table)
                         ));
-                        //task.set_bootstrap(true);
-                        task.add_candidates(cloned_nodes.borrow().as_slice());
+                        task.set_bootstrap(true);
+                        task.inject_candidates(cloned_nodes.borrow().as_slice());
                         task.set_name("Bootstrap: filling home bucket");
                         task.add_listener(Box::new(move |_| {
                              println!(">>>>>> listener invoked!!!! >>>>");

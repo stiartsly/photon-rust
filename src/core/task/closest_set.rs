@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::id::{distance, Id};
 use super::candidate_node::CandidateNode;
@@ -7,7 +9,7 @@ pub(crate) struct ClosestSet {
     target: Id,
     capacity: usize,
 
-    closest: HashMap<Id, Box<CandidateNode>>,
+    closest: HashMap<Id, Rc<RefCell<CandidateNode>>>,
 
     insert_attempt_since_tail_modification: usize,
     insert_attempt_since_head_modification: usize,
@@ -33,18 +35,20 @@ impl ClosestSet {
         self.closest.len()
     }
 
-    pub(crate) fn candidate_node(&self, id: &Id) -> Option<&Box<CandidateNode>> {
-        self.closest.get(id)
+    pub(crate) fn candidate_node(&self, id: &Id) -> Option<Rc<RefCell<CandidateNode>>> {
+        self.closest.get(id).map(|item | Rc::clone(&item))
     }
+
+
 
     pub(crate) fn contains(&self, id: &Id) -> bool {
         self.closest.get(id).is_some()
     }
 
-    pub(crate) fn add(&mut self, candidate: Box<CandidateNode>) {
-        let nodeid = candidate.nodeid().clone();
+    pub(crate) fn add(&mut self, candidate: Rc<RefCell<CandidateNode>>) {
+        let nodeid = candidate.borrow().nodeid().clone();
         self.closest.insert(
-            candidate.nodeid().clone(),
+            nodeid.clone(),
             candidate
         );
 

@@ -1,0 +1,123 @@
+use std::net::SocketAddr;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+use crate::{
+    constants,
+    id::Id,
+    node_info::{NodeInfo, Reachable},
+    rpccall::RpcCall,
+//    routing_table::RoutingTable,
+
+};
+
+use crate::msg::{
+    msg::Msg,
+};
+
+use super::{
+    candidate_node::CandidateNode,
+    closest_set::ClosestSet,
+    closest_candidates::ClosestCandidates,
+};
+
+pub(crate) struct LookupTaskData {
+    target: Id,
+    closest_set: ClosestSet,
+    closest_candidates: ClosestCandidates,
+}
+
+impl LookupTaskData {
+    pub(crate) fn new(target: &Id) -> Self {
+        Self {
+            target: target.clone(),
+            closest_set: ClosestSet::new(target, constants::MAX_ENTRIES_PER_BUCKET),
+            closest_candidates: ClosestCandidates::new(
+                target, 3 * constants::MAX_ENTRIES_PER_BUCKET,
+            )
+        }
+    }
+}
+
+pub(crate) trait LookupTask {
+    fn data(&self) -> &LookupTaskData;
+    fn data_mut(&mut self) -> &mut LookupTaskData;
+    fn node_id(&self) -> &Id;
+    fn node_address(&self) -> &SocketAddr;
+
+    fn target(&self) -> &Id {
+        &self.data().target
+    }
+
+    fn candidate(&self, id: &Id) -> Option<Rc<RefCell<CandidateNode>>>  {
+        self.data().closest_candidates.get(id)
+    }
+
+    fn next_candidate(&mut self) -> Option<Rc<RefCell<CandidateNode>>> {
+        self.data_mut().closest_candidates.next()
+    }
+
+    fn add_candidates(&mut self, nodes: &[NodeInfo]) {
+        let mut candidates = Vec::new();
+
+        for item in nodes.iter() {
+            if is_bogon_address(item.socket_addr()) ||
+                self.node_id() == item.id() ||
+                self.node_address() == item.socket_addr() ||
+                self.data().closest_set.contains(item.id()) {
+                continue;
+            }
+            candidates.push(item.clone());
+        }
+
+        if !candidates.is_empty() {
+            self.data_mut().closest_candidates.add(candidates.as_slice())
+        }
+    }
+
+    fn remove_candidate(&mut self, id: &Id) -> Option<Rc<RefCell<CandidateNode>>> {
+        self.data_mut().closest_candidates.remove(id)
+    }
+
+    fn closest_set(&self) -> &ClosestSet {
+        &self.data().closest_set
+    }
+
+    fn add_closest(&mut self, candidate_node: Rc<RefCell<CandidateNode>>) {
+        self.data_mut().closest_set.add(candidate_node)
+    }
+
+    fn is_done(&self) -> bool {
+        let data = self.data();
+        data.closest_candidates.len() == 0 ||
+            (data.closest_set.is_eligible() &&
+                data.target.three_way_compare(
+                    &data.closest_set.tail(), &data.closest_candidates.head()).is_le())
+    }
+
+    fn call_error(&mut self, call: &RpcCall) {
+        _ = self.remove_candidate(call.target_id())
+    }
+
+    fn call_timeout(&mut self, call: &RpcCall) {
+        let mut candidate = Box::new(CandidateNode::new(call.target(), false));
+        if candidate.unreachable() {
+            self.remove_candidate(candidate.nodeid());
+            return;
+        }
+        // Clear the sent time-stamp and make it available again for the next retry
+        candidate.clear_sent()
+    }
+
+    fn call_responsed(&mut self, call: &RpcCall, rsp: &Box<dyn Msg>) {
+        if let Some(cn) = self.remove_candidate(call.target_id()) {
+            cn.borrow_mut().set_replied();
+            cn.borrow_mut().set_token(rsp.token());
+            self.add_closest(cn);
+        }
+    }
+}
+
+fn is_bogon_address(_: &SocketAddr) -> bool {
+    false
+}

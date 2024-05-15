@@ -35,6 +35,10 @@ impl CandidateNode {
         self.ni.id()
     }
 
+    pub(crate) fn node(&self) -> &NodeInfo {
+        &self.ni
+    }
+
     pub(crate) fn set_sent(&mut self) {
         self.last_sent = SystemTime::now();
         self.pinged += 1;

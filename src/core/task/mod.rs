@@ -6,6 +6,7 @@ pub(crate) mod node_lookup;
 pub(crate) mod peer_lookup;
 pub(crate) mod ping_refresh;
 pub(crate) mod task;
+pub(crate) mod lookup_task;
 pub(crate) mod task_manager;
 pub(crate) mod value_announce;
 pub(crate) mod value_lookup;

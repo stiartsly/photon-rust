@@ -1,14 +1,17 @@
 use std::any::Any;
-use std::boxed::Box;
 use std::collections::LinkedList;
 use std::rc::Rc;
 
 use super::{
     closest_set::ClosestSet,
-    task::{State, Task},
+    task::{Task, TaskData},
 };
 use crate::{
-    kbucket::KBucket, kbucket_entry::KBucketEntry, value::Value,
+    kbucket::KBucket,
+    kbucket_entry::KBucketEntry,
+    value::Value,
+    rpccall::RpcCall,
+    msg::msg::Msg,
 };
 
 #[allow(dead_code)]
@@ -29,47 +32,38 @@ impl ValueAnnounceTask {
 }
 
 impl Task for ValueAnnounceTask {
-    fn taskid(&self) -> i32 {
+    fn data(&self) -> &TaskData {
         unimplemented!()
     }
-
-    fn name(&self) -> &str {
-        unimplemented!()
-    }
-
-    fn set_name(&mut self, _: &str) {
-        unimplemented!()
-    }
-
-    fn state(&self) -> State {
-        unimplemented!()
-    }
-
-    fn nested(&self) -> &Box<dyn Task> {
-        unimplemented!()
-    }
-
-    fn is_canceled(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn is_finished(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn set_nested(&mut self, _: Box<dyn Task>) {
-        unimplemented!()
-    }
-
-    fn start(&mut self) {
-        unimplemented!()
-    }
-
-    fn cancel(&mut self) {
+    fn data_mut(&mut self) -> &mut TaskData {
         unimplemented!()
     }
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn prepare(&mut self) {
+        unimplemented!()
+    }
+
+    fn update(&mut self) {
+        unimplemented!()
+    }
+
+    fn call_sent(&mut self, _: &RpcCall) {
+        unimplemented!()
+    }
+
+    fn call_responsed(&mut self, _: &RpcCall, _: &Box<dyn Msg>) {
+        unimplemented!()
+    }
+
+    fn call_error(&mut self, _: &RpcCall) {
+        unimplemented!()
+    }
+
+    fn call_timeout(&mut self, _: &RpcCall) {
+        unimplemented!()
     }
 }
