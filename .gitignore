@@ -9,4 +9,5 @@
 #
 # already existing elements were commented out
 
-#/target
+.shell_data
+.target_data
