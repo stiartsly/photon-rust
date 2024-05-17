@@ -272,8 +272,10 @@ impl Value {
             Some(pk) => {
                 input.extend_from_slice(pk.as_bytes());
                 input.extend_from_slice(unwrap!(self.nonce).as_bytes());
+            },
+            None => {
+                input.extend_from_slice(self.data.as_slice())
             }
-            None => input.extend_from_slice(self.data.as_slice()),
         }
 
         let mut sha256 = Sha256::new();
@@ -318,9 +320,8 @@ impl Value {
 
     pub fn size(&self) -> usize {
         let mut len = self.data.len();
-        match self.sig.as_ref() {
-            Some(sig) => len += sig.len(),
-            None => {}
+        if let Some(sig) = self.sig.as_ref() {
+            len += sig.len();
         }
         len
     }
@@ -338,8 +339,9 @@ impl Value {
     }
 
     pub fn is_valid(&self) -> bool {
-        assert!(!self.data.is_empty());
-
+        if self.data.is_empty() {
+            return false;
+        }
         if !self.is_mutable() {
             return true;
         }

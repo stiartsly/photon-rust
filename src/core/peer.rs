@@ -154,13 +154,13 @@ impl Peer {
     }
 
     fn serialize_signature_data(&self) -> Vec<u8> {
-        let mut len: usize = 0;
+        let mut len = 0usize;
 
         len += ID_BYTES * 2;
         len += mem::size_of::<u16>(); // padding port
 
-        if self.url.is_some() {
-            len += unwrap!(self.url).len();
+        if let Some(url) = self.url.as_ref() {
+            len += url.len();
         }
 
         let mut input = Vec::<u8>::with_capacity(len);
@@ -168,8 +168,8 @@ impl Peer {
         input.extend_from_slice(self.origin.as_bytes());
         input.extend_from_slice(self.port.to_le_bytes().as_ref());
 
-        if self.url.is_some() {
-            input.extend_from_slice(unwrap!(self.url).as_ref());
+        if let Some(url) = self.url.as_ref() {
+            input.extend_from_slice(url.as_ref());
         }
         input
     }
