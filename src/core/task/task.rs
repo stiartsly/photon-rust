@@ -11,6 +11,7 @@ use crate::{
     rpccall::{RpcCall, State as CallState},
     error::Error,
     msg::msg::Msg,
+    server::Server,
 };
 
 use super::{
@@ -40,7 +41,7 @@ impl fmt::Display for State {
     }
 }
 
-type TaskId = i32;
+pub(crate) type TaskId = i32;
 static mut NEXT_TASKID: TaskId= 0;
 
 fn next_taskid() -> TaskId {
@@ -65,8 +66,12 @@ pub(crate) struct TaskData {
     listeners: Vec<Box<dyn FnOnce(&dyn Task)>>,
 
     nested: Option<Box<dyn Task>>,
+
+    ref_task: Option<Rc<RefCell<dyn Task>>>,
+    server: Option<Rc<RefCell<Server>>>,
 }
 
+#[allow(dead_code)]
 impl TaskData {
     pub(crate) fn new() -> Self {
         Self {
@@ -77,7 +82,10 @@ impl TaskData {
             started_time: SystemTime::UNIX_EPOCH,
             finished_time: SystemTime::UNIX_EPOCH,
             inflights: HashMap::new(),
-            listeners: Vec::new()
+            listeners: Vec::new(),
+
+            ref_task: None,
+            server: None,
         }
     }
 
@@ -91,6 +99,7 @@ impl TaskData {
 pub(crate) trait Task {
     fn data(&self) -> &TaskData;
     fn data_mut(&mut self) -> &mut TaskData;
+
     fn prepare(&mut self);
     fn update(&mut self);
     fn call_sent(&mut self, _: &RpcCall);
@@ -98,6 +107,14 @@ pub(crate) trait Task {
     fn call_error(&mut self, call: &RpcCall);
     fn call_timeout(&mut self, call: &RpcCall);
     fn as_any(&self) -> &dyn Any;
+
+    fn link_self(&mut self, task: Rc<RefCell<dyn Task>>) {
+        self.data_mut().ref_task = Some(task)
+    }
+
+    fn link_server(&mut self, server: Rc<RefCell<Server>>)  {
+        self.data_mut().server = Some(server)
+    }
 
     fn taskid(&self) -> i32 {
         self.data().taskid
@@ -135,7 +152,7 @@ pub(crate) trait Task {
     }
 
     fn add_listener(&mut self, _: Box<dyn FnOnce(&dyn Task)>) {
-        // unimplemented!()
+        //unimplemented!()
     }
 
     fn start(&mut self) {
@@ -196,21 +213,24 @@ pub(crate) trait Task {
 
         let ni = Box::new(cn.borrow().node().clone());
         let call = Rc::new(RefCell::new(RpcCall::new(ni, msg)));
-        call.borrow_mut().set_state_changed_fn (|_, _, _| {
-            //self.call_sent(call);
+        let task = Rc::clone(self.data().ref_task.as_ref().unwrap());
+        //let server = Rc::clone(self.data().server.as_ref().unwrap());
+        call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
+            task.borrow_mut().call_sent(call);
 
-           /* match prev_state {
-                CallState::Sent => self.call_sent(call),
+            match prev_state {
+                CallState::Sent => task.borrow_mut().call_sent(call),
                 CallState::Responsed => {
-                    self.data_mut().inflights.remove(&call.hash());
-                    if self.is_done() {
-                        self.call_error(call);
+                    task.borrow_mut().data_mut().inflights.remove(&call.hash());
+                    if task.borrow().is_done() {
+                        let msg = call.rsp();
+                        task.borrow_mut().call_responsed(call, msg.as_ref().unwrap());
                     }
                 },
                 CallState::Err => {
-                    self.data_mut().inflights.remove(&call.hash());
-                    if self.is_done() {
-                        self.call_timeout(call);
+                    task.borrow_mut().data_mut().inflights.remove(&call.hash());
+                    if task.borrow().is_done() {
+                        task.borrow_mut().call_timeout(call);
                     }
                 },
                 CallState::Timeout => {}
@@ -220,14 +240,14 @@ pub(crate) trait Task {
             //if need_update {
             //    self.serialized_update()
             //}
-            */
             println!(">>>>>>>>>>");
         });
         // (f)(Rc::clone(&call));
         // self.data_mut().inflights.insert(call.borrow().hash(), Rc::clone(&call));
 
         // debug!("Task#{} sending call to {}{}", self.taskid(), node, msg.addr());
-        //TODO: dht.getServer().sendCall(call);
+        //TODO: server.borrow_mut().send_call(call);
+
 
         println!("send call>>>>>>");
         Ok(())

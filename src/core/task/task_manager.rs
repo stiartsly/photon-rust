@@ -1,12 +1,15 @@
 use std::collections::LinkedList;
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use super::task::{
     Task,
     State
 };
 
 pub(crate) struct TaskManager {
-    queued: LinkedList<Box<dyn Task>>,
-    running: LinkedList<Box<dyn Task>>,
+    queued: LinkedList<Rc<RefCell<dyn Task>>>,
+    running: LinkedList<Rc<RefCell<dyn Task>>>,
 
     canceling: bool,
 }
@@ -20,21 +23,21 @@ impl TaskManager {
         }
     }
 
-    pub(crate) fn add(&mut self, task: Box<dyn Task>) {
+    pub(crate) fn add(&mut self, task: Rc<RefCell<dyn Task>>) {
         self.add_prior(task, false)
     }
 
-    pub(crate) fn add_prior(&mut self, mut task: Box<dyn Task>, prior: bool) {
+    pub(crate) fn add_prior(&mut self, task: Rc<RefCell<dyn Task>>, prior: bool) {
         if self.canceling {
             return;
         }
-        if task.state() == State::Running {
+        if task.borrow().state() == State::Running {
             self.running.push_back(task);
             return;
         }
 
         let expected = vec![State::Initial];
-        if !task.set_state(&expected, State::Queued) {
+        if !task.borrow_mut().set_state(&expected, State::Queued) {
             return;
         }
 
@@ -53,13 +56,13 @@ impl TaskManager {
                 break;
             }
 
-            if let Some(mut task) = self.queued.pop_front() {
-                if task.is_finished() {
+            if let Some(task) = self.queued.pop_front() {
+                if task.borrow().is_finished() {
                     continue;
                 }
 
-                task.start();
-                if !task.is_finished() {
+                task.borrow_mut().start();
+                if !task.borrow().is_finished() {
                     self.running.push_back(task);
                 }
             }
@@ -68,11 +71,11 @@ impl TaskManager {
 
     pub(crate) fn cancel_all(&mut self) {
         self.canceling = true;
-        while let Some(mut task) = self.running.pop_front() {
-            task.cancel();
+        while let Some(task) = self.running.pop_front() {
+            task.borrow_mut().cancel();
         }
-        while let Some(mut task) = self.queued.pop_front() {
-            task.cancel();
+        while let Some(task) = self.queued.pop_front() {
+            task.borrow_mut().cancel();
         }
         self.canceling = false;
     }

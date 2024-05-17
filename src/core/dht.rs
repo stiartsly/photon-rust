@@ -147,6 +147,7 @@ impl DHT {
             let taskman = Rc::clone(&self.taskman);
             let routing_table = Rc::clone(&self.routing_table);
             let bootstrap_time = Rc::clone(&self.bootstrap_time);
+            let server = Rc::clone(&self.server);
             call.borrow_mut().set_state_changed_fn(move |call, _, cur| {
                 if cur == &rpccall::State::Responsed || cur == &rpccall::State::Err ||
                     cur == &rpccall::State::Timeout {
@@ -154,22 +155,28 @@ impl DHT {
                         cloned_nodes.borrow_mut().extend_from_slice(rsp.nodes4());
                     }
 
+
                     *cloned_count.borrow_mut() += 1;
                     if *cloned_count.borrow() == len {
+
                         *bootstrap_time.borrow_mut() = SystemTime::now();
                         if routing_table.borrow().size() == 0 &&
                             cloned_nodes.borrow().is_empty() {
                             return;
                         }
 
-                        let mut task = Box::new(NodeLookupTask::new(
+
+                        let task = Rc::new(RefCell::new(NodeLookupTask::new(
                             cloned_id.deref(),
                             Rc::clone(&routing_table)
-                        ));
-                        task.set_bootstrap(true);
-                        task.inject_candidates(cloned_nodes.borrow().as_slice());
-                        task.set_name("Bootstrap: filling home bucket");
-                        task.add_listener(Box::new(move |_| {
+                        )));
+                        let cloned_task = Rc::clone(&task);
+                        task.borrow_mut().link_self(cloned_task);
+                        task.borrow_mut().link_server(Rc::clone(&server));
+                        task.borrow_mut().set_bootstrap(true);
+                        task.borrow_mut().inject_candidates(cloned_nodes.borrow().as_slice());
+                        task.borrow_mut().set_name("Bootstrap: filling home bucket");
+                        task.borrow_mut().add_listener(Box::new(move |_| {
                              println!(">>>>>> listener invoked!!!! >>>>");
                         }));
                         taskman.borrow_mut().add(task);
@@ -240,11 +247,16 @@ impl DHT {
         let addr = self.addr.clone();
         let taskman = Rc::clone(&self.taskman);
         let routing_table = Rc::clone(&self.routing_table);
+        let server = Rc::clone(&self.server);
         self.scheduler.borrow_mut().add(move || {
-            let mut task = Box::new(NodeLookupTask::new(&Id::random(), Rc::clone(&routing_table)));
+            let task = Rc::new(RefCell::new(NodeLookupTask::new(&Id::random(), Rc::clone(&routing_table))));
             let name = format!("{}: random lookup", as_kind_name!(&addr));
-            task.set_name(&name);
-            task.add_listener(Box::new(move |_|{}));
+            let task_cloned = Rc::clone(&task);
+            task.borrow_mut().link_self(task_cloned);
+            task.borrow_mut().link_server(Rc::clone(&server));
+            task.borrow_mut().set_name(&name);
+            task.borrow_mut().add_listener(Box::new(move |_|{}));
+
             taskman.borrow_mut().add(task);
         }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL)
     }
@@ -580,9 +592,9 @@ impl DHT {
         ));
         let result_shadow = Rc::clone(&result);
 
-        let mut task = Box::new(NodeLookupTask::new(id, Rc::clone(&self.routing_table)));
-        task.set_name("node-lookup");
-        task.set_result_fn(move |_task, _node| {
+        let task = Rc::new(RefCell::new(NodeLookupTask::new(id, Rc::clone(&self.routing_table))));
+        task.borrow_mut().set_name("node-lookup");
+        task.borrow_mut().set_result_fn(move |_task, _node| {
             if _node.is_some() {
                 *(result.borrow_mut()) = Some(_node.unwrap().clone());
             }
@@ -590,7 +602,7 @@ impl DHT {
                 _task.cancel()
             }
         });
-        task.add_listener(Box::new(move |_| {
+        task.borrow_mut().add_listener(Box::new(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         }));
 
@@ -603,9 +615,9 @@ impl DHT {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
         let result_shadow = Rc::clone(&result);
 
-        let mut task = Box::new(ValueLookupTask::new(id));
-        task.set_name("value-lookup");
-        task.set_result_fn(move |_task, _value| {
+        let task = Rc::new(RefCell::new(ValueLookupTask::new(id)));
+        task.borrow_mut().set_name("value-lookup");
+        task.borrow_mut().set_result_fn(move |_task, _value| {
             if let Some(_v) = _value.as_ref() {
                 match result.borrow().as_ref() {
                     Some(v) => {
@@ -625,7 +637,7 @@ impl DHT {
             }
         });
 
-        task.add_listener(move |_| {
+        task.borrow_mut().add_listener(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         });
         self.taskman.borrow_mut().add(task);
@@ -634,10 +646,10 @@ impl DHT {
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
     where F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static,
     {
-        let mut task = Box::new(NodeLookupTask::new(&value.id(), Rc::clone(&self.routing_table)));
-        task.set_name("store-value");
-        task.set_want_token(true);
-        task.add_listener(Box::new(move |_task| {
+        let task = Rc::new(RefCell::new(NodeLookupTask::new(&value.id(), Rc::clone(&self.routing_table))));
+        task.borrow_mut().set_name("store-value");
+        task.borrow_mut().set_want_token(true);
+        task.borrow_mut().add_listener(Box::new(move |_task| {
             if _task.state() != State::Finished {
                 return;
             }
@@ -668,16 +680,16 @@ impl DHT {
         let result = Rc::new(RefCell::new(Vec::new() as Vec<Box<Peer>>));
         let result_shadow = Rc::clone(&result);
 
-        let mut task = Box::new(PeerLookupTask::new(id));
-        task.set_name("peer-lookup");
-        task.set_result_fn(move |_task, _peers| {
+        let task = Rc::new(RefCell::new(PeerLookupTask::new(id)));
+        task.borrow_mut().set_name("peer-lookup");
+        task.borrow_mut().set_result_fn(move |_task, _peers| {
             (*result.borrow_mut()).append(_peers);
             if option != LookupOption::Conservative && result.borrow().len() >= expected {
                 _task.cancel()
             }
         });
 
-        task.add_listener(move |_| complete_fn(result_shadow.take()));
+        task.borrow_mut().add_listener(move |_| complete_fn(result_shadow.take()));
 
         self.taskman.borrow_mut().add(task);
     }

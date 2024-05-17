@@ -11,7 +11,7 @@ use crate::{
     node_info::{NodeInfo},
     rpccall::RpcCall,
     routing_table::RoutingTable,
-    kclosest_nodes::KClosestNodes
+    kclosest_nodes::KClosestNodes,
 };
 
 use crate::msg::{
@@ -40,7 +40,8 @@ pub(crate) struct NodeLookupTask {
 
 #[allow(dead_code)]
 impl NodeLookupTask {
-    pub(crate) fn new(target: &Id, routing_table: Rc<RefCell<RoutingTable>>) -> Self {
+    pub(crate) fn new(target: &Id,
+        routing_table: Rc<RefCell<RoutingTable>>) -> Self {
         Self {
             base_data: TaskData::new(),
             lookup_data: LookupTaskData::new(target),
@@ -128,9 +129,7 @@ impl Task for NodeLookupTask {
             };
 
             let mut req = Box::new(find_node_req::Message::new());
-            //let target = self.target().clone();
-            let target = Id::random();
-            req.with_target(target);
+            req.with_target(self.target().clone());
             req.with_want4(true);
             req.with_want6(false);
 
