@@ -9,7 +9,8 @@ use crate::{
     version,
     error,
     id::Id,
-    rpccall::RpcCall
+    rpccall::RpcCall,
+    error::Error,
 };
 
 use super::{
@@ -119,9 +120,11 @@ impl Message {
     }
 
     pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
-        let msg = Rc::new(RefCell::new(Self::new()));
-        msg.borrow_mut().from_cbor(input);
-        Ok(msg as Rc<RefCell<dyn Msg>>)
+        let mut msg = Self::new();
+        match msg.from_cbor(input) {
+            true => Ok(Rc::new(RefCell::new(msg))),
+            false => Err(Error::Protocol(format!("Invalid cobor value for find_node request message"))),
+        }
     }
 }
 

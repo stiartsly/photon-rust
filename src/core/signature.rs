@@ -172,7 +172,10 @@ impl KeyPair {
 
         unsafe {
             // Always success
-            crypto_sign_ed25519_sk_to_pk(as_uchar_ptr_mut!(pk), as_uchar_ptr!(input.as_bytes()));
+            crypto_sign_ed25519_sk_to_pk(
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr!(input.as_bytes())
+            );
         }
         KeyPair(sk, PublicKey::from(&pk))
     }

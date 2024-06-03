@@ -272,10 +272,9 @@ impl Message {
     }
 
     pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, Error> {
-        let msg = Rc::new(RefCell::new(Self::new()));
-        let mut binding = msg.borrow_mut();
-        match binding.from_cbor(input) {
-            true => Ok(Rc::clone(&msg) as Rc<RefCell<dyn Msg>>),
+        let mut msg = Self::new();
+        match msg.from_cbor(input) {
+            true => Ok(Rc::new(RefCell::new(msg))),
             false => Err(Error::Protocol(format!("Invalid cobor value for find_node request message"))),
         }
     }

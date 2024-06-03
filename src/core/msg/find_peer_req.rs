@@ -8,7 +8,7 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
-    error,
+    error::Error,
     id::Id,
     rpccall::RpcCall
 };
@@ -131,10 +131,10 @@ impl Message {
         }
     }
 
-    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
-        let msg = Rc::new(RefCell::new(Self::new()));
-        msg.borrow_mut().from_cbor(input);
-        Ok(msg as Rc<RefCell<dyn Msg>>)
+    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, Error> {
+        let mut msg = Self::new();
+        msg.from_cbor(input);
+        Ok(Rc::new(RefCell::new(msg)))
     }
 
     fn want(&self) -> i32 {

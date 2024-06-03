@@ -144,9 +144,10 @@ impl Node {
 
             match server::start_tweak(Rc::clone(&server), addr4.unwrap()) {
                 Ok(_) => {
+                    let dht4 = Rc::clone(&server.borrow().dht4());
                     _ = server::run_loop(
                         Rc::clone(&server),
-                        server.borrow().dht4(),
+                        dht4,
                         Arc::clone(&quit),
                     ).map_err(|err| {
                         error!("Unexpected error happened in the loop: {}.", err);
