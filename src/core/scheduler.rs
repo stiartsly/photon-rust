@@ -90,8 +90,7 @@ impl Scheduler {
     }
 }
 
-pub(crate) fn run_jobs(scheduler: &Rc<RefCell<Scheduler>>) {
-    let scheduler = Rc::clone(scheduler);
+pub(crate) fn run_jobs(scheduler: Rc<RefCell<Scheduler>>) {
     let jobs = {
         scheduler.borrow_mut().sync_time();
         scheduler.borrow_mut().pop_jobs()

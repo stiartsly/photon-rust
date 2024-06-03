@@ -26,7 +26,6 @@ use crate::{
     scheduler::{self, Scheduler},
     crypto_cache,
     crypto_cache::CryptoCache,
-    stats::Stats,
     msg::msg,
     bootstrap::BootstrapZone,
 };
@@ -47,11 +46,12 @@ pub(crate) struct Server<> {
 
     bootstrap_zone: Arc<Mutex<BootstrapZone>>,
 
-    stats: RefCell<Stats>,
-    calls: RefCell<HashMap<i32, Box<RpcCall>>>,
+    //stats: RefCell<Stats>,
+    calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
 
     option: LookupOption,
     dht4: Option<Rc<RefCell<DHT>>>,
+    queue4: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>,
 
     scheduler:  Rc<RefCell<Scheduler>>,
     token_man:  Rc<RefCell<TokenManager>>,
@@ -74,11 +74,13 @@ impl Server {
 
             bootstrap_zone: params.3,
 
-            stats: RefCell::new(Stats::new()),
-            calls: RefCell::new(HashMap::new()),
+            //stats: RefCell::new(Stats::new()),
+            calls: HashMap::new(),
+
 
             option: LookupOption::Conservative,
             dht4: None,
+            queue4: Rc::new(RefCell::new(LinkedList::new())),
 
             scheduler:  Rc::new(RefCell::new(Scheduler::new())),
             token_man:  Rc::new(RefCell::new(TokenManager::new())),
@@ -91,8 +93,8 @@ impl Server {
         &self.token_man
     }
 
-    pub(crate) fn scheduler(&self) -> &Rc<RefCell<Scheduler>> {
-        &self.scheduler
+    pub(crate) fn scheduler(&self) -> Rc<RefCell<Scheduler>> {
+        Rc::clone(&self.scheduler)
     }
 
     pub(crate) fn nodeid(&self) -> &Id {
@@ -101,6 +103,10 @@ impl Server {
 
     pub(crate) fn dht4(&self) -> Rc<RefCell<DHT>> {
         Rc::clone(self.dht4.as_ref().unwrap())
+    }
+
+    pub(crate) fn queue4(&self) -> Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>> {
+        Rc::clone(&self.queue4)
     }
 
     pub(crate) fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
@@ -185,6 +191,25 @@ impl Server {
     fn decrypt_into(&self, _: &Id, _: &[u8]) -> Result<Vec<u8>, Error> {
         unimplemented!()
     }
+
+    pub(crate) fn send_msg4(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        self.queue4.borrow_mut().push_back(msg)
+    }
+
+    pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
+        self.calls.insert(call.borrow().hash(), Rc::clone(&call));
+    }
+
+    fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let txid = msg.borrow().txid();
+        match self.calls.remove(&txid) {
+            Some(call) => {
+                msg.borrow_mut().with_associated_call(Rc::clone(&call));
+                call.borrow_mut().responsed(msg)
+            },
+            None => {}
+        }
+    }
 }
 
 fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
@@ -219,7 +244,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
     let mut running = true;
     rt.block_on(async move {
         let sock4 = UdpSocket::bind(dht4.borrow().socket_addr()).await?;
-        let queue4 = dht4.borrow().queue();
+        let queue4 = server.borrow_mut().queue4();
 
         let mut interval = interval_at(
             server.borrow().scheduler.borrow().next_time(),
@@ -231,6 +256,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                    Some(buf.to_vec())
                 }) => {
                     if let Ok(Some(msg)) = data {
+                        server.borrow_mut().responsed(Rc::clone(&msg));
                         dht4.borrow_mut().on_message(msg)
                     }
                 }
@@ -242,7 +268,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                 }
 
                 _ = interval.tick() => {
-                    scheduler::run_jobs(&server.borrow().scheduler);
+                    let scheduler = server.borrow().scheduler();
+                    scheduler::run_jobs(scheduler);
                 }
             }
 

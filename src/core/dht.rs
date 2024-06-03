@@ -1,6 +1,5 @@
 
 use std::rc::Rc;
-use std::collections::{LinkedList, HashMap};
 use std::cell::RefCell;
 use std::time::SystemTime;
 use std::net::SocketAddr;
@@ -59,15 +58,11 @@ pub(crate) struct DHT {
     bootstrap_nodes: Vec<Box<NodeInfo>>,
     bootstrap_time: Rc<RefCell<SystemTime>>,
 
-    calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
-
     routing_table: Rc<RefCell<RoutingTable>>,
     server: Rc<RefCell<Server>>,
     taskman: Rc<RefCell<TaskManager>>,
     tokenman: Rc<RefCell<TokenManager>>,
     scheduler: Rc<RefCell<Scheduler>>,
-
-    queue: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>
 }
 
 #[allow(dead_code)]
@@ -85,14 +80,10 @@ impl DHT {
             bootstrap_need: false,
             bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
 
-            calls: HashMap::new(),
-
             server: Rc::clone(&server),
             taskman:  Rc::new(RefCell::new(TaskManager::new())),
             tokenman: Rc::clone(server.borrow().tokenman()),
-            scheduler: Rc::clone(server.borrow().scheduler()),
-
-            queue: Rc::new(RefCell::new(LinkedList::new())),
+            scheduler: server.borrow().scheduler(),
         }
     }
 
@@ -115,10 +106,6 @@ impl DHT {
 
     pub(crate) fn routing_table(&self) -> Rc<RefCell<RoutingTable>> {
         Rc::clone(&self.routing_table)
-    }
-
-    pub(crate) fn queue(&self) -> Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>> {
-        Rc::clone(&self.queue)
     }
 
     pub(crate) fn bootstrap(&mut self) {
@@ -279,7 +266,6 @@ impl DHT {
     }
 
     pub(crate) fn on_message(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        self.responsed(Rc::clone(&msg));
         let kind = msg.borrow().kind();
         let received_msg = Rc::clone(&msg);
         match kind {
@@ -288,17 +274,6 @@ impl DHT {
             Kind::Response => self.on_response(msg),
         };
         self.received(received_msg);
-    }
-
-    fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        let txid = msg.borrow().txid();
-        match self.calls.remove(&txid) {
-            Some(call) => {
-                msg.borrow_mut().with_associated_call(Rc::clone(&call));
-                call.borrow_mut().responsed(msg)
-            },
-            None => {}
-        }
     }
 
     fn received(&mut self, msg: Rc<RefCell<dyn Msg>>) {
@@ -727,7 +702,7 @@ impl DHT {
             }, 2000, 10);
         }
 
-        self.queue.borrow_mut().push_back(msg);
+        self.server.borrow_mut().send_msg4(msg);
     }
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
@@ -738,11 +713,11 @@ impl DHT {
 
         let cloned_call = Rc::clone(&call);
         let msg = call.borrow_mut().req();
-        let txid = call.borrow_mut().hash();
-        self.calls.insert(txid, call);
+        let hashid = call.borrow().hash();
+        self.server.borrow_mut().send_call(call);
 
         if let Some(msg) = msg {
-            msg.borrow_mut().set_txid(txid);
+            msg.borrow_mut().set_txid(hashid);
             msg.borrow_mut().with_associated_call(cloned_call);
             self.send_msg(msg);
         }
