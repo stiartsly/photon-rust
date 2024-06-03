@@ -195,7 +195,7 @@ pub(crate) trait Msg: Display {
     fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool;
 }
 
-pub(crate) fn deser(buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
+pub(crate) fn deser(buf: &[u8]) -> Result<Rc<RefCell<dyn Msg>>, Error> {
     let mut msg_type = 0;
     let value: ciborium::value::Value;
     let reader = cbor::Reader::new(buf);
@@ -218,7 +218,7 @@ pub(crate) fn deser(buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
         )));
     }
 
-    let msg = match Kind::from(msg_type) {
+    match Kind::from(msg_type) {
         Kind::Error => {
             error::Message::from(&value)
         },
@@ -244,12 +244,11 @@ pub(crate) fn deser(buf: &[u8]) -> Result<Box<dyn Msg>, Error> {
                 "Invalid response message: {}, ignored it", Method::from(msg_type)
             )))
         }
-    };
-    msg
+    }
 }
 
-pub(crate) fn serialize(msg: &Box<dyn Msg>) -> Vec<u8> {
-    let mut value = msg.to_cbor();
+pub(crate) fn serialize(msg: Rc<RefCell<dyn Msg>>) -> Vec<u8> {
+    let mut value = msg.borrow().to_cbor();
     let mut encoded = Vec::new() as Vec<u8>;
     let writer = cbor::Writer::new(&mut encoded);
     let _ = ciborium::ser::into_writer(&mut value, writer);

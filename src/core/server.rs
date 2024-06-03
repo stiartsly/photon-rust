@@ -230,11 +230,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                 data = read_socket(&sock4, Rc::clone(&buffer), move |_, buf| {
                    Some(buf.to_vec())
                 }) => {
-                    match data {
-                        Ok(mut msg) => {
-                            dht4.borrow_mut().on_message(msg.take().unwrap())
-                        },
-                        Err(_) => {},
+                    if let Ok(Some(msg)) = data {
+                        dht4.borrow_mut().on_message(msg)
                     }
                 }
 
@@ -262,7 +259,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
 async fn read_socket<F>(socket: &UdpSocket,
     buffer: Rc<RefCell<Vec<u8>>>,
     mut decrypt: F
-) -> Result<Option<Box<dyn Msg>>, io::Error>
+) -> Result<Option<Rc<RefCell<dyn Msg>>>, io::Error>
     where F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
 {
     let mut buf = buffer.borrow_mut();
@@ -275,7 +272,7 @@ async fn read_socket<F>(socket: &UdpSocket,
         return Ok(None);
     };
 
-    let mut msg = msg::deser(&unwrap!(plain)).map_err(|err| {
+    let msg = msg::deser(&unwrap!(plain)).map_err(|err| {
         //self.stats.borrow_mut().on_dropped_packet(size);
         warn!("Got a wrong packet from {}, ignored. {}", from_addr, err);
     }).unwrap();
@@ -283,13 +280,13 @@ async fn read_socket<F>(socket: &UdpSocket,
     //self.stats.borrow_mut().on_received_bytes(size);
     //self.stats.borrow_mut().on_received_msg(&msg);
 
-    msg.set_id(fromid.clone());
-    msg.set_addr(from_addr);
+    msg.borrow_mut().set_id(fromid.clone());
+    msg.borrow_mut().set_addr(from_addr);
 
-    info!("Received message: {}/{} from {}:[size: {}] {}", msg.method(), msg.kind(), from_addr, size, msg);
+    info!("Received message: {}/{} from {}:[size: {}] {}", msg.borrow().method(), msg.borrow().kind(), from_addr, size, msg.borrow());
 
     // transaction id should be a non-zero integer as a normal message.
-    if msg.kind() != msg::Kind::Error && msg.txid() == 0 {
+    if msg.borrow().kind() != msg::Kind::Error && msg.borrow().txid() == 0 {
         warn!("Reeived a message with invalid transaction id");
         // self.send_err(msg, ErrorCode::ProtocolError,
         //    "Received a message with an invalid transaction id, expected a non-zero transaction id");
@@ -297,14 +294,14 @@ async fn read_socket<F>(socket: &UdpSocket,
     }
 
     // Just respond to incoming requests, no need to match them to pending requests
-    if msg.kind() == msg::Kind::Request {
+    if msg.borrow().kind() == msg::Kind::Request {
         return Ok(Some(msg));
     }
 
     Ok(Some(msg))
 }
 
-async fn write_socket<F>(socket: &UdpSocket, queue: Rc<RefCell<LinkedList<Box<dyn Msg>>>>, _: F) -> Result<(), io::Error>
+async fn write_socket<F>(socket: &UdpSocket, queue: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>, _: F) -> Result<(), io::Error>
 where
     F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
 {
@@ -315,11 +312,11 @@ where
 
     match queue.borrow_mut().pop_front() {
         Some(msg) => {
-            let serialized = msg::serialize(&msg);
+            let serialized = msg::serialize(Rc::clone(&msg));
             let mut buffer = Vec::new() as Vec<u8>;
-            buffer.extend_from_slice(msg.id().as_bytes());
+            buffer.extend_from_slice(msg.borrow().id().as_bytes());
             buffer.extend_from_slice(&serialized);
-            _ = socket.send_to(&buffer, msg.addr()).await?;
+            _ = socket.send_to(&buffer, msg.borrow().addr()).await?;
         },
         None => {
             sleep(Duration::from_millis(500)).await;

@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::collections::LinkedList;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use super::{
     closest_set::ClosestSet,
@@ -55,7 +56,7 @@ impl Task for ValueAnnounceTask {
         unimplemented!()
     }
 
-    fn call_responsed(&mut self, _: &RpcCall, _: &Box<dyn Msg>) {
+    fn call_responsed(&mut self, _: &RpcCall, _: Rc<RefCell<dyn Msg>>) {
         unimplemented!()
     }
 

@@ -1,4 +1,6 @@
 use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::time::SystemTime;
 
 use crate::{
@@ -24,8 +26,8 @@ pub(crate) struct RpcCall {
     hashid: i32,
     target: Box<NodeInfo>,
 
-    req: Option<Box<dyn Msg>>,
-    rsp: Option<Box<dyn Msg>>,
+    req: Option<Rc<RefCell<dyn Msg>>>,
+    rsp: Option<Rc<RefCell<dyn Msg>>>,
 
     sent: SystemTime,
     responsed: SystemTime,
@@ -33,7 +35,7 @@ pub(crate) struct RpcCall {
     state: State,
 
     state_changed_fn: Box<dyn Fn(&RpcCall, &State, &State)>,
-    responsed_fn: Box<dyn Fn(&RpcCall, &Box<dyn Msg>)>,
+    responsed_fn: Box<dyn Fn(&RpcCall, Rc<RefCell<dyn Msg>>)>,
     stalled_fn: Box<dyn Fn(&RpcCall)>,
     timeout_fn: Box<dyn Fn(&RpcCall)>
 }
@@ -42,7 +44,7 @@ static mut HASH_ID: i32 = 0;
 
 #[allow(dead_code)]
 impl RpcCall {
-    pub(crate) fn new(ni: Box<NodeInfo>, req: Box<dyn Msg>) -> Self {
+    pub(crate) fn new(ni: Box<NodeInfo>, req: Rc<RefCell<dyn Msg>>) -> Self {
         let hash = unsafe {
             HASH_ID += 1;
             if HASH_ID >= i32::MAX {
@@ -81,26 +83,37 @@ impl RpcCall {
     }
 
     pub(crate) fn matches_id(&self) -> bool {
-        match self.rsp.as_ref() {
-            Some(msg) => msg.id() == self.target.id(),
-            None => false
-        }
+        let rsp = match self.rsp.as_ref() {
+            Some(rsp) => rsp,
+            None => return false,
+        };
+        rsp.borrow().id() == self.target_id()
     }
 
     pub(crate) fn matches_addr(&self) -> bool {
-        /*match self.rsp.as_ref() {
-            Some(msg) => msg.addr() == self.target.socket_addr(),
-            None => false
-        }*/
-        true
+        let req = match self.req.as_ref() {
+            Some(req) => req,
+            None => return false,
+        };
+        let rsp = match self.rsp.as_ref() {
+            Some(rsp) => rsp,
+            None => return false,
+        };
+        req.borrow().addr() == rsp.borrow().addr()
     }
 
-    pub(crate) fn req(&mut self) ->Option<Box<dyn Msg>> {
-        self.req.take()
+    pub(crate) fn req(&self) ->Option<Rc<RefCell<dyn Msg>>> {
+        match self.req.as_ref() {
+            Some(msg) => Some(Rc::clone(msg)),
+            None => None
+        }
     }
 
-    pub(crate) fn rsp(&self) -> Option<&Box<dyn Msg>> {
-        self.rsp.as_ref()
+    pub(crate) fn rsp(&self) -> Option<Rc<RefCell<dyn Msg>>>  {
+        match self.rsp.as_ref() {
+            Some(msg) => Some(Rc::clone(msg)),
+            None => None
+        }
     }
 
     pub(crate) fn sent_time(&self) -> &SystemTime {
@@ -125,7 +138,7 @@ impl RpcCall {
     }
 
     pub(crate) fn set_responsed_fn<F>(&mut self, f: F)
-    where F: Fn(&RpcCall, &Box<dyn Msg>) + 'static {
+    where F: Fn(&RpcCall, Rc<RefCell<dyn Msg>>) + 'static {
         self.responsed_fn = Box::new(f)
     }
 
@@ -148,7 +161,7 @@ impl RpcCall {
             State::Timeout => (self.timeout_fn)(self),
             State::Stalled => (self.stalled_fn)(self),
             State::Responsed => {
-                if let Some(rsp) = self.rsp.as_ref() {
+                if let Some(rsp) = self.rsp() {
                     (self.responsed_fn)(self, rsp)
                 }
             }
@@ -161,17 +174,15 @@ impl RpcCall {
         self.update_state(State::Sent);
     }
 
-    pub(crate) fn responsed(&mut self, rsp: Box<dyn Msg>) -> Box<dyn Msg> {
+    pub(crate) fn responsed(&mut self, rsp: Rc<RefCell<dyn Msg>>) {
         self.rsp = Some(rsp);
         self.responsed = SystemTime::now();
 
-        match unwrap!(self.rsp).kind() {
+        match unwrap!(self.rsp()).borrow().kind() {
             msg::Kind::Request => {},
             msg::Kind::Response => self.update_state(State::Responsed),
             msg::Kind::Error => self.update_state(State::Err)
         }
-
-        self.rsp.take().unwrap()
     }
 
     fn failed(&mut self) {

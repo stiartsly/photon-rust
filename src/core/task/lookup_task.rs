@@ -109,10 +109,10 @@ pub(crate) trait LookupTask {
         candidate.clear_sent()
     }
 
-    fn call_responsed(&mut self, call: &RpcCall, rsp: &Box<dyn Msg>) {
+    fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
         if let Some(cn) = self.remove_candidate(call.target_id()) {
             cn.borrow_mut().set_replied();
-            cn.borrow_mut().set_token(rsp.token());
+            cn.borrow_mut().set_token(rsp.borrow().token());
             self.add_closest(cn);
         }
     }

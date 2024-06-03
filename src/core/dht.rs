@@ -67,7 +67,7 @@ pub(crate) struct DHT {
     tokenman: Rc<RefCell<TokenManager>>,
     scheduler: Rc<RefCell<Scheduler>>,
 
-    queue: Rc<RefCell<LinkedList<Box<dyn Msg>>>>,
+    queue: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>
 }
 
 #[allow(dead_code)]
@@ -117,7 +117,7 @@ impl DHT {
         Rc::clone(&self.routing_table)
     }
 
-    pub(crate) fn queue(&self) -> Rc<RefCell<LinkedList<Box<dyn Msg>>>> {
+    pub(crate) fn queue(&self) -> Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>> {
         Rc::clone(&self.queue)
     }
 
@@ -133,11 +133,11 @@ impl DHT {
         let count = Rc::new(RefCell::new(0));
 
         for node in bns.iter() {
-            let mut req = Box::new(find_node_req::Message::new());
-            req.set_id(node.id().clone());
-            req.set_addr(node.socket_addr().clone());
-            req.with_target(Id::random());
-            req.with_want4(true);
+            let req = Rc::new(RefCell::new(find_node_req::Message::new()));
+            req.borrow_mut().set_id(node.id().clone());
+            req.borrow_mut().set_addr(node.socket_addr().clone());
+            req.borrow_mut().with_target(Id::random());
+            req.borrow_mut().with_want4(true);
 
             let call = Rc::new(RefCell::new(RpcCall::new(node.clone(), req)));
             let len = bns.len();
@@ -152,7 +152,7 @@ impl DHT {
                 if cur == &rpccall::State::Responsed || cur == &rpccall::State::Err ||
                     cur == &rpccall::State::Timeout {
                     if let Some(rsp) = call.rsp() {
-                        cloned_nodes.borrow_mut().extend_from_slice(rsp.nodes4());
+                        cloned_nodes.borrow_mut().extend_from_slice(rsp.borrow().nodes4());
                     }
 
 
@@ -278,27 +278,31 @@ impl DHT {
         self.taskman.borrow_mut().cancel_all();
     }
 
-    pub(crate) fn on_message(&mut self, msg: Box<dyn Msg>) {
-        let msg = self.responsed(msg);
-        match msg.kind() {
-            Kind::Error => self.on_error(&msg),
-            Kind::Request => self.on_request(&msg),
-            Kind::Response => self.on_response(&msg),
+    pub(crate) fn on_message(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        self.responsed(Rc::clone(&msg));
+        let kind = msg.borrow().kind();
+        let received_msg = Rc::clone(&msg);
+        match kind {
+            Kind::Error => self.on_error(msg),
+            Kind::Request => self.on_request(msg),
+            Kind::Response => self.on_response(msg),
         };
-        self.received(msg);
+        self.received(received_msg);
     }
 
-    fn responsed(&mut self, mut msg: Box<dyn Msg>) -> Box<dyn Msg> {
-        match self.calls.remove(&msg.txid()) {
+    fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let txid = msg.borrow().txid();
+        match self.calls.remove(&txid) {
             Some(call) => {
-                msg.with_associated_call(Rc::clone(&call));
+                msg.borrow_mut().with_associated_call(Rc::clone(&call));
                 call.borrow_mut().responsed(msg)
             },
-            None => msg
+            None => {}
         }
     }
 
-    fn received(&mut self, msg: Box<dyn Msg>) {
+    fn received(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let msg = msg.borrow();
         let from_id = msg.id();
         let from_addr = msg.addr();
 
@@ -333,9 +337,9 @@ impl DHT {
             new_entry.signal_response();
             new_entry.merge_request_time(call.borrow().sent_time().clone());
         } else if !entry_found {
-            let mut req = Box::new(ping_req::Message::new());
-            req.set_id(msg.id().clone());
-            req.set_addr(from_addr.clone());
+            let req = Rc::new(RefCell::new(ping_req::Message::new()));
+            req.borrow_mut().set_id(msg.id().clone());
+            req.borrow_mut().set_addr(from_addr.clone());
 
             let ni = Box::new(new_entry.inner_node());
             let call = Rc::new(RefCell::new(RpcCall::new(ni, req)));
@@ -344,8 +348,9 @@ impl DHT {
         self.routing_table.borrow_mut().put(new_entry);
     }
 
-    fn on_request(&mut self, msg: &Box<dyn Msg>) {
-        match msg.method() {
+    fn on_request(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let method = msg.borrow().method();
+        match method {
             Method::Ping => self.on_ping(msg),
             Method::FindNode => self.on_find_node(msg),
             Method::FindValue => self.on_find_value(msg),
@@ -358,9 +363,10 @@ impl DHT {
         }
     }
 
-    fn on_response(&mut self, _: &Box<dyn Msg>) {}
+    fn on_response(&mut self, _: Rc<RefCell<dyn Msg>>) {}
 
-    fn on_error(&mut self, msg: &Box<dyn Msg>) {
+    fn on_error(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let msg = msg.borrow();
         warn!("Error from {}/{} - {}:{}, txid {}",
             msg.addr(),
             version::formatted_version(msg.version()),
@@ -370,33 +376,36 @@ impl DHT {
         );
     }
 
-    fn send_err(&mut self, msg: &Box<dyn Msg>, code: i32, str: &str) {
-        let mut err = Box::new(error::Message::new());
+    fn send_err(&mut self, msg: Rc<RefCell<dyn Msg>>, code: i32, str: &str) {
+        let msg = msg.borrow();
+        let err = Rc::new(RefCell::new(error::Message::new()));
 
-        err.set_id(msg.id().clone());
-        err.set_addr(msg.addr().clone());
-        err.set_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
-        err.set_txid(msg.txid());
-        err.with_msg(str);
-        err.with_code(code);
+        err.borrow_mut().set_id(msg.id().clone());
+        err.borrow_mut().set_addr(msg.addr().clone());
+        err.borrow_mut().set_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
+        err.borrow_mut().set_txid(msg.txid());
+        err.borrow_mut().with_msg(str);
+        err.borrow_mut().with_code(code);
 
         self.send_msg(err);
     }
 
-    fn on_ping(&mut self, req: &Box<dyn Msg>) {
-        let mut rsp = Box::new(ping_rsp::Message::new());
-        rsp.set_id(req.id().clone());
-        rsp.set_addr(req.addr().clone());
-        rsp.set_txid(req.txid());
+    fn on_ping(&mut self, req: Rc<RefCell<dyn Msg>>) {
+        let req = req.borrow();
+        let rsp = Rc::new(RefCell::new(ping_rsp::Message::new()));
+        rsp.borrow_mut().set_id(req.id().clone());
+        rsp.borrow_mut().set_addr(req.addr().clone());
+        rsp.borrow_mut().set_txid(req.txid());
 
         self.send_msg(rsp);
     }
 
-    fn on_find_node(&mut self, req: &Box<dyn Msg>) {
-        let mut rsp = Box::new(find_node_rsp::Message::new());
-        rsp.set_id(req.id().clone());
-        rsp.set_addr(req.addr().clone());
-        rsp.set_txid(req.txid());
+    fn on_find_node(&mut self, req: Rc<RefCell<dyn Msg>>) {
+        let req = req.borrow();
+        let rsp = Rc::new(RefCell::new(find_node_rsp::Message::new()));
+        rsp.borrow_mut().set_id(req.id().clone());
+        rsp.borrow_mut().set_addr(req.addr().clone());
+        rsp.borrow_mut().set_txid(req.txid());
 
         if req.want4() {
             let mut knodes = KClosestNodes::new(
@@ -405,24 +414,25 @@ impl DHT {
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
-            rsp.populate_closest_nodes4(knodes.as_nodes());
+            rsp.borrow_mut().populate_closest_nodes4(knodes.as_nodes());
         }
 
         if req.want_token() {
             let token = self.tokenman.borrow_mut().generate_token(
                 req.id(), req.addr(), req.target()
             );
-            rsp.populate_token(token);
+            rsp.borrow_mut().populate_token(token);
         }
 
         self.send_msg(rsp)
     }
 
-    fn on_find_value(&mut self, req: &Box<dyn Msg>) {
-        let mut rsp = Box::new(find_value_rsp::Message::new());
-        rsp.set_id(req.id().clone());
-        rsp.set_addr(req.addr().clone());
-        rsp.set_txid(req.txid());
+    fn on_find_value(&mut self, req: Rc<RefCell<dyn Msg>>) {
+        let req = req.borrow();
+        let rsp = Rc::new(RefCell::new(find_value_rsp::Message::new()));
+        rsp.borrow_mut().set_id(req.id().clone());
+        rsp.borrow_mut().set_addr(req.addr().clone());
+        rsp.borrow_mut().set_txid(req.txid());
 
         let mut has_value = false;
         let value = self.server.borrow().storage().borrow().value(req.target());
@@ -432,7 +442,7 @@ impl DHT {
                 || req.seq() <= value.as_ref().unwrap().sequence_number()
             {
                 has_value = true;
-                rsp.populate_value(value.unwrap());
+                rsp.borrow_mut().populate_value(value.unwrap());
             }
         }
 
@@ -443,20 +453,21 @@ impl DHT {
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
-            rsp.populate_closest_nodes4(knodes.as_nodes());
+            rsp.borrow_mut().populate_closest_nodes4(knodes.as_nodes());
         }
 
         if req.want_token() {
             let token = self.tokenman.borrow_mut().generate_token(
                 req.id(), req.addr(), req.target()
             );
-            rsp.populate_token(token);
+            rsp.borrow_mut().populate_token(token);
         }
 
         self.send_msg(rsp);
     }
 
-    fn on_store_value(&mut self, req: &Box<dyn Msg>) {
+    fn on_store_value(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let req = msg.borrow();
         let value = req.value();
         let value_id = value.as_ref().unwrap().id();
 
@@ -468,38 +479,38 @@ impl DHT {
                 "Received a store value request with invalid token from {}",
                 req.addr()
             );
-            self.send_err(
-                req,
-                203,
+            self.send_err(Rc::clone(&msg), 203,
                 "Invalid token for STORE VALUE request",
             );
             return;
         }
 
         if !value.as_ref().unwrap().is_valid() {
-            self.send_err(req, 203, "Invalid value");
+            self.send_err(Rc::clone(&msg), 203, "Invalid value");
             return;
         }
+
         // TODO: store value.
-        let mut rsp = Box::new(store_value_rsp::Message::new());
-        rsp.set_id(req.id().clone());
-        rsp.set_addr(req.addr().clone());
-        rsp.set_txid(req.txid());
+        let rsp = Rc::new(RefCell::new(store_value_rsp::Message::new()));
+        rsp.borrow_mut().set_id(req.id().clone());
+        rsp.borrow_mut().set_addr(req.addr().clone());
+        rsp.borrow_mut().set_txid(req.txid());
 
         self.send_msg(rsp);
     }
 
-    fn on_find_peers(&mut self, req: &Box<dyn Msg>) {
-        let mut rsp = Box::new(find_peer_rsp::Message::new());
-        rsp.set_id(req.id().clone());
-        rsp.set_addr(req.addr().clone());
-        rsp.set_txid(req.txid());
+    fn on_find_peers(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let req = msg.borrow();
+        let rsp = Rc::new(RefCell::new(find_peer_rsp::Message::new()));
+        rsp.borrow_mut().set_id(req.id().clone());
+        rsp.borrow_mut().set_addr(req.addr().clone());
+        rsp.borrow_mut().set_txid(req.txid());
 
         let mut has_peers = false;
         let peers = self.server.borrow().storage().borrow().peers(req.target(), 8);
         if !peers.is_empty() {
             has_peers = true;
-            rsp.populate_peers(peers);
+            rsp.borrow_mut().populate_peers(peers);
         }
 
         if req.want4() && has_peers {
@@ -509,20 +520,21 @@ impl DHT {
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
-            rsp.populate_closest_nodes4(knodes.as_nodes());
+            rsp.borrow_mut().populate_closest_nodes4(knodes.as_nodes());
         }
 
         if req.want_token() {
             let token = self.tokenman.borrow_mut().generate_token(
                 req.id(), req.addr(), req.target()
             );
-            rsp.populate_token(token);
+            rsp.borrow_mut().populate_token(token);
         }
 
         self.send_msg(rsp);
     }
 
-    fn on_announce_peer(&mut self, req: &Box<dyn Msg>) {
+    fn on_announce_peer(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        let req = msg.borrow();
         if is_bogon_address(req.addr()) {
             info!(
                 "Received an announce peer request from bogon address {}, ignored ",
@@ -539,7 +551,7 @@ impl DHT {
                 req.addr()
             );
             self.send_err(
-                req, 203,"Invalid token for ANNOUNCE PEER request",
+                Rc::clone(&msg), 203,"Invalid token for ANNOUNCE PEER request",
             );
             return;
         }
@@ -547,7 +559,7 @@ impl DHT {
         let peers = req.peers();
         for peer in peers.iter() {
             if !peer.is_valid() {
-                self.send_err(req, 203, "One peer is invalid peer");
+                self.send_err(Rc::clone(&msg), 203, "One peer is invalid peer");
                 return;
             }
         }
@@ -559,10 +571,10 @@ impl DHT {
         );
         // TODO: Store peers.
 
-        let mut rsp = Box::new(announce_peer_rsp::Message::new());
-        rsp.set_id(req.id().clone());
-        rsp.set_addr(req.addr().clone());
-        rsp.set_txid(req.txid());
+        let rsp = Rc::new(RefCell::new(announce_peer_rsp::Message::new()));
+        rsp.borrow_mut().set_id(req.id().clone());
+        rsp.borrow_mut().set_addr(req.addr().clone());
+        rsp.borrow_mut().set_txid(req.txid());
 
         self.send_msg(rsp);
     }
@@ -701,12 +713,12 @@ impl DHT {
         unimplemented!()
     }
 
-    fn send_msg(&mut self, msg: Box<dyn Msg>) {
+    fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         // Handle associated call if it exists:
         // - Notify Kademlia DHT of being interacting with a neighboring node;
         // - Process some internal state for this RPC call.
-        if let Some(call) = msg.associated_call() {
-            self.on_send(msg.id());
+        if let Some(call) = msg.borrow().associated_call() {
+            self.on_send(msg.borrow().id());
             call.borrow_mut().send();
 
             let call = Rc::clone(&call);
@@ -729,9 +741,9 @@ impl DHT {
         let txid = call.borrow_mut().hash();
         self.calls.insert(txid, call);
 
-        if let Some(mut msg) = msg {
-            msg.set_txid(txid);
-            msg.with_associated_call(cloned_call);
+        if let Some(msg) = msg {
+            msg.borrow_mut().set_txid(txid);
+            msg.borrow_mut().with_associated_call(cloned_call);
             self.send_msg(msg);
         }
     }

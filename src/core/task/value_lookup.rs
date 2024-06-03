@@ -1,4 +1,6 @@
 use std::any::Any;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use super::task::{Task, TaskData};
 use crate::{
@@ -75,7 +77,7 @@ impl Task for ValueLookupTask {
         unimplemented!()
     }
 
-    fn call_responsed(&mut self, _: &RpcCall, _: &Box<dyn Msg>) {
+    fn call_responsed(&mut self, _: &RpcCall, _: Rc<RefCell<dyn Msg>>) {
         unimplemented!()
     }
 

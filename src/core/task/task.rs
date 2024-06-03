@@ -103,7 +103,7 @@ pub(crate) trait Task {
     fn prepare(&mut self);
     fn update(&mut self);
     fn call_sent(&mut self, _: &RpcCall);
-    fn call_responsed(&mut self, call: &RpcCall, rsp: &Box<dyn Msg>);
+    fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>);
     fn call_error(&mut self, call: &RpcCall);
     fn call_timeout(&mut self, call: &RpcCall);
     fn as_any(&self) -> &dyn Any;
@@ -204,7 +204,7 @@ pub(crate) trait Task {
 
     fn send_call(&mut self,
         cn: Rc<RefCell<CandidateNode>>,
-        msg: Box<dyn Msg + 'static>,
+        msg: Rc<RefCell<dyn Msg>>,
         _: Box<dyn FnMut(Rc<RefCell<RpcCall>>)>)
     -> Result<(), Error> {
         if self.can_request() {
@@ -223,8 +223,9 @@ pub(crate) trait Task {
                 CallState::Responsed => {
                     task.borrow_mut().data_mut().inflights.remove(&call.hash());
                     if task.borrow().is_done() {
-                        let msg = call.rsp();
-                        task.borrow_mut().call_responsed(call, msg.as_ref().unwrap());
+                        if let Some(msg) = call.rsp() {
+                            task.borrow_mut().call_responsed(call, msg);
+                        }
                     }
                 },
                 CallState::Err => {
