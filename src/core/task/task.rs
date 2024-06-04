@@ -205,19 +205,17 @@ pub(crate) trait Task {
     fn send_call(&mut self,
         cn: Rc<RefCell<CandidateNode>>,
         msg: Rc<RefCell<dyn Msg>>,
-        _: Box<dyn FnMut(Rc<RefCell<RpcCall>>)>)
+        mut f: Box<dyn FnMut(Rc<RefCell<RpcCall>>)>)
     -> Result<(), Error> {
-        if self.can_request() {
+        if !self.can_request() {
             return Ok(())
         }
 
         let ni = Box::new(cn.borrow().node().clone());
         let call = Rc::new(RefCell::new(RpcCall::new(ni, msg)));
         let task = Rc::clone(self.data().ref_task.as_ref().unwrap());
-        //let server = Rc::clone(self.data().server.as_ref().unwrap());
+        let server = Rc::clone(self.data().server.as_ref().unwrap());
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
-            task.borrow_mut().call_sent(call);
-
             match prev_state {
                 CallState::Sent => task.borrow_mut().call_sent(call),
                 CallState::Responsed => {
@@ -243,12 +241,12 @@ pub(crate) trait Task {
             //}
             println!(">>>>>>>>>>");
         });
-        // (f)(Rc::clone(&call));
-        // self.data_mut().inflights.insert(call.borrow().hash(), Rc::clone(&call));
+
+        (f)(Rc::clone(&call));
+        self.data_mut().inflights.insert(call.borrow().hash(), Rc::clone(&call));
 
         // debug!("Task#{} sending call to {}{}", self.taskid(), node, msg.addr());
-        //TODO: server.borrow_mut().send_call(call);
-
+        server.borrow_mut().send_call(call);
 
         println!("send call>>>>>>");
         Ok(())
