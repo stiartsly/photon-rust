@@ -193,21 +193,32 @@ impl Server {
     }
 
     pub(crate) fn send_msg4(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        self.queue4.borrow_mut().push_back(msg)
+        if let Some(call) = msg.borrow().associated_call() {
+           call.borrow_mut().send();
+
+            let call = Rc::clone(&call);
+            self.scheduler.borrow_mut().add(move || {
+               call.borrow_mut().check_timeout()
+            }, 2000, 10);
+        }
+
+        self.queue4.borrow_mut().push_back(msg);
     }
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
+        call.borrow_mut().set_responsed_fn(|_,_| {});
+        call.borrow_mut().set_timeout_fn(|_call| {
+            // self.on_timeout(_call);
+        });
+
         self.calls.insert(call.borrow().hash(), Rc::clone(&call));
     }
 
     fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         let txid = msg.borrow().txid();
-        match self.calls.remove(&txid) {
-            Some(call) => {
-                msg.borrow_mut().with_associated_call(Rc::clone(&call));
-                call.borrow_mut().responsed(msg)
-            },
-            None => {}
+        if let Some(call) = self.calls.remove(&txid) {
+            msg.borrow_mut().with_associated_call(Rc::clone(&call));
+            call.borrow_mut().responsed(msg)
         }
     }
 }

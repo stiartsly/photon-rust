@@ -688,36 +688,21 @@ impl DHT {
     }
 
     fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        // Handle associated call if it exists:
-        // - Notify Kademlia DHT of being interacting with a neighboring node;
-        // - Process some internal state for this RPC call.
-        if let Some(call) = msg.borrow().associated_call() {
+        if msg.borrow().associated_call().is_some() {
             self.on_send(msg.borrow().id());
-            call.borrow_mut().send();
-
-            let call = Rc::clone(&call);
-            self.scheduler.borrow_mut().add(move || {
-               call.borrow_mut().check_timeout()
-            }, 2000, 10);
         }
-
         self.server.borrow_mut().send_msg4(msg);
     }
 
-    pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
-        call.borrow_mut().set_responsed_fn(|_,_| {});
-        call.borrow_mut().set_timeout_fn(|_call| {
-            // self.on_timeout(_call);
-        });
-
-        let cloned_call = Rc::clone(&call);
+    fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
         let msg = call.borrow_mut().req();
         let hashid = call.borrow().hash();
+        let cloned = Rc::clone(&call);
         self.server.borrow_mut().send_call(call);
 
         if let Some(msg) = msg {
             msg.borrow_mut().set_txid(hashid);
-            msg.borrow_mut().with_associated_call(cloned_call);
+            msg.borrow_mut().with_associated_call(cloned);
             self.send_msg(msg);
         }
     }
