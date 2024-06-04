@@ -12,7 +12,7 @@ use tokio::net::UdpSocket;
 use tokio::time::{sleep, interval_at, Duration};
 
 use crate::{
-    unwrap, as_millis,
+    as_millis,
     constants,
     cryptobox,
     id::{self, Id},
@@ -56,7 +56,7 @@ pub(crate) struct Server<> {
     scheduler:  Rc<RefCell<Scheduler>>,
     token_man:  Rc<RefCell<TokenManager>>,
     storage:    Rc<RefCell<dyn DataStorage>>,
-    crypto_ctx: Rc<RefCell<CryptoCache>>,
+    crypto_ctx: Rc<RefCell<CryptoCache>>
 }
 
 #[allow(dead_code)]
@@ -240,8 +240,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         .unwrap();
 
     let buffer = Rc::new(RefCell::new(vec![0; 64*1024]));
-
     let mut running = true;
+
     rt.block_on(async move {
         let sock4 = UdpSocket::bind(dht4.borrow().socket_addr()).await?;
         let queue4 = server.borrow_mut().queue4();
@@ -253,7 +253,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         while running {
             tokio::select! {
                 data = read_socket(&sock4, Rc::clone(&buffer), move |_, buf| {
-                   Some(buf.to_vec())
+                   Ok(buf.to_vec())
                 }) => {
                     if let Ok(Some(msg)) = data {
                         server.borrow_mut().responsed(Rc::clone(&msg));
@@ -287,36 +287,35 @@ async fn read_socket<F>(socket: &UdpSocket,
     buffer: Rc<RefCell<Vec<u8>>>,
     mut decrypt: F
 ) -> Result<Option<Rc<RefCell<dyn Msg>>>, io::Error>
-    where F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
+    where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
 {
     let mut buf = buffer.borrow_mut();
-    let (size, from_addr) = socket.recv_from(&mut buf).await?;
-    let fromid = Id::from_bytes(&buf[0.. id::ID_BYTES]);
-    let plain = decrypt(&fromid, &mut buf[id::ID_BYTES .. size]);
-    if plain.is_none() {
-        //self.stats.borrow_mut().on_dropped_packet(size);
-        warn!("Decrypt packet error from {}, ignored: len {}", from_addr, size);
-        return Ok(None);
+    let (len, from) = socket.recv_from(&mut buf).await?;
+    let from_id = Id::from_bytes(&buf[0.. id::ID_BYTES]);
+
+    let plain = match decrypt(&from_id, &mut buf[id::ID_BYTES .. len]) {
+        Ok(plain) => plain,
+        Err(err) => {
+            warn!("Decrypt packet error {} from {} ", err, from);
+            return Ok(None);
+        }
     };
 
-    let msg = msg::deser(&unwrap!(plain)).map_err(|err| {
-        //self.stats.borrow_mut().on_dropped_packet(size);
-        warn!("Got a wrong packet from {}, ignored. {}", from_addr, err);
-    }).unwrap();
+    let msg = match msg::deser(&plain) {
+        Ok(msg) => msg,
+        Err(err) => {
+            warn!("Got a wrong packet from {}, ignored. {}", from, err);
+            return Ok(None);
+        }
+    };
 
-    //self.stats.borrow_mut().on_received_bytes(size);
-    //self.stats.borrow_mut().on_received_msg(&msg);
+    msg.borrow_mut().set_id(from_id);
+    msg.borrow_mut().set_addr(from);
 
-    msg.borrow_mut().set_id(fromid.clone());
-    msg.borrow_mut().set_addr(from_addr);
+    info!("Received message: {}/{} from {}:[size: {}] {}", msg.borrow().method(), msg.borrow().kind(), from, len, msg.borrow());
 
-    info!("Received message: {}/{} from {}:[size: {}] {}", msg.borrow().method(), msg.borrow().kind(), from_addr, size, msg.borrow());
-
-    // transaction id should be a non-zero integer as a normal message.
     if msg.borrow().kind() != msg::Kind::Error && msg.borrow().txid() == 0 {
-        warn!("Reeived a message with invalid transaction id");
-        // self.send_err(msg, ErrorCode::ProtocolError,
-        //    "Received a message with an invalid transaction id, expected a non-zero transaction id");
+        warn!("Received a message with invalid transaction id");
         return Ok(None);
     }
 
