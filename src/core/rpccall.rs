@@ -44,7 +44,7 @@ static mut HASH_ID: i32 = 0;
 
 #[allow(dead_code)]
 impl RpcCall {
-    pub(crate) fn new(ni: Box<NodeInfo>, req: Rc<RefCell<dyn Msg>>) -> Self {
+    pub(crate) fn new(target: Box<NodeInfo>, req: Rc<RefCell<dyn Msg>>) -> Self {
         let hash = unsafe {
             HASH_ID += 1;
             if HASH_ID >= i32::MAX {
@@ -53,9 +53,12 @@ impl RpcCall {
             HASH_ID
         };
 
+        req.borrow_mut().set_id(target.id().clone());
+        req.borrow_mut().set_addr(target.socket_addr().clone());
+
         RpcCall {
             hashid: hash,
-            target: ni,
+            target,
             req: Some(req),
             rsp: None,
 

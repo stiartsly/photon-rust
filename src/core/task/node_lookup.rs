@@ -133,9 +133,9 @@ impl Task for NodeLookupTask {
             req.borrow_mut().with_want4(true);
             req.borrow_mut().with_want6(false);
 
-            let cloned_next = Rc::clone(&next);
+            let cloned = Rc::clone(&next);
             if let Err(err) = self.send_call(next, req, Box::new(move|_| {
-                cloned_next.borrow_mut().set_sent();
+                cloned.borrow_mut().set_sent();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
             }
@@ -147,14 +147,14 @@ impl Task for NodeLookupTask {
     fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
         LookupTask::call_responsed(self, call, Rc::clone(&rsp));
 
-        let rsp_binding = rsp.borrow();
+        let binding = rsp.borrow();
         if !call.matches_id()||
-            rsp_binding.kind() != msg::Kind::Response ||
-            rsp_binding.method() != msg::Method::FindNode {
+            binding.kind() != msg::Kind::Response ||
+            binding.method() != msg::Method::FindNode {
             return;
         }
 
-        if let Some(downcasted) = rsp_binding.as_any().downcast_ref::<find_node_rsp::Message>() {
+        if let Some(downcasted) = binding.as_any().downcast_ref::<find_node_rsp::Message>() {
             let nodes = downcasted.nodes4(); // TODO:
             if !nodes.is_empty() {
                 self.add_candidates(nodes);
