@@ -192,7 +192,7 @@ impl Server {
         unimplemented!()
     }
 
-    pub(crate) fn send_msg4(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+    pub(crate) fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         if let Some(call) = msg.borrow().associated_call() {
            call.borrow_mut().send();
 
@@ -272,7 +272,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                     }
                 }
 
-                _ = write_socket(&sock4, Rc::clone(&queue4),  move |_, _| {
+                _ = write_socket(&sock4, Rc::clone(&dht4), Rc::clone(&queue4),  move |_, _| {
                     Some(Vec::new() as Vec<u8>)
                 }) => {
                     //println!("Write data to ipv4 socket");
@@ -339,6 +339,7 @@ async fn read_socket<F>(socket: &UdpSocket,
 }
 
 async fn write_socket<F>(socket: &UdpSocket,
+    dht: Rc<RefCell<DHT>>,
     msg_queue: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>, _: F) -> Result<(), io::Error>
 where
     F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
@@ -357,7 +358,7 @@ where
     };
 
     if let Some(call) = msg.borrow().associated_call() {
-        // dht.borrow_mut().on_send(call.borrow().target_id());
+        dht.borrow_mut().on_send(call.borrow().target_id());
         call.borrow_mut().send();
         // self.scheduler.borrow_mut().add(move || {
         //    call.borrow_mut().check_timeout()

@@ -362,7 +362,7 @@ impl DHT {
         err.borrow_mut().with_msg(str);
         err.borrow_mut().with_code(code);
 
-        self.send_msg(err);
+        self.server.borrow_mut().send_msg(err);
     }
 
     fn on_ping(&mut self, req: Rc<RefCell<dyn Msg>>) {
@@ -372,7 +372,7 @@ impl DHT {
         rsp.borrow_mut().set_addr(binding.addr().clone());
         rsp.borrow_mut().set_txid(binding.txid());
 
-        self.send_msg(rsp);
+        self.server.borrow_mut().send_msg(rsp);
     }
 
     fn on_find_node(&mut self, req: Rc<RefCell<dyn Msg>>) {
@@ -399,7 +399,7 @@ impl DHT {
             rsp.borrow_mut().populate_token(token);
         }
 
-        self.send_msg(rsp)
+        self.server.borrow_mut().send_msg(rsp);
     }
 
     fn on_find_value(&mut self, req: Rc<RefCell<dyn Msg>>) {
@@ -438,7 +438,7 @@ impl DHT {
             rsp.borrow_mut().populate_token(token);
         }
 
-        self.send_msg(rsp);
+        self.server.borrow_mut().send_msg(rsp);
     }
 
     fn on_store_value(&mut self, msg: Rc<RefCell<dyn Msg>>) {
@@ -471,7 +471,7 @@ impl DHT {
         rsp.borrow_mut().set_addr(binding.addr().clone());
         rsp.borrow_mut().set_txid(binding.txid());
 
-        self.send_msg(rsp);
+        self.server.borrow_mut().send_msg(rsp);
     }
 
     fn on_find_peers(&mut self, msg: Rc<RefCell<dyn Msg>>) {
@@ -505,7 +505,7 @@ impl DHT {
             rsp.borrow_mut().populate_token(token);
         }
 
-        self.send_msg(rsp);
+        self.server.borrow_mut().send_msg(rsp);
     }
 
     fn on_announce_peer(&mut self, msg: Rc<RefCell<dyn Msg>>) {
@@ -550,7 +550,7 @@ impl DHT {
         rsp.borrow_mut().set_addr(binding.addr().clone());
         rsp.borrow_mut().set_txid(binding.txid());
 
-        self.send_msg(rsp);
+        self.server.borrow_mut().send_msg(rsp);
     }
 
     pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
@@ -687,13 +687,6 @@ impl DHT {
         unimplemented!()
     }
 
-    fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        if msg.borrow().associated_call().is_some() {
-            self.on_send(msg.borrow().id());
-        }
-        self.server.borrow_mut().send_msg4(msg);
-    }
-
     fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
         let msg = call.borrow_mut().req();
         let hashid = call.borrow().hash();
@@ -703,7 +696,7 @@ impl DHT {
         if let Some(msg) = msg {
             msg.borrow_mut().set_txid(hashid);
             msg.borrow_mut().with_associated_call(cloned);
-            self.send_msg(msg);
+            self.server.borrow_mut().send_msg(msg);
         }
     }
 }
