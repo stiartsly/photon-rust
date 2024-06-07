@@ -338,26 +338,37 @@ async fn read_socket<F>(socket: &UdpSocket,
     Ok(Some(msg))
 }
 
-async fn write_socket<F>(socket: &UdpSocket, queue: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>, _: F) -> Result<(), io::Error>
+async fn write_socket<F>(socket: &UdpSocket,
+    msg_queue: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>, _: F) -> Result<(), io::Error>
 where
     F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
 {
-    if queue.borrow().is_empty() {
+    if msg_queue.borrow().is_empty() {
         sleep(Duration::MAX).await;
         return Ok(())
     }
 
-    match queue.borrow_mut().pop_front() {
-        Some(msg) => {
-            let serialized = msg::serialize(Rc::clone(&msg));
-            let mut buffer = Vec::new() as Vec<u8>;
-            buffer.extend_from_slice(msg.borrow().id().as_bytes());
-            buffer.extend_from_slice(&serialized);
-            _ = socket.send_to(&buffer, msg.borrow().addr()).await?;
-        },
+    let msg = match msg_queue.borrow_mut().pop_front() {
+        Some(msg) => msg,
         None => {
             sleep(Duration::from_millis(500)).await;
+            return Ok(())
         }
+    };
+
+    if let Some(call) = msg.borrow().associated_call() {
+        // dht.borrow_mut().on_send(call.borrow().target_id());
+        call.borrow_mut().send();
+        // self.scheduler.borrow_mut().add(move || {
+        //    call.borrow_mut().check_timeout()
+        // }, 2000, 10);
     }
+
+    let serialized = msg::serialize(Rc::clone(&msg));
+    let mut buf = Vec::new() as Vec<u8>;
+    buf.extend_from_slice(msg.borrow().id().as_bytes());
+    buf.extend_from_slice(&serialized);
+    _ = socket.send_to(&buf, msg.borrow().addr()).await?;
+
     Ok(())
 }
