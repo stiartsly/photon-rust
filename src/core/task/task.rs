@@ -239,7 +239,7 @@ pub(crate) trait Task {
             //if need_update {
             //    self.serialized_update()
             //}
-            println!(">>>>>>>>>>");
+            println!("state change invoked: prev: {:?} >>>>>>>>>>", prev_state);
         });
 
         (f)(Rc::clone(&call));
