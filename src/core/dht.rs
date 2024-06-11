@@ -171,7 +171,7 @@ impl DHT {
                 }
             });
 
-            self.send_call(call);
+            self.server.borrow_mut().send_call(call);
         };
     }
 
@@ -318,7 +318,7 @@ impl DHT {
 
             let ni = Box::new(new_entry.inner_node());
             let call = Rc::new(RefCell::new(RpcCall::new(ni, req)));
-            self.send_call(call);
+            self.server.borrow_mut().send_call(call);
         }
         self.routing_table.borrow_mut().put(new_entry);
     }
@@ -685,19 +685,6 @@ impl DHT {
         F: Fn(&[&NodeInfo]),
     {
         unimplemented!()
-    }
-
-    fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
-        let msg = call.borrow_mut().req();
-        let hashid = call.borrow().hash();
-        let cloned = Rc::clone(&call);
-        self.server.borrow_mut().send_call(call);
-
-        if let Some(msg) = msg {
-            msg.borrow_mut().set_txid(hashid);
-            msg.borrow_mut().with_associated_call(cloned);
-            self.server.borrow_mut().send_msg(msg);
-        }
     }
 }
 

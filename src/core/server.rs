@@ -206,12 +206,22 @@ impl Server {
     }
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
+        let msg = call.borrow_mut().req();
+        let hashid = call.borrow().hash();
+        let cloned = Rc::clone(&call);
+
         call.borrow_mut().set_responsed_fn(|_,_| {});
         call.borrow_mut().set_timeout_fn(|_call| {
             // self.on_timeout(_call);
         });
 
         self.calls.insert(call.borrow().hash(), Rc::clone(&call));
+
+        if let Some(msg) = msg {
+            msg.borrow_mut().set_txid(hashid);
+            msg.borrow_mut().with_associated_call(cloned);
+            self.send_msg(msg);
+        }
     }
 
     fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
@@ -367,6 +377,7 @@ where
 
     let serialized = msg::serialize(Rc::clone(&msg));
     let mut buf = Vec::new() as Vec<u8>;
+
     buf.extend_from_slice(msg.borrow().id().as_bytes());
     buf.extend_from_slice(&serialized);
     _ = socket.send_to(&buf, msg.borrow().addr()).await?;
