@@ -1,85 +1,31 @@
-use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::any::Any;
 use std::fmt;
-use std::net::SocketAddr;
 use ciborium::Value as CVal;
 
 use crate::{
     version,
     error,
-    id::Id,
-    rpccall::RpcCall,
-    error::Error,
 };
 
 use super::{
-    msg::{Kind, Method, Msg}
+    msg::{Kind, Method, Msg, Data as MsgData}
 };
 
-#[derive(Debug)]
 pub(crate) struct Message {
-    id: Option<Id>,
-    addr: Option<SocketAddr>,
-
-    txid: i32,
-    ver: i32,
-
-    msg: Option<String>,
+    base_data: MsgData,
+    msg: String,
     code: i32,
 }
 
 impl Msg for Message {
-    fn kind(&self) -> Kind {
-        Kind::Request
+    fn data(&self) -> &MsgData {
+        &self.base_data
     }
 
-    fn method(&self) -> Method {
-        Method::Ping
-    }
-
-    fn id(&self) -> &Id {
-        &self.id.as_ref().unwrap()
-    }
-
-    fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
-    }
-
-    fn txid(&self) -> i32 {
-        self.txid
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn set_id(&mut self, nodeid: Id) {
-        self.id = Some(nodeid)
-    }
-
-    fn set_addr(&mut self, addr: SocketAddr) {
-        self.addr = Some(addr)
-    }
-
-    fn set_txid(&mut self, txid: i32) {
-        self.txid = txid
-    }
-
-    fn set_ver(&mut self, ver: i32) {
-        self.ver = ver
-    }
-
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        unimplemented!()
-    }
-
-    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn data_mut(&mut self) -> &mut MsgData {
+        &mut self.base_data
     }
 
     fn to_cbor(&self) -> CVal {
@@ -90,55 +36,57 @@ impl Msg for Message {
         unimplemented!()
     }
 
-    fn msg(&self) -> &str {
-        &self.msg.as_ref().unwrap()
-    }
-
-    fn code(&self) -> i32 {
-        self.code
-    }
-
-    fn with_msg(&mut self, str: &str) {
-        self.msg = Some(str.to_string())
-    }
-
-    fn with_code(&mut self, code: i32) {
-        self.code = code
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
+#[allow(dead_code)]
 impl Message {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(method: Method, txid: i32) -> Self {
         Message {
-            id: None,
-            addr: None,
-            txid: 0,
-            ver: 0,
+            base_data: MsgData::new(Kind::Error, method, txid),
             code: 0,
-            msg: None,
+            msg: String::from(""),
         }
     }
 
-    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
-        let mut msg = Self::new();
+    pub(crate) fn from(_: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
+        /*let mut msg = Self::new();
         match msg.from_cbor(input) {
             true => Ok(Rc::new(RefCell::new(msg))),
             false => Err(Error::Protocol(format!("Invalid cobor value for find_node request message"))),
-        }
+        }*/
+        unimplemented!()
+    }
+
+    pub(crate) fn msg(&self) -> &str {
+        &self.msg
+    }
+
+    pub(crate) fn code(&self) -> i32 {
+        self.code
+    }
+
+    pub(crate) fn with_msg(&mut self, str: &str) {
+        self.msg = String::from(str);
+    }
+
+    pub(crate) fn with_code(&mut self, code: i32) {
+        self.code = code
     }
 }
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
+        write!(f,
             "y:{},m:{},t:{},e:{{c:{}.m:{}}}v:{}",
             self.kind(),
             self.method(),
-            self.txid,
-            self.code,
-            self.msg.as_ref().unwrap(),
-            version::formatted_version(self.ver)
+            self.txid(),
+            self.code(),
+            self.msg(),
+            version::formatted_version(self.ver())
         )?;
         Ok(())
     }

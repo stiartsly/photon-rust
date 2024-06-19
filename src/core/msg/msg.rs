@@ -9,9 +9,6 @@ use std::fmt::Display;
 use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::error::Error;
-use crate::node_info::NodeInfo;
-use crate::peer::Peer;
-use crate::value::Value;
 
 use super::keys;
 use super::cbor;
@@ -29,7 +26,8 @@ use super::store_value_rsp;
 use super::find_value_req;
 use super::find_value_rsp;
 
-#[derive(PartialEq)]
+
+#[derive(PartialEq, Clone, Copy)]
 pub(crate) enum Kind {
     Error = 0,
     Request = 0x20,
@@ -64,6 +62,10 @@ impl Kind {
             Kind::Response => "r",
         }
     }
+
+    pub(crate) fn into_i32(&self) -> i32 {
+        *self as i32
+    }
 }
 
 impl fmt::Display for Kind {
@@ -78,7 +80,7 @@ impl fmt::Display for Kind {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub(crate) enum Method {
     Unknown = 0x00,
     Ping = 0x01,
@@ -109,6 +111,10 @@ impl Method {
         let method = _type & Self::MASK;
         method >= 0 && method < 0x06
     }
+
+    pub(crate) fn into_i32(&self) -> i32 {
+        *self as i32
+    }
 }
 
 impl fmt::Display for Method {
@@ -127,72 +133,113 @@ impl fmt::Display for Method {
     }
 }
 
+pub(crate) struct Data {
+    id: Option<Id>,
+    remote_id: Option<Id>,
+
+    origin: Option<SocketAddr>,
+    remote_addr: Option<SocketAddr>,
+
+    associated_call: Option<Rc<RefCell<RpcCall>>>,
+
+    _type: i32,
+    txid: i32,
+    ver: i32,
+}
+
+#[allow(dead_code)]
+impl Data {
+   pub(crate) fn new(kind: Kind, method: Method, txid: i32) -> Self {
+        Self {
+            id: None,
+            remote_id: None,
+            origin: None,
+            remote_addr: None,
+            associated_call: None,
+            _type: kind as i32 | method as i32,
+            txid: txid,
+            ver: 0
+        }
+    }
+}
+
 pub(crate) trait Msg: Display {
-    fn kind(&self) -> Kind;
-    fn method(&self) -> Method;
+    fn data(&self) -> &Data;
+    fn data_mut(&mut self) -> &mut Data;
 
-    // Common methods
-    fn id(&self) -> &Id;
-    fn addr(&self) -> &SocketAddr;
-    fn txid(&self) -> i32;
-    fn version(&self) -> i32;
-    fn set_id(&mut self, _: Id);
-    fn set_addr(&mut self, _: SocketAddr);
-    fn set_txid(&mut self, _: i32);
-    fn set_ver(&mut self, _: i32);
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>>;
-    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>);
+    fn _type(&self) -> i32 {
+        self.data()._type
+    }
 
-    // Methods for Node/Value/Peer Lookup as query condition.
-    fn target(&self) -> &Id { panic!() }
-    fn want4(&self) -> bool { panic!() }
-    fn want6(&self) -> bool { panic!() }
-    fn want_token(&self) -> bool { panic!() }
-    fn with_target(&mut self, _: Id) { panic!() }
-    fn with_want4(&mut self, _: bool) { panic!() }
-    fn with_want6(&mut self, _: bool) { panic!() }
-    fn with_want_token(&mut self) { panic!() }
+    fn kind(&self) -> Kind {
+        Kind::from(self.data()._type)
+    }
 
-    // Common methods for Node/Value/Peer Lookup as query result.
-    fn nodes4(&self) -> &[NodeInfo] { panic!() }
-    fn nodes6(&self) -> &[NodeInfo] { panic!() }
-    fn token(&self) -> i32 { panic!() }
+    fn method(&self) -> Method {
+        Method::from(self.data()._type)
+    }
 
-    // Common methos for Node/Value/Peer Lookup as query result.
-    fn populate_closest_nodes4(&mut self, _: Vec<NodeInfo>) { panic!() }
-    fn populate_closest_nodes6(&mut self, _: Vec<NodeInfo>) { panic!() }
-    fn populate_token(&mut self, _:i32) { panic!() }
+    fn id(&self) -> &Id {
+        self.data().id.as_ref().unwrap()
+    }
 
-    // Methods for FindValue as query condition
-    fn seq(&self) -> i32 { panic!() }
-    fn with_seq(&mut self, _: i32) { panic!() }
+    fn remote_id(&self) -> &Id {
+        self.data().remote_id.as_ref().unwrap()
+    }
 
-    // Methods for FindPeer as query result.
-    fn has_peers(&self) -> bool { panic!() }
-    fn peers(&self) -> &[Box<Peer>] { panic!() }
-    fn populate_peers(&mut self, _: Vec<Box<Peer>>) { panic!()}
+    fn origin(&self) -> &SocketAddr {
+        self.data().origin.as_ref().unwrap()
+    }
 
-    // Methods for Lookup Peer as query result.
-    fn value(&self) -> &Option<Box<Value>> { panic!() }
-    fn populate_value(&mut self, _: Box<Value>) { panic!() }
+    fn remote_addr(&self) -> &SocketAddr {
+        self.data().remote_addr.as_ref().unwrap()
+    }
 
+    fn txid(&self) -> i32 {
+        self.data().txid
+    }
 
-    // StoreValue option
-    // fn token(&self) -> i32;
-    //fn value(&self) -> &Box<Value>;
+    fn ver(&self) -> i32 {
+        self.data().ver
+    }
 
-    // Methods for Error Message.
-    fn msg(&self) -> &str { panic!() }
-    fn code(&self) -> i32 { panic!() }
-    fn with_msg(&mut self, _: &str) { panic!() }
-    fn with_code(&mut self, _: i32) { panic!() }
+    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
+        self.data().associated_call.as_ref().cloned()
+    }
 
-    fn with_value(&mut self, _: Box<Value>) { panic!() }
+    fn set_type(&mut self, kind: Kind, method: Method) {
+        self.data_mut()._type = kind.into_i32() | method.into_i32()
+    }
 
-    fn as_any(&self) -> &dyn Any;
+    fn set_id(&mut self, id: &Id) {
+        self.data_mut().id = Some(id.clone())
+    }
+
+    fn set_origin(&mut self, addr: &SocketAddr) {
+        self.data_mut().origin = Some(addr.clone())
+    }
+
+    fn set_remote(&mut self, id: &Id, addr: &SocketAddr) {
+        self.data_mut().remote_id = Some(id.clone());
+        self.data_mut().remote_addr = Some(addr.clone())
+    }
+
+    fn set_txid(&mut self, txid: i32) {
+        self.data_mut().txid = txid
+    }
+
+    fn set_ver(&mut self, ver: i32) {
+        self.data_mut().ver = ver
+    }
+
+    fn with_associated_call(&mut self, call: Rc<RefCell<RpcCall>>) {
+        self.data_mut().associated_call = Some(call)
+    }
 
     fn to_cbor(&self) -> ciborium::value::Value;
     fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool;
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub(crate) fn deser(buf: &[u8]) -> Result<Rc<RefCell<dyn Msg>>, Error> {
@@ -254,8 +301,4 @@ pub(crate) fn serialize(msg: Rc<RefCell<dyn Msg>>) -> Vec<u8> {
     let _ = ciborium::ser::into_writer(&mut value, writer);
     encoded.push(0x0);
     encoded
-}
-
-pub(crate) fn msg_type(kind: Kind, method: Method) -> i32 {
-    kind as i32 | method as i32
 }

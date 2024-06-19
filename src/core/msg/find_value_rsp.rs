@@ -1,74 +1,33 @@
-use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::any::Any;
 use std::fmt;
-use std::net::SocketAddr;
-use std::fmt::Debug;
 use ciborium::Value as CVal;
 
 use crate::{
     error,
-    id::Id,
-    node_info::NodeInfo,
     value::Value,
-    rpccall::RpcCall
 };
 
 use super::{
-    msg::{Kind, Method, Msg}
+    msg::{Kind, Method, Msg, Data as MsgData},
+    lookup_rsp::{Msg as LookupResponse, Data as LookupData},
 };
 
+pub(crate) struct Message {
+    base_data: MsgData,
+    lookup_data: LookupData,
+
+    value: Option<Box<Value>>,
+}
+
 impl Msg for Message {
-    fn kind(&self) -> Kind {
-        Kind::Response
+    fn data(&self) -> &MsgData {
+        &self.base_data
     }
 
-    fn method(&self) -> Method {
-        Method::Ping
-    }
-
-    fn id(&self) -> &Id {
-        &self.id.as_ref().unwrap()
-    }
-
-    fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
-    }
-
-    fn txid(&self) -> i32 {
-        self.txid
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn set_id(&mut self, nodeid: Id) {
-        self.id = Some(nodeid)
-    }
-
-    fn set_addr(&mut self, addr: SocketAddr) {
-        self.addr = Some(addr)
-    }
-
-    fn set_txid(&mut self, txid: i32) {
-        self.txid = txid
-    }
-
-    fn set_ver(&mut self, ver: i32) {
-        self.ver = ver
-    }
-
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        unimplemented!()
-    }
-
-    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn data_mut(&mut self) -> &mut MsgData {
+        &mut self.base_data
     }
 
     fn to_cbor(&self) -> CVal {
@@ -79,54 +38,31 @@ impl Msg for Message {
         unimplemented!()
     }
 
-    fn nodes4(&self) -> &[NodeInfo] {
-        &self.nodes4.as_ref().unwrap()
-    }
-
-    fn token(&self) -> i32 {
-        self.token
-    }
-
-    fn populate_closest_nodes4(&mut self, nodes: Vec<NodeInfo>) {
-        self.nodes4 = Some(nodes)
-    }
-
-    fn populate_token(&mut self, token: i32) {
-        self.token = token
-    }
-
-    fn value(&self) -> &Option<Box<crate::value::Value>> {
-        &self.value
-    }
-
-    fn populate_value(&mut self, value: Box<crate::value::Value>) {
-        self.value = Some(value)
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Message {
-    id: Option<Id>,
-    addr: Option<SocketAddr>,
+impl LookupResponse for Message {
+    fn data(&self) -> &LookupData {
+        &self.lookup_data
+    }
 
-    txid: i32,
-    ver: i32,
-
-    nodes4: Option<Vec<NodeInfo>>,
-    token: i32,
-
-    value: Option<Box<Value>>,
+    fn data_mut(&mut self) -> &mut LookupData {
+        &mut self.lookup_data
+    }
 }
 
+#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
-        Message {
-            id: None,
-            addr: None,
-            txid: 0,
-            ver: 0,
-            nodes4: None,
-            token: 0,
+        Self::with_txid(0)
+    }
+
+    pub(crate) fn with_txid(txid: i32) -> Self {
+        Self {
+            base_data: MsgData::new(Kind::Response, Method::FindValue, txid),
+            lookup_data: LookupData::new(),
             value: None,
         }
     }
@@ -135,6 +71,14 @@ impl Message {
         let mut msg = Self::new();
         msg.from_cbor(input);
         Ok(Rc::new(RefCell::new(msg)))
+    }
+
+    pub(crate) fn value(&self) -> &Option<Box<crate::value::Value>> {
+        &self.value
+    }
+
+    pub(crate) fn populate_value(&mut self, value: Box<crate::value::Value>) {
+        self.value = Some(value)
     }
 }
 

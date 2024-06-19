@@ -1,74 +1,34 @@
-use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::any::Any;
 use std::fmt;
-use std::net::SocketAddr;
-use std::fmt::Debug;
 use ciborium::Value as CVal;
 
 use crate::{
     version,
     error,
-    id::Id,
-    node_info::NodeInfo,
     peer::Peer,
-    rpccall::RpcCall
 };
 
 use super::{
-    msg::{Kind, Method, Msg}
+    msg::{Kind, Method, Msg, Data as MsgData},
+    lookup_rsp::{Msg as LookupResponse, Data as LookupData},
 };
 
+pub(crate) struct Message {
+    base_data: MsgData,
+    lookup_data: LookupData,
+
+    peers: Option<Vec<Box<Peer>>>,
+}
+
 impl Msg for Message {
-    fn kind(&self) -> Kind {
-        Kind::Response
+    fn data(&self) -> &MsgData {
+        &self.base_data
     }
 
-    fn method(&self) -> Method {
-        Method::Ping
-    }
-
-    fn id(&self) -> &Id {
-        &self.id.as_ref().unwrap()
-    }
-
-    fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
-    }
-
-    fn txid(&self) -> i32 {
-        self.txid
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn set_id(&mut self, nodeid: Id) {
-        self.id = Some(nodeid)
-    }
-
-    fn set_addr(&mut self, addr: SocketAddr) {
-        self.addr = Some(addr)
-    }
-
-    fn set_txid(&mut self, txid: i32) {
-        self.txid = txid
-    }
-
-    fn set_ver(&mut self, ver: i32) {
-        self.ver = ver
-    }
-
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        unimplemented!()
-    }
-    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn data_mut(&mut self) -> &mut MsgData {
+        &mut self.base_data
     }
 
     fn to_cbor(&self) -> CVal {
@@ -79,60 +39,31 @@ impl Msg for Message {
         unimplemented!()
     }
 
-    fn nodes4(&self) -> &[NodeInfo] {
-        &self.nodes4.as_ref().unwrap()
-    }
-
-    fn token(&self) -> i32 {
-        self.token
-    }
-
-    fn populate_closest_nodes4(&mut self, nodes: Vec<NodeInfo>) {
-        self.nodes4 = Some(nodes)
-    }
-
-    fn populate_token(&mut self, token: i32) {
-        self.token = token
-    }
-
-    fn has_peers(&self) -> bool {
-        unimplemented!()
-    }
-
-    fn peers(&self) -> &[Box<Peer>] {
-        unimplemented!()
-    }
-
-    fn populate_peers(&mut self, peers: Vec<Box<Peer>>) {
-        self.peers = Some(peers);
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Message {
-    id: Option<Id>,
-    addr: Option<SocketAddr>,
+impl LookupResponse for Message {
+    fn data(&self) -> &LookupData {
+        &self.lookup_data
+    }
 
-    txid: i32,
-    ver: i32,
-
-    nodes4: Option<Vec<NodeInfo>>,
-    nodes6: Option<Vec<NodeInfo>>,
-    token: i32,
-
-    peers: Option<Vec<Box<Peer>>>,
+    fn data_mut(&mut self) -> &mut LookupData {
+        &mut self.lookup_data
+    }
 }
 
+#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
-        Message {
-            id: None,
-            addr: None,
-            txid: 0,
-            ver: 0,
-            nodes4: None,
-            nodes6: None,
-            token: 0,
+        Self::with_txid(0)
+    }
+
+    pub(crate) fn with_txid(txid: i32) -> Self {
+        Self {
+            base_data: MsgData::new(Kind::Response, Method::FindPeer, txid),
+            lookup_data: LookupData::new(),
             peers: None,
         }
     }
@@ -141,6 +72,18 @@ impl Message {
         let mut msg = Self::new();
         msg.from_cbor(input);
         Ok(Rc::new(RefCell::new(msg)))
+    }
+
+    pub(crate) fn has_peers(&self) -> bool {
+        unimplemented!()
+    }
+
+    pub(crate) fn peers(&self) -> &[Box<Peer>] {
+        unimplemented!()
+    }
+
+    pub(crate) fn populate_peers(&mut self, peers: Vec<Box<Peer>>) {
+        self.peers = Some(peers);
     }
 }
 
@@ -151,10 +94,10 @@ impl fmt::Display for Message {
             "y:{},m:{},t:{},r: {{",
             self.kind(),
             self.method(),
-            self.txid
+            self.txid()
         )?;
 
-        match self.nodes4.as_ref() {
+        match self.nodes4() {
             Some(nodes4) => {
                 let mut first = true;
                 if !nodes4.is_empty() {
@@ -171,7 +114,7 @@ impl fmt::Display for Message {
             None => {}
         }
 
-        match self.nodes6.as_ref() {
+        match self.nodes6() {
             Some(nodes6) => {
                 let mut first = true;
                 if !nodes6.is_empty() {
@@ -188,8 +131,8 @@ impl fmt::Display for Message {
             None => {}
         }
 
-        if self.token != 0 {
-            write!(f, ",tok:{}", self.token)?;
+        if self.token() != 0 {
+            write!(f, ",tok:{}", self.token())?;
         }
 
         match self.peers.as_ref() {
@@ -209,7 +152,7 @@ impl fmt::Display for Message {
             None => {}
         }
 
-        write!(f, "}},v:{}", version::formatted_version(self.ver))?;
+        write!(f, "}},v:{}", version::formatted_version(self.ver()))?;
         Ok(())
     }
 }

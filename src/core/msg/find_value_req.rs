@@ -1,72 +1,33 @@
-use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::any::Any;
 use std::fmt;
-use std::net::SocketAddr;
-use std::fmt::Debug;
 use ciborium::Value as CVal;
 
 use crate::{
     version,
     error,
-    id::Id,
-    rpccall::RpcCall
 };
 
 use super::{
-    msg::{Kind, Method, Msg}
+    msg::{Kind, Method, Msg, Data as MsgData},
+    lookup_req::{Msg as LookupRequest, Data as LookupData},
 };
 
+pub(crate) struct Message {
+    base_data: MsgData,
+    lookkup_data: LookupData,
+
+    seq: i32,
+}
+
 impl Msg for Message {
-    fn kind(&self) -> Kind {
-        Kind::Request
+    fn data(&self) -> &MsgData {
+        &self.base_data
     }
 
-    fn method(&self) -> Method {
-        Method::Ping
-    }
-
-    fn id(&self) -> &Id {
-        &self.id.as_ref().unwrap()
-    }
-
-    fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
-    }
-
-    fn txid(&self) -> i32 {
-        self.txid
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn set_id(&mut self, nodeid: Id) {
-        self.id = Some(nodeid)
-    }
-
-    fn set_addr(&mut self, addr: SocketAddr) {
-        self.addr = Some(addr)
-    }
-
-    fn set_txid(&mut self, txid: i32) {
-        self.txid = txid
-    }
-
-    fn set_ver(&mut self, ver: i32) {
-        self.ver = ver
-    }
-
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        unimplemented!()
-    }
-    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn data_mut(&mut self) -> &mut MsgData {
+        &mut self.base_data
     }
 
     fn to_cbor(&self) -> CVal {
@@ -77,68 +38,32 @@ impl Msg for Message {
         unimplemented!()
     }
 
-    fn target(&self) -> &Id {
-        &self.target.as_ref().unwrap()
-    }
-
-    fn want4(&self) -> bool {
-        self.want4
-    }
-
-    fn want_token(&self) -> bool {
-        self.want_token
-    }
-
-    fn with_target(&mut self, target: Id) {
-        self.target = Some(target)
-    }
-
-    fn with_want4(&mut self, want: bool) {
-        self.want4 = want
-    }
-
-    fn with_want_token(&mut self) {
-        self.want_token = true
-    }
-
-    fn seq(&self) -> i32 {
-        self.seq
-    }
-
-    fn with_seq(&mut self, seq: i32) {
-        self.seq = seq
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Message {
-    id: Option<Id>,
-    addr: Option<SocketAddr>,
+impl LookupRequest for Message {
+    fn data(&self) -> &LookupData {
+        &self.lookkup_data
+    }
 
-    txid: i32,
-    ver: i32,
-
-    target: Option<Id>,
-    want4: bool,
-    want6: bool,
-    want_token: bool,
-
-    seq: i32,
+    fn data_mut(&mut self) -> &mut LookupData {
+        &mut self.lookkup_data
+    }
 }
 
 #[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
-        Message {
-            id: None,
-            addr: None,
-            txid: 0,
-            ver: 0,
-            target: None,
-            want4: false,
-            want6: false,
-            want_token: false,
-            seq: -1,
+        Self::with_txid(0)
+    }
+
+    pub(crate) fn with_txid(txid: i32) -> Self {
+        Self {
+            base_data: MsgData::new(Kind::Request, Method::FindValue, txid),
+            lookkup_data: LookupData::new(),
+            seq: -1
         }
     }
 
@@ -148,39 +73,30 @@ impl Message {
         Ok(Rc::new(RefCell::new(msg)))
     }
 
-    fn want(&self) -> i32 {
-        let mut want = 0;
+    pub(crate) fn seq(&self) -> i32 {
+        self.seq
+    }
 
-        if self.want4 {
-            want |= 0x01
-        }
-        if self.want6 {
-            want |= 0x02
-        }
-        if self.want_token {
-            want |= 0x04
-        }
-
-        want
+    pub(crate) fn with_seq(&mut self, seq: i32) {
+        self.seq = seq
     }
 }
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
+        write!(f,
             "y:{},m:{},t:{},q:{{t:{},w:{}}}",
             self.kind(),
             self.method(),
-            self.txid,
-            self.target.as_ref().unwrap(),
+            self.txid(),
+            self.target(),
             self.want()
         )?;
         if self.seq >= 0 {
             write!(f, ",seq:{}", self.seq)?;
         }
 
-        write!(f, ",v:{}", version::formatted_version(self.ver))?;
+        write!(f, ",v:{}", version::formatted_version(self.ver()))?;
         Ok(())
     }
 }

@@ -1,116 +1,56 @@
-use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::any::Any;
 use std::fmt;
-use std::net::SocketAddr;
 use ciborium::Value as CVal;
 
 use crate::{
     error,
-    id::Id,
     value::Value,
-    rpccall::RpcCall
 };
 
 use super::{
-    msg::{Kind, Method, Msg}
+    msg::{Kind, Method, Msg, Data as MsgData}
 };
 
+pub(crate) struct Message {
+    base_data: MsgData,
+
+    token: i32,
+    value: Option<Box<Value>>,
+}
+
 impl Msg for Message {
-    fn kind(&self) -> Kind {
-        Kind::Request
+    fn data(&self) -> &MsgData {
+        &self.base_data
     }
 
-    fn method(&self) -> Method {
-        Method::Ping
-    }
-
-    fn id(&self) -> &Id {
-        &self.id.as_ref().unwrap()
-    }
-
-    fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
-    }
-
-    fn txid(&self) -> i32 {
-        self.txid
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn set_id(&mut self, nodeid: Id) {
-        self.id = Some(nodeid)
-    }
-
-    fn set_addr(&mut self, addr: SocketAddr) {
-        self.addr = Some(addr)
-    }
-
-    fn set_txid(&mut self, txid: i32) {
-        self.txid = txid
-    }
-
-    fn set_ver(&mut self, ver: i32) {
-        self.ver = ver
-    }
-
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        unimplemented!()
-    }
-
-    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn data_mut(&mut self) -> &mut MsgData {
+        &mut self.base_data
     }
 
     fn to_cbor(&self) -> CVal {
         unimplemented!()
     }
 
-    fn from_cbor(&mut self, _: &CVal) -> bool {
+    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool {
         unimplemented!()
     }
 
-    fn token(&self) -> i32 {
-        self.token
-    }
-
-    fn value(&self) -> &Option<Box<Value>> {
-        &self.value
-    }
-
-    //fn with_token(&mut self, token: i32) {
-    //    self.token = token
-    //}
-    fn with_value(&mut self, value: Box<Value>) {
-        self.value = Some(value)
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Message {
-    id: Option<Id>,
-    addr: Option<SocketAddr>,
-    txid: i32,
-    ver: i32,
-
-    token: i32,
-    value: Option<Box<Value>>,
-}
-
+#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
-        Message {
-            id: None,
-            addr: None,
-            txid: 0,
-            ver: 0,
+        Self::with_txid(0)
+    }
+
+    pub(crate) fn with_txid(txid: i32) -> Self {
+        Self {
+            base_data: MsgData::new(Kind::Request, Method::StoreValue, txid),
             token: 0,
             value: None,
         }
@@ -120,6 +60,22 @@ impl Message {
         let mut msg = Self::new();
         msg.from_cbor(input);
         Ok(Rc::new(RefCell::new(msg)))
+    }
+
+    pub(crate) fn token(&self) -> i32 {
+        self.token
+    }
+
+    pub(crate) fn value(&self) -> &Option<Box<Value>> {
+        &self.value
+    }
+
+    //fn with_token(&mut self, token: i32) {
+    //    self.token = token
+    //}
+
+    pub(crate) fn with_value(&mut self, value: Box<Value>) {
+        self.value = Some(value)
     }
 }
 

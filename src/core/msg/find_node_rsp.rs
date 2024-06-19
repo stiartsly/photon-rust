@@ -1,88 +1,44 @@
-use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::any::Any;
 use std::fmt;
-use std::net::SocketAddr;
 use ciborium::Value as CVal;
 
 use crate::{
     version,
     error::Error,
-    id::Id,
     node_info::NodeInfo,
-    rpccall::RpcCall
 };
 
 use super::{
     keys,
-    msg::{self, Kind, Method, Msg}
+    msg::{Kind, Method, Msg, Data as MsgData},
+    lookup_rsp::{Msg as LookupResponse, Data as LookupData },
 };
 
+pub(crate) struct Message {
+    base_data: MsgData,
+    lookup_data: LookupData,
+}
+
 impl Msg for Message {
-    fn kind(&self) -> Kind {
-        Kind::from(self.kind)
+    fn data(&self) -> &MsgData {
+        &self.base_data
     }
 
-    fn method(&self) -> Method {
-        Method::from(self.kind)
-    }
-
-    fn id(&self) -> &Id {
-        &self.id.as_ref().unwrap()
-    }
-
-    fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
-    }
-
-    fn txid(&self) -> i32 {
-        self.txid
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn set_id(&mut self, nodeid: Id) {
-        self.id = Some(nodeid)
-    }
-
-    fn set_addr(&mut self, addr: SocketAddr) {
-        self.addr = Some(addr)
-    }
-
-    fn set_txid(&mut self, txid: i32) {
-        self.txid = txid
-    }
-
-    fn set_ver(&mut self, ver: i32) {
-        self.ver = ver
-    }
-
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        match self.associated_call.as_ref() {
-            Some(call) => Some(Rc::clone(call)),
-            None => None
-        }
-    }
-
-    fn with_associated_call(&mut self, call: Rc<RefCell<RpcCall>>) {
-        self.associated_call = Some(call)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn data_mut(&mut self) -> &mut MsgData {
+        &mut self.base_data
     }
 
     fn to_cbor(&self) -> CVal {
         let mut nodes4 = Vec::new();
-        if let Some(ns) = self.nodes4.as_ref() {
+        if let Some(ns) = self.nodes4() {
             ns.iter().for_each(|item| {
                 nodes4.push(item.to_cbor());
             })
         }
         let mut nodes6 = Vec::new();
-        if let Some(ns) = self.nodes6.as_ref() {
+        if let Some(ns) = self.nodes6() {
             ns.iter().for_each(|item| {
                 nodes6.push(item.to_cbor())
             })
@@ -103,24 +59,24 @@ impl Msg for Message {
         }
         reply_part.push((
             CVal::Text(String::from(keys::KEY_RES_TOKEN)),
-            CVal::Integer(self.token.into())
+            CVal::Integer(self.token().into())
         ));
 
         CVal::Map(vec![
             (
                 CVal::Text(String::from(keys::KEY_TYPE)),
-                CVal::Integer(self.kind.into())
+                CVal::Integer(self._type().into())
             ),
             (
                 CVal::Text(String::from(keys::KEY_TXID)),
-                CVal::Integer(self.txid.into())
+                CVal::Integer(self.txid().into())
             ),
             (
                 CVal::Text(String::from(keys::KEY_VERSION)),
-                CVal::Integer(self.ver.into())
+                CVal::Integer(self.ver().into())
             ),
             (
-                CVal::Text(Kind::from(self.kind).to_key().to_string()),
+                CVal::Text(Kind::Response.to_key().to_string()),
                 CVal::Map(reply_part)
             )
         ])
@@ -139,26 +95,20 @@ impl Msg for Message {
             };
 
             match key {
-                keys::KEY_TYPE => {
-                    let val = match val.as_integer() {
-                        Some(val) => val,
-                        None => return false,
-                    };
-                    self.kind = val.try_into().unwrap();
-                },
+                keys::KEY_TYPE => {},
                 keys::KEY_TXID => {
                     let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.txid = val.try_into().unwrap();
+                    self.set_txid(val.try_into().unwrap());
                 },
                 keys::KEY_VERSION => {
                     let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.ver = val.try_into().unwrap();
+                    self.set_ver(val.try_into().unwrap());
                 },
                 keys::KEY_RESPONSE => {
                     let map = match val.as_map() {
@@ -186,7 +136,7 @@ impl Msg for Message {
                                     };
                                     nodes.push(ni);
                                 }
-                                self.nodes4 = Some(nodes);
+                                self.populate_closest_nodes4(nodes);
                             },
                             keys::KEY_RES_NODES6 => {
                                 let array = match val.as_array() {
@@ -202,14 +152,14 @@ impl Msg for Message {
                                     };
                                     nodes.push(ni);
                                 }
-                                self.nodes6 = Some(nodes);
+                                self.populate_closest_nodes6(nodes);
                             },
                             keys::KEY_RES_TOKEN => {
                                 let val = match val.as_integer() {
                                     Some(val) => val,
                                     None => return false,
                                 };
-                                self.token = val.try_into().unwrap();
+                                self.populate_token(val.try_into().unwrap());
                             }
                             _ => return false
                         }
@@ -221,53 +171,31 @@ impl Msg for Message {
         true
     }
 
-    fn nodes4(&self) -> &[NodeInfo] {
-        &self.nodes4.as_ref().unwrap()
-    }
-
-    fn token(&self) -> i32 {
-        self.token
-    }
-
-    fn populate_closest_nodes4(&mut self, nodes: Vec<NodeInfo>) {
-        self.nodes4 = Some(nodes)
-    }
-
-    fn populate_token(&mut self, token: i32) {
-        self.token = token
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-pub(crate) struct Message {
-    id: Option<Id>,
-    addr: Option<SocketAddr>,
+impl LookupResponse for Message {
+    fn data(&self) -> &LookupData {
+        &self.lookup_data
+    }
 
-    kind: i32,
-    txid: i32,
-    ver: i32,
-
-    associated_call: Option<Rc<RefCell<RpcCall>>>,
-
-    nodes4: Option<Vec<NodeInfo>>,
-    nodes6: Option<Vec<NodeInfo>>,
-    token: i32,
-
+    fn data_mut(&mut self) -> &mut LookupData {
+        &mut self.lookup_data
+    }
 }
 
+#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
+        Self::with_txid(0)
+    }
+
+    pub(crate) fn with_txid(txid: i32) -> Self {
         Message {
-            id: None,
-            addr: None,
-            kind: msg::msg_type(Kind::Response, Method::FindNode),
-            txid: 0,
-            ver: 0,
-
-            associated_call: None,
-
-            nodes4: None,
-            nodes6: None,
-            token: 0,
+            base_data: MsgData::new(Kind::Response, Method::FindNode, txid),
+            lookup_data: LookupData::new(),
         }
     }
 
@@ -286,10 +214,10 @@ impl fmt::Display for Message {
             "y:{},m:{},t:{},r:{{",
             self.kind(),
             self.method(),
-            self.txid
+            self.txid()
         )?;
 
-        match self.nodes4.as_ref() {
+        match self.nodes4() {
             Some(nodes4) => {
                 let mut first = true;
                 if !nodes4.is_empty() {
@@ -306,7 +234,7 @@ impl fmt::Display for Message {
             None => {}
         }
 
-        match self.nodes6.as_ref() {
+        match self.nodes6() {
             Some(nodes6) => {
                 let mut first = true;
                 if !nodes6.is_empty() {
@@ -323,10 +251,10 @@ impl fmt::Display for Message {
             None => {}
         }
 
-        if self.token != 0 {
-            write!(f, ",tok:{}", self.token)?;
+        if self.token() != 0 {
+            write!(f, ",tok:{}", self.token())?;
         }
-        write!(f, "}},v:{}", version::formatted_version(self.ver))?;
+        write!(f, "}},v:{}", version::formatted_version(self.ver()))?;
         Ok(())
     }
 }

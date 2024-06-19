@@ -1,81 +1,33 @@
-use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::any::Any;
 use std::fmt;
-use std::net::SocketAddr;
-use std::fmt::Debug;
 use ciborium::Value as CVal;
 
 use crate::{
     error,
-    id::Id,
     peer::Peer,
-    rpccall::RpcCall
+    id::Id,
 };
 
 use super::{
-    msg::{Kind, Method, Msg}
+    msg::{Kind, Method, Msg, Data as MsgData},
 };
 
-pub(crate) trait AnnounceOption {
-    fn token(&self) -> i32;
-    fn peers(&self) -> &Vec<Box<Peer>>;
+pub(crate) struct Message {
+    base_data: MsgData,
 
-    fn with_token(&mut self, _: i32);
-    fn with_peers(&mut self, _: Vec<Box<Peer>>);
+    token: i32,
+    peers: Vec<Box<Peer>>,
 }
 
 impl Msg for Message {
-    fn kind(&self) -> Kind {
-        Kind::Request
+    fn data(&self) -> &MsgData {
+        &self.base_data
     }
 
-    fn method(&self) -> Method {
-        Method::Ping
-    }
-
-    fn id(&self) -> &Id {
-        self.id.as_ref().unwrap()
-    }
-
-    fn addr(&self) -> &SocketAddr {
-        &self.addr.as_ref().unwrap()
-    }
-
-    fn txid(&self) -> i32 {
-        self.txid
-    }
-
-    fn version(&self) -> i32 {
-        self.ver
-    }
-
-    fn set_id(&mut self, nodeid: Id) {
-        self.id = Some(nodeid)
-    }
-
-    fn set_addr(&mut self, addr: SocketAddr) {
-        self.addr = Some(addr)
-    }
-
-    fn set_txid(&mut self, txid: i32) {
-        self.txid = txid
-    }
-
-    fn set_ver(&mut self, ver: i32) {
-        self.ver = ver
-    }
-
-    fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        unimplemented!()
-    }
-
-    fn with_associated_call(&mut self, _: Rc<RefCell<RpcCall>>) {
-        unimplemented!()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn data_mut(&mut self) -> &mut MsgData {
+        &mut self.base_data
     }
 
     fn to_cbor(&self) -> CVal {
@@ -85,44 +37,21 @@ impl Msg for Message {
     fn from_cbor(&mut self, _: &CVal)-> bool {
         unimplemented!()
     }
-}
 
-impl AnnounceOption for Message {
-    fn token(&self) -> i32 {
-        self.token
-    }
-
-    fn peers(&self) -> &Vec<Box<Peer>> {
-        &self.peers
-    }
-
-    fn with_token(&mut self, token: i32) {
-        self.token = token
-    }
-
-    fn with_peers(&mut self, peers: Vec<Box<Peer>>) {
-        self.peers = peers
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Message {
-    id: Option<Id>,
-    addr: Option<SocketAddr>,
-    txid: i32,
-    ver: i32,
-
-    token: i32,
-    peers: Vec<Box<Peer>>,
-}
-
+#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
-        Message {
-            id: None,
-            addr: None,
-            txid: 0,
-            ver: 0,
+        Self::with_txid(0)
+    }
+
+    pub(crate) fn with_txid(txid: i32) -> Self {
+        Self {
+            base_data: MsgData::new(Kind::Request, Method::AnnouncePeer, txid),
             token: 0,
             peers: Vec::new(),
         }
@@ -132,6 +61,26 @@ impl Message {
         let mut msg = Self::new();
         msg.from_cbor(input);
         Ok(Rc::new(RefCell::new(msg)))
+    }
+
+    pub(crate) fn token(&self) -> i32 {
+        self.token
+    }
+
+    pub(crate) fn peers(&self) -> &Vec<Box<Peer>> {
+        &self.peers
+    }
+
+    pub(crate) fn with_token(&mut self, token: i32) {
+        self.token = token
+    }
+
+    pub(crate) fn with_peers(&mut self, peers: Vec<Box<Peer>>) {
+        self.peers = peers
+    }
+
+    pub(crate) fn target(&self) -> &Id {
+        unimplemented!()
     }
 }
 

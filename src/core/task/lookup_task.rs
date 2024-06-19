@@ -12,7 +12,7 @@ use crate::{
 };
 
 use crate::msg::{
-    msg::Msg,
+    lookup_rsp::{Msg as LookupResponse},
 };
 
 use super::{
@@ -109,10 +109,10 @@ pub(crate) trait LookupTask {
         candidate.clear_sent()
     }
 
-    fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
+    fn call_responsed(&mut self, call: &RpcCall, rsp: &dyn LookupResponse) {
         if let Some(cn) = self.remove_candidate(call.target_id()) {
             cn.borrow_mut().set_replied();
-            cn.borrow_mut().set_token(rsp.borrow().token());
+            cn.borrow_mut().set_token(rsp.token());
             self.add_closest(cn);
         }
     }

@@ -53,8 +53,7 @@ impl RpcCall {
             HASH_ID
         };
 
-        req.borrow_mut().set_id(target.id().clone());
-        req.borrow_mut().set_addr(target.socket_addr().clone());
+        req.borrow_mut().set_remote(target.id(), target.socket_addr());
 
         RpcCall {
             hashid: hash,
@@ -102,7 +101,8 @@ impl RpcCall {
             Some(rsp) => rsp,
             None => return false,
         };
-        req.borrow().addr() == rsp.borrow().addr()
+
+        rsp.borrow().origin() == req.borrow().remote_addr()
     }
 
     pub(crate) fn req(&self) ->Option<Rc<RefCell<dyn Msg>>> {

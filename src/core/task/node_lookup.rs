@@ -18,7 +18,8 @@ use crate::msg::{
     find_node_req,
     find_node_rsp,
     msg::{self, Msg},
-
+    lookup_req::{Msg as LookupRequest},
+    lookup_rsp::{Msg as LookupResponse},
 };
 
 use super::{
@@ -145,24 +146,25 @@ impl Task for NodeLookupTask {
     fn call_sent(&mut self, _: &RpcCall) {}
 
     fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
-        LookupTask::call_responsed(self, call, Rc::clone(&rsp));
-
         let binding = rsp.borrow();
-        if !call.matches_id()||
-            binding.kind() != msg::Kind::Response ||
-            binding.method() != msg::Method::FindNode {
-            return;
-        }
-
         if let Some(downcasted) = binding.as_any().downcast_ref::<find_node_rsp::Message>() {
-            let nodes = downcasted.nodes4(); // TODO:
-            if !nodes.is_empty() {
-                self.add_candidates(nodes);
+            LookupTask::call_responsed(self, call, downcasted);
+
+            if !call.matches_id()||
+                binding.kind() != msg::Kind::Response ||
+                binding.method() != msg::Method::FindNode {
+                return;
             }
 
-            for item in nodes.iter() {
-                if item.id() == self.target() {
-                    //(self.result_fn)(self.clone(), None)
+            if let Some(nodes) = downcasted.nodes4() { // TODO:
+                if !nodes.is_empty() {
+                    self.add_candidates(nodes);
+                }
+
+                for item in nodes.iter() {
+                    if item.id() == self.target() {
+                        //(self.result_fn)(self.clone(), None)
+                    }
                 }
             }
         }

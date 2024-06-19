@@ -193,8 +193,9 @@ impl Server {
     }
 
     pub(crate) fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        msg.borrow_mut().set_id(self.nodeid());
         if let Some(call) = msg.borrow().associated_call() {
-           call.borrow_mut().send();
+            call.borrow_mut().send();
 
             let call = Rc::clone(&call);
             self.scheduler.borrow_mut().add(move || {
@@ -317,7 +318,7 @@ async fn read_socket<F>(socket: &UdpSocket,
     let plain = match decrypt(&from_id, &mut buf[id::ID_BYTES .. len]) {
         Ok(plain) => plain,
         Err(err) => {
-            warn!("Decrypt packet error {} from {} ", err, from);
+            warn!("Decrypt packet from {} error {}, discarded it", err, from);
             return Ok(None);
         }
     };
@@ -325,18 +326,18 @@ async fn read_socket<F>(socket: &UdpSocket,
     let msg = match msg::deser(&plain) {
         Ok(msg) => msg,
         Err(err) => {
-            warn!("Got a wrong packet from {}, ignored. {}", from, err);
+            warn!("Got a wrong packet from {}: {}", from, err);
             return Ok(None);
         }
     };
 
-    msg.borrow_mut().set_id(from_id);
-    msg.borrow_mut().set_addr(from);
+    msg.borrow_mut().set_id(&from_id);
+    msg.borrow_mut().set_origin(&from);
 
-    info!("Received message: {}/{} from {}:[size: {}] {}", msg.borrow().method(), msg.borrow().kind(), from, len, msg.borrow());
+    info!("Received message: {}/{} from {}:[size: {}] - {}", msg.borrow().method(), msg.borrow().kind(), from, len, msg.borrow());
 
     if msg.borrow().kind() != msg::Kind::Error && msg.borrow().txid() == 0 {
-        warn!("Received a message with invalid transaction id");
+        warn!("Received a message with invalid transaction id, ignored it");
         return Ok(None);
     }
 
@@ -380,7 +381,7 @@ where
 
     buf.extend_from_slice(msg.borrow().id().as_bytes());
     buf.extend_from_slice(&serialized);
-    _ = socket.send_to(&buf, msg.borrow().addr()).await?;
+    _ = socket.send_to(&buf, msg.borrow().remote_addr()).await?;
 
     Ok(())
 }
