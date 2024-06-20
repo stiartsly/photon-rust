@@ -5,6 +5,7 @@ use std::fmt;
 use std::net::SocketAddr;
 use ciborium;
 use std::fmt::Display;
+use ciborium::Value as CVal;
 
 use crate::id::Id;
 use crate::rpccall::RpcCall;
@@ -236,10 +237,27 @@ pub(crate) trait Msg: Display {
         self.data_mut().associated_call = Some(call)
     }
 
-    fn to_cbor(&self) -> ciborium::value::Value;
+    fn to_cbor(&self) -> CVal {
+        CVal::Map(vec![
+            (
+                CVal::Text(String::from(keys::KEY_TYPE)),
+                CVal::Integer(self._type().into())
+            ),
+            (
+                CVal::Text(String::from(keys::KEY_TXID)),
+                CVal::Integer(self.txid().into())
+            ),
+            (
+                CVal::Text(String::from(keys::KEY_VERSION)),
+                CVal::Integer(self.ver().into())
+            )
+        ])
+    }
     fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool;
 
     fn as_any(&self) -> &dyn Any;
+
+    fn ser(&self) -> CVal;
 }
 
 pub(crate) fn deser(buf: &[u8]) -> Result<Rc<RefCell<dyn Msg>>, Error> {
@@ -295,10 +313,11 @@ pub(crate) fn deser(buf: &[u8]) -> Result<Rc<RefCell<dyn Msg>>, Error> {
 }
 
 pub(crate) fn serialize(msg: Rc<RefCell<dyn Msg>>) -> Vec<u8> {
-    let mut value = msg.borrow().to_cbor();
-    let mut encoded = Vec::new() as Vec<u8>;
-    let writer = cbor::Writer::new(&mut encoded);
-    let _ = ciborium::ser::into_writer(&mut value, writer);
-    encoded.push(0x0);
-    encoded
+    let mut val = msg.borrow().ser();
+    let mut buf = Vec::new() as Vec<u8>;
+    let writer = cbor::Writer::new(&mut buf);
+    let _ = ciborium::ser::into_writer(&mut val, writer);
+
+    buf.push(0x0);
+    buf
 }

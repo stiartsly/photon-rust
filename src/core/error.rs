@@ -25,13 +25,13 @@ impl fmt::Display for BosonError {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Generic(msg) => write!(f, "Generic error: {}", msg),
-            Error::Io(err, msg) => write!(f, "IO error: {}:{}", err, msg),
-            Error::Network(err, msg) => write!(f, "Network error: {}:{}", err, msg),
-            Error::Argument(msg) => write!(f, "Invalid argument: {}", msg),
-            Error::State(msg) => write!(f, "State error {}", msg),
-            Error::Protocol(msg) => write!(f, "DHT error {}", msg),
-            Error::Crypto(msg) => write!(f, "Crypto error {}", msg),
+            Error::Generic(msg) => write!(f, "<Generic error>: {}", msg),
+            Error::Io(err, msg) => write!(f, "<IO error>: {}:{}", err, msg),
+            Error::Network(err, msg) => write!(f, "<Network error>: {}:{}", err, msg),
+            Error::Argument(msg) => write!(f, "<Invalid argument>: {}", msg),
+            Error::State(msg) => write!(f, "<State error>: {}", msg),
+            Error::Protocol(msg) => write!(f, "<DHT error>: {}", msg),
+            Error::Crypto(msg) => write!(f, "<Crypto error>: {}", msg),
         }
     }
 }

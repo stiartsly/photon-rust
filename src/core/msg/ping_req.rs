@@ -27,23 +27,6 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn to_cbor(&self) -> CVal {
-        CVal::Map(vec![
-            (
-                CVal::Text(String::from(keys::KEY_TYPE)),
-                CVal::Integer(self._type().into())
-            ),
-            (
-                CVal::Text(String::from(keys::KEY_TXID)),
-                CVal::Integer(self.txid().into())
-            ),
-            (
-                CVal::Text(String::from(keys::KEY_VERSION)),
-                CVal::Integer(self.ver().into())
-            )
-        ])
-    }
-
     fn from_cbor(&mut self, input: &ciborium::value::Value) -> bool {
         let root = match input.as_map() {
             Some(root) => root,
@@ -71,6 +54,10 @@ impl Msg for Message {
             }
         }
         true
+    }
+
+    fn ser(&self) -> CVal {
+        Msg::to_cbor(self)
     }
 
     fn as_any(&self) -> &dyn Any {

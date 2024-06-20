@@ -28,11 +28,11 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn to_cbor(&self) -> CVal {
+    fn from_cbor(&mut self, _: &CVal) -> bool {
         unimplemented!()
     }
 
-    fn from_cbor(&mut self, _: &CVal) -> bool {
+    fn ser(&self) -> CVal {
         unimplemented!()
     }
 
@@ -51,7 +51,6 @@ impl LookupRequest for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Self::with_txid(0)

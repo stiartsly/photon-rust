@@ -29,11 +29,11 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn to_cbor(&self) -> CVal {
+    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool {
         unimplemented!()
     }
 
-    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool {
+    fn ser(&self) -> CVal {
         unimplemented!()
     }
 

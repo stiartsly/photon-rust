@@ -30,38 +30,6 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn to_cbor(&self) -> CVal {
-        let query_part = CVal::Map(vec![
-            (
-                CVal::Text(String::from(keys::KEY_REQ_TARGET)),
-                LookupRequest::target(self).to_cbor()
-            ),
-            (
-                CVal::Text(String::from(keys::KEY_REQ_WANT)),
-                CVal::Integer(self.want().into())
-            )
-        ]);
-
-        CVal::Map(vec![
-            (
-                CVal::Text(String::from(keys::KEY_TYPE)),
-                CVal::Integer(self._type().into())
-            ),
-            (
-                CVal::Text(String::from(keys::KEY_TXID)),
-                CVal::Integer(self.txid().into())
-            ),
-            (
-                CVal::Text(String::from(keys::KEY_VERSION)),
-                CVal::Integer(self.ver().into())
-            ),
-            (
-                CVal::Text(self.kind().to_key().to_string()),
-                query_part,
-            )
-        ])
-    }
-
     fn from_cbor(&mut self, input: &CVal) -> bool {
         let root = match input.as_map() {
             Some(root) => root,
@@ -126,6 +94,16 @@ impl Msg for Message {
         true
     }
 
+    fn ser(&self) -> CVal {
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text(Kind::Request.to_key().to_string());
+            let val = LookupRequest::to_cbor(self);
+            map.push((key, val));
+        }
+        root
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -141,7 +119,6 @@ impl LookupRequest for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Self::with_txid(0)

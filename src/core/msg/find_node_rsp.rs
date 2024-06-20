@@ -30,58 +30,6 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn to_cbor(&self) -> CVal {
-        let mut nodes4 = Vec::new();
-        if let Some(ns) = self.nodes4() {
-            ns.iter().for_each(|item| {
-                nodes4.push(item.to_cbor());
-            })
-        }
-        let mut nodes6 = Vec::new();
-        if let Some(ns) = self.nodes6() {
-            ns.iter().for_each(|item| {
-                nodes6.push(item.to_cbor())
-            })
-        }
-
-        let mut reply_part = Vec::new();
-        if !nodes4.is_empty() {
-            reply_part.push((
-                CVal::Text(String::from(keys::KEY_RES_NODES4)),
-                CVal::Array(nodes4)
-            ));
-        }
-        if !nodes6.is_empty() {
-            reply_part.push((
-                CVal::Text(String::from(keys::KEY_RES_NODES6)),
-                CVal::Array(nodes6)
-            ));
-        }
-        reply_part.push((
-            CVal::Text(String::from(keys::KEY_RES_TOKEN)),
-            CVal::Integer(self.token().into())
-        ));
-
-        CVal::Map(vec![
-            (
-                CVal::Text(String::from(keys::KEY_TYPE)),
-                CVal::Integer(self._type().into())
-            ),
-            (
-                CVal::Text(String::from(keys::KEY_TXID)),
-                CVal::Integer(self.txid().into())
-            ),
-            (
-                CVal::Text(String::from(keys::KEY_VERSION)),
-                CVal::Integer(self.ver().into())
-            ),
-            (
-                CVal::Text(Kind::Response.to_key().to_string()),
-                CVal::Map(reply_part)
-            )
-        ])
-    }
-
     fn from_cbor(&mut self, input: &CVal) -> bool {
         let root = match input.as_map() {
             Some(root) => root,
@@ -168,7 +116,19 @@ impl Msg for Message {
                 _ => return false,
             }
         }
+
+
         true
+    }
+
+    fn ser(&self) -> CVal {
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text(Kind::Response.to_key().to_string());
+            let val = LookupResponse::to_cbor(self);
+            map.push((key, val));
+        }
+        root
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -186,7 +146,6 @@ impl LookupResponse for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Self::with_txid(0)
@@ -203,7 +162,7 @@ impl Message {
         let mut msg = Self::new();
         match msg.from_cbor(input) {
             true => Ok(Rc::new(RefCell::new(msg))),
-            false => Err(Error::Protocol(format!("Invalid cobor value for find_node request message"))),
+            false => Err(Error::Protocol(format!("Invalid cobor value for find_node_rsp message"))),
         }
     }
 }

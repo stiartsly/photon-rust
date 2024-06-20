@@ -326,7 +326,7 @@ async fn read_socket<F>(socket: &UdpSocket,
     let msg = match msg::deser(&plain) {
         Ok(msg) => msg,
         Err(err) => {
-            warn!("Got a wrong packet from {}: {}", from, err);
+            warn!("Got a wrong packet from {} with {}", from, err);
             return Ok(None);
         }
     };

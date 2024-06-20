@@ -1,5 +1,9 @@
-
+use ciborium::Value as CVal;
 use crate::node_info::NodeInfo;
+
+use super::{
+    keys
+};
 
 pub(crate) struct Data {
     nodes4: Option<Vec<NodeInfo>>,
@@ -43,5 +47,40 @@ pub(crate) trait Msg {
 
     fn populate_token(&mut self, token: i32) {
         self.data_mut().token = token
+    }
+
+    fn to_cbor(&self) -> CVal {
+        let mut nodes4 = Vec::new();
+        if let Some(ns) = self.nodes4() {
+            ns.iter().for_each(|item| {
+                nodes4.push(item.to_cbor());
+            })
+        }
+        let mut nodes6 = Vec::new();
+        if let Some(ns) = self.nodes6() {
+            ns.iter().for_each(|item| {
+                nodes6.push(item.to_cbor())
+            })
+        }
+
+        let mut cbor = Vec::new();
+        if !nodes4.is_empty() {
+            cbor.push((
+                CVal::Text(String::from(keys::KEY_RES_NODES4)),
+                CVal::Array(nodes4)
+            ));
+        }
+        if !nodes6.is_empty() {
+            cbor.push((
+                CVal::Text(String::from(keys::KEY_RES_NODES6)),
+                CVal::Array(nodes6)
+            ));
+        }
+        cbor.push((
+            CVal::Text(String::from(keys::KEY_RES_TOKEN)),
+            CVal::Integer(self.token().into())
+        ));
+
+        CVal::Map(cbor)
     }
 }
