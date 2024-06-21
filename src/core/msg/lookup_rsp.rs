@@ -1,9 +1,7 @@
 use ciborium::Value as CVal;
 use crate::node_info::NodeInfo;
 
-use super::{
-    keys
-};
+use super::keys;
 
 pub(crate) struct Data {
     nodes4: Option<Vec<NodeInfo>>,

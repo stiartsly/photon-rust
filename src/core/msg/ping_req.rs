@@ -11,7 +11,12 @@ use crate::{
 
 use super::{
     keys,
-    msg::{Kind, Method, Msg, Data as MsgData}
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    }
 };
 
 pub(crate) struct Message {
@@ -69,7 +74,6 @@ impl Msg for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Self::with_txid(0)

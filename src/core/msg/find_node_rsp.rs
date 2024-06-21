@@ -12,8 +12,16 @@ use crate::{
 
 use super::{
     keys,
-    msg::{Kind, Method, Msg, Data as MsgData},
-    lookup_rsp::{Msg as LookupResponse, Data as LookupData },
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    },
+    lookup_rsp::{
+        Msg as LookupResponse,
+        Data as LookupData
+    },
 };
 
 pub(crate) struct Message {
@@ -116,7 +124,6 @@ impl Msg for Message {
                 _ => return false,
             }
         }
-
 
         true
     }

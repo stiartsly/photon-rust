@@ -10,13 +10,21 @@ use crate::{
 };
 
 use super::{
-    msg::{Kind, Method, Msg, Data as MsgData},
-    lookup_req::{Msg as LookupRequest, Data as LookupData },
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    },
+    lookup_req::{
+        Msg as LookupRequest,
+        Data as LookupRequestData
+    },
 };
 
 pub(crate) struct Message {
     base_data: MsgData,
-    lookkup_data: LookupData,
+    lookkup_data: LookupRequestData,
 }
 
 impl Msg for Message {
@@ -42,11 +50,11 @@ impl Msg for Message {
 }
 
 impl LookupRequest for Message {
-    fn data(&self) -> &LookupData {
+    fn data(&self) -> &LookupRequestData {
         &self.lookkup_data
     }
 
-    fn data_mut(&mut self) -> &mut LookupData {
+    fn data_mut(&mut self) -> &mut LookupRequestData {
         &mut self.lookkup_data
     }
 }
@@ -59,14 +67,16 @@ impl Message {
     pub(crate) fn with_txid(txid: i32) -> Self {
         Message {
             base_data: MsgData::new(Kind::Request, Method::FindPeer, txid),
-            lookkup_data: LookupData::new(),
+            lookkup_data: LookupRequestData::new(),
         }
     }
 
     pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, Error> {
         let mut msg = Self::new();
-        msg.from_cbor(input);
-        Ok(Rc::new(RefCell::new(msg)))
+        match msg.from_cbor(input) {
+            true => Ok(Rc::new(RefCell::new(msg))),
+            false => Err(Error::Protocol(format!("Invalid cobor value for find_peer_req message"))),
+        }
     }
 }
 

@@ -6,18 +6,26 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
-    error,
+    error::Error,
     peer::Peer,
 };
 
 use super::{
-    msg::{Kind, Method, Msg, Data as MsgData},
-    lookup_rsp::{Msg as LookupResponse, Data as LookupData},
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    },
+    lookup_rsp::{
+        Msg as LookupResponse,
+        Data as LookuResponseData
+    },
 };
 
 pub(crate) struct Message {
     base_data: MsgData,
-    lookup_data: LookupData,
+    lookup_data: LookuResponseData,
 
     peers: Option<Vec<Box<Peer>>>,
 }
@@ -45,11 +53,11 @@ impl Msg for Message {
 }
 
 impl LookupResponse for Message {
-    fn data(&self) -> &LookupData {
+    fn data(&self) -> &LookuResponseData {
         &self.lookup_data
     }
 
-    fn data_mut(&mut self) -> &mut LookupData {
+    fn data_mut(&mut self) -> &mut LookuResponseData {
         &mut self.lookup_data
     }
 }
@@ -63,23 +71,25 @@ impl Message {
     pub(crate) fn with_txid(txid: i32) -> Self {
         Self {
             base_data: MsgData::new(Kind::Response, Method::FindPeer, txid),
-            lookup_data: LookupData::new(),
+            lookup_data: LookuResponseData::new(),
             peers: None,
         }
     }
 
-    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
+    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, Error> {
         let mut msg = Self::new();
-        msg.from_cbor(input);
-        Ok(Rc::new(RefCell::new(msg)))
+        match msg.from_cbor(input) {
+            true => Ok(Rc::new(RefCell::new(msg))),
+            false => Err(Error::Protocol(format!("Invalid cobor value for find_peer_rsp message"))),
+        }
     }
 
     pub(crate) fn has_peers(&self) -> bool {
-        unimplemented!()
+        self.peers.as_ref().map_or(false, |peers| !peers.is_empty())
     }
 
-    pub(crate) fn peers(&self) -> &[Box<Peer>] {
-        unimplemented!()
+    pub(crate) fn peers(&self) -> Option<&[Box<Peer>]> {
+        self.peers.as_ref().map(|peers| peers.as_slice())
     }
 
     pub(crate) fn populate_peers(&mut self, peers: Vec<Box<Peer>>) {

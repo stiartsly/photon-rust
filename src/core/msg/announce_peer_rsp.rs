@@ -5,7 +5,7 @@ use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
-    error,
+    error::Error,
 };
 
 use super::{
@@ -50,10 +50,14 @@ impl Message {
         }
     }
 
-    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
+    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, Error> {
         let mut msg = Self::new();
-        msg.from_cbor(input);
-        Ok(Rc::new(RefCell::new(msg)))
+        match msg.from_cbor(input) {
+            true => Ok(Rc::new(RefCell::new(msg))),
+            false => Err(Error::Protocol(
+                format!("Invalid cobor value for announce_peer_rsp message")
+            )),
+        }
     }
 }
 

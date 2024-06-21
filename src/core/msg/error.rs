@@ -6,11 +6,16 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
-    error,
+    error::Error,
 };
 
 use super::{
-    msg::{Kind, Method, Msg, Data as MsgData}
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    }
 };
 
 pub(crate) struct Message {
@@ -41,9 +46,12 @@ impl Msg for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
-    pub(crate) fn new(method: Method, txid: i32) -> Self {
+    pub(crate) fn new() -> Self {
+        Self::with_txid(Method::Unknown, 0)
+    }
+
+    pub(crate) fn with_txid(method: Method, txid: i32) -> Self {
         Message {
             base_data: MsgData::new(Kind::Error, method, txid),
             code: 0,
@@ -51,13 +59,12 @@ impl Message {
         }
     }
 
-    pub(crate) fn from(_: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
-        /*let mut msg = Self::new();
+    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, Error> {
+        let mut msg = Self::new();
         match msg.from_cbor(input) {
             true => Ok(Rc::new(RefCell::new(msg))),
-            false => Err(Error::Protocol(format!("Invalid cobor value for find_node request message"))),
-        }*/
-        unimplemented!()
+            false => Err(Error::Protocol(format!("Invalid cobor value for error message"))),
+        }
     }
 
     pub(crate) fn msg(&self) -> &str {

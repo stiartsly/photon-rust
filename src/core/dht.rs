@@ -357,7 +357,7 @@ impl DHT {
 
     fn send_err(&mut self, msg: Rc<RefCell<dyn Msg>>, code: i32, str: &str) {
         let msg = msg.borrow();
-        let err = Rc::new(RefCell::new(error::Message::new(msg.method(), msg.txid())));
+        let err = Rc::new(RefCell::new(error::Message::with_txid(msg.method(), msg.txid())));
 
         err.borrow_mut().set_remote(msg.id(), msg.origin());
         err.borrow_mut().set_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));

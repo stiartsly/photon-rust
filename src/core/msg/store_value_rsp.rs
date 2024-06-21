@@ -5,11 +5,16 @@ use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
-    error,
+    error::Error,
 };
 
 use super::{
-    msg::{Kind, Method, Msg, Data as MsgData}
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    }
 };
 
 pub(crate) struct Message {
@@ -38,7 +43,6 @@ impl Msg for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Self::with_txid(0)
@@ -50,10 +54,14 @@ impl Message {
         }
     }
 
-    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, error::Error> {
+    pub(crate) fn from(input: &CVal) -> Result<Rc<RefCell<dyn Msg>>, Error> {
         let mut msg = Self::new();
-        msg.from_cbor(input);
-        Ok(Rc::new(RefCell::new(msg)))
+        match msg.from_cbor(input) {
+            true => Ok(Rc::new(RefCell::new(msg))),
+            false => Err(Error::Protocol(
+                format!("Invalid cobor value for store_value_req message")
+            )),
+        }
     }
 }
 
