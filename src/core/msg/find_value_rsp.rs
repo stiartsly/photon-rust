@@ -79,7 +79,9 @@ impl Message {
         let mut msg = Self::new();
         match msg.from_cbor(input) {
             true => Ok(Rc::new(RefCell::new(msg))),
-            false => Err(Error::Protocol(format!("Invalid cobor value for find_value_rsp message"))),
+            false => Err(Error::Protocol(
+                format!("Invalid cobor value for find_value_rsp message")
+            )),
         }
     }
 
