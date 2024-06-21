@@ -20,13 +20,13 @@ use super::{
     },
     lookup_rsp::{
         Msg as LookupResponse,
-        Data as LookupData
+        Data as LookupResponseData
     },
 };
 
 pub(crate) struct Message {
     base_data: MsgData,
-    lookup_data: LookupData,
+    lookup_data: LookupResponseData,
 }
 
 impl Msg for Message {
@@ -144,11 +144,11 @@ impl Msg for Message {
 }
 
 impl LookupResponse for Message {
-    fn data(&self) -> &LookupData {
+    fn data(&self) -> &LookupResponseData {
         &self.lookup_data
     }
 
-    fn data_mut(&mut self) -> &mut LookupData {
+    fn data_mut(&mut self) -> &mut LookupResponseData {
         &mut self.lookup_data
     }
 }
@@ -161,7 +161,7 @@ impl Message {
     pub(crate) fn with_txid(txid: i32) -> Self {
         Message {
             base_data: MsgData::new(Kind::Response, Method::FindNode, txid),
-            lookup_data: LookupData::new(),
+            lookup_data: LookupResponseData::new(),
         }
     }
 

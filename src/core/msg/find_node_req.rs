@@ -12,13 +12,21 @@ use crate::{
 
 use super::{
     keys,
-    msg::{Kind, Method, Msg, Data as MsgData},
-    lookup_req::{Msg as LookupRequest, Data as LookupData },
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    },
+    lookup_req::{
+        Msg as LookupRequest,
+        Data as LookupRequestData
+    },
 };
 
 pub(crate) struct Message {
     base_data: MsgData,
-    lookup_data: LookupData,
+    lookup_data: LookupRequestData,
 }
 
 impl Msg for Message {
@@ -110,11 +118,11 @@ impl Msg for Message {
 }
 
 impl LookupRequest for Message {
-    fn data(&self) -> &LookupData {
+    fn data(&self) -> &LookupRequestData {
         &self.lookup_data
     }
 
-    fn data_mut(&mut self) -> &mut LookupData {
+    fn data_mut(&mut self) -> &mut LookupRequestData {
         &mut self.lookup_data
     }
 }
@@ -127,7 +135,7 @@ impl Message {
     pub(crate) fn with_txid(txid: i32) -> Self {
         Message {
             base_data: MsgData::new(Kind::Request, Method::FindNode, txid),
-            lookup_data: LookupData::new(),
+            lookup_data: LookupRequestData::new(),
         }
     }
 

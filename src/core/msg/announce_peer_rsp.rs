@@ -9,7 +9,12 @@ use crate::{
 };
 
 use super::{
-    msg::{Kind, Method, Msg, Data as MsgData}
+    msg::{
+        Kind,
+        Method,
+        Msg,
+        Data as MsgData
+    }
 };
 
 pub(crate) struct Message {

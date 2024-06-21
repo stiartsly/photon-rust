@@ -73,7 +73,8 @@ impl Prefix {
     }
 
     pub fn is_sibling_of(&self, other: &Prefix) -> bool {
-        self.depth == other.depth && id::bits_equal(&self.id, &other.id, self.depth - 1)
+        self.depth == other.depth &&
+            id::bits_equal(&self.id, &other.id, self.depth - 1)
     }
 
     pub fn create_random_id(&self) -> Id {
