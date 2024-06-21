@@ -63,10 +63,6 @@ impl Kind {
             Kind::Response => "r",
         }
     }
-
-    pub(crate) fn into_i32(&self) -> i32 {
-        *self as i32
-    }
 }
 
 impl fmt::Display for Kind {
@@ -111,10 +107,6 @@ impl Method {
     fn is_valid(_type: i32) -> bool {
         let method = _type & Self::MASK;
         method >= 0 && method < 0x06
-    }
-
-    pub(crate) fn into_i32(&self) -> i32 {
-        *self as i32
     }
 }
 
@@ -209,7 +201,7 @@ pub(crate) trait Msg: Display {
     }
 
     fn set_type(&mut self, kind: Kind, method: Method) {
-        self.data_mut()._type = kind.into_i32() | method.into_i32()
+        self.data_mut()._type = kind as i32 | method as i32
     }
 
     fn set_id(&mut self, id: &Id) {

@@ -38,19 +38,23 @@ impl Msg for Message {
                 Some(key) => key,
                 None => return false,
             };
-            let val = match val.as_integer() {
-                Some(val) => val,
-                None => return false,
-            };
-
             match key {
-                keys::KEY_TYPE =>
-                    self.set_type(Kind::Request, Method::Ping),
-                keys::KEY_TXID =>
-                    self.set_txid(val.try_into().unwrap()),
-                keys::KEY_VERSION =>
-                    self.set_ver(val.try_into().unwrap()),
-                _ => return false,
+                keys::KEY_TYPE => {},
+                keys::KEY_TXID => {
+                    let txid = match val.as_integer() {
+                        Some(txid) => txid,
+                        None => return false,
+                    };
+                    self.set_txid(txid.try_into().unwrap());
+                },
+                keys::KEY_VERSION => {
+                    let ver = match val.as_integer() {
+                        Some(ver) => ver,
+                        None => return false,
+                    };
+                    self.set_ver(ver.try_into().unwrap());
+                },
+                _=> return false,
             }
         }
         true
