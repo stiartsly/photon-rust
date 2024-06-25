@@ -55,6 +55,55 @@ impl<'a> Builder<'a> {
     }
 }
 
+pub(crate) struct PackBuilder<'a> {
+    pk: Option<Id>,
+    node_id: Option<Id>,
+    port: u16,
+    url: Option<&'a str>,
+    sig: Option<Vec<u8>>,
+}
+
+impl<'a> PackBuilder<'a> {
+    pub(crate) fn new() -> Self {
+        Self {
+            pk: None,
+            node_id: None,
+            port: 0,
+            url: None,
+            sig: None,
+        }
+    }
+
+    pub(crate) fn with_peerid(&mut self, peerid: Id) -> &mut Self {
+        self.pk = Some(peerid);
+        self
+    }
+
+    pub(crate) fn with_nodeid(&mut self, proxyid: Id) -> &mut Self {
+        self.node_id = Some(proxyid);
+        self
+    }
+
+    pub(crate) fn with_port(&mut self, port: u16) -> &mut Self {
+        self.port = port;
+        self
+    }
+
+    pub(crate) fn with_alternative_url(&mut self, alternative_url: &'a str) -> &mut Self {
+        self.url = Some(alternative_url);
+        self
+    }
+
+    pub(crate) fn with_sigature(&mut self, sig: &[u8]) -> &mut Self {
+        self.sig = Some(sig.to_vec());
+        self
+    }
+
+    pub fn build(&mut self) -> Peer {
+        Peer::packed(self)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Peer {
     pk: Id,
@@ -90,6 +139,22 @@ impl Peer {
         );
         peer.sig = sig;
         peer
+    }
+
+    pub(crate) fn packed(b: &mut PackBuilder) -> Self {
+        // TODO:
+        Peer {
+            pk: b.pk.take().unwrap(),
+            sk: None,
+            id: b.node_id.take().unwrap(),
+            origin: None,
+            port: b.port,
+            url: match b.url {
+                Some(url) => Some(url.nfc().collect::<String>()),
+                None => None,
+            },
+            sig: Vec::new(),
+        }
     }
 
     pub const fn id(&self) -> &Id {

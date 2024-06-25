@@ -5,12 +5,14 @@ use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
+    unwrap,
     error::Error,
-    peer::Peer,
+    peer::{Peer, PackBuilder},
     id::Id,
 };
 
 use super::{
+    keys,
     msg::{
         Kind,
         Method,
@@ -23,7 +25,7 @@ pub(crate) struct Message {
     base_data: MsgData,
 
     token: i32,
-    peers: Vec<Box<Peer>>,
+    peer: Option<Box<Peer>>,
 }
 
 impl Msg for Message {
@@ -35,12 +37,163 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn from_cbor(&mut self, _: &CVal)-> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &CVal)-> bool {
+        let mut peer_id = None;
+        let mut proxy_id = None;
+        let mut port = 0u16;
+        let mut alt = None;
+        let mut sig = None;
+
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
+
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+            match key {
+                keys::KEY_TYPE => {},
+                keys::KEY_TXID => {
+                    let txid = match val.as_integer() {
+                        Some(txid) => txid,
+                        None => return false,
+                    };
+                    self.set_txid(txid.try_into().unwrap());
+                },
+                keys::KEY_VERSION => {
+                    let ver = match val.as_integer() {
+                        Some(ver) => ver,
+                        None => return false,
+                    };
+                    self.set_ver(ver.try_into().unwrap());
+                },
+                keys::KEY_REQUEST => {
+                    let map = match val.as_map() {
+                        Some(map) => map,
+                        None => return false,
+                    };
+                    for (key, val) in map {
+                        let key = match key.as_text() {
+                            Some(key) => key,
+                            None => return false,
+                        };
+                        match key {
+                            keys::KEY_REQ_TARGET => {
+                                let id = match Id::from_cbor(val) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                peer_id = Some(id);
+                            },
+                            keys::KEY_REQ_PROXY_ID => {
+                                let id = match Id::from_cbor(val) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                proxy_id = Some(id);
+                            },
+                            keys::KEY_REQ_PORT => {
+                                let v = match val.as_integer() {
+                                    Some(v) => v.try_into().unwrap(),
+                                    None => return false,
+                                };
+                                port = v;
+                            },
+                            keys::KEY_REQ_ALT => {
+                                let v = match val.as_text() {
+                                    Some(v) => v,
+                                    None => return false,
+                                };
+                                alt = Some(v);
+                            },
+                            keys::KEY_REQ_SIGNATURE => {
+                                let v = match val.as_bytes() {
+                                    Some(v) => v,
+                                    None => return false,
+                                };
+                                sig = Some(v);
+                            },
+                            keys::KEY_REQ_TOKEN => {
+                                let v = match val.as_integer() {
+                                    Some(v) => v,
+                                    None => return false,
+                                };
+                                self.token = v.try_into().unwrap();
+                            }
+                            _ => return false,
+                        }
+                    }
+                },
+                _ => return false,
+            }
+        }
+
+        let mut b = PackBuilder::new();
+        b.with_port(port);
+        if let Some(peerid) = peer_id.take() {
+            b.with_peerid(peerid);
+        }
+        if let Some(proxyid) = proxy_id.take() {
+            b.with_nodeid(proxyid);
+        }
+        if let Some(alt) = alt.take() {
+            b.with_alternative_url(alt);
+        }
+        if let Some(sig) = sig.take() {
+            b.with_sigature(sig);
+        }
+
+        self.peer = Some(Box::new(b.build()));
+        true
     }
 
     fn ser(&self) -> CVal {
-        unimplemented!()
+        let mut req_map = vec![
+            (
+                CVal::Text(String::from(keys::KEY_REQ_TARGET)),
+                unwrap!(self.peer).id().to_cbor(),
+            ),
+            (
+                CVal::Text(String::from(keys::KEY_REQ_WANT)),
+                CVal::Integer(self.token.into()),
+            ),
+            (
+                CVal::Text(String::from(keys::KEY_REQ_PORT)),
+                CVal::Integer(unwrap!(self.peer).port().into()),
+            ),
+            (
+                CVal::Text(String::from(keys::KEY_REQ_SIGNATURE)),
+                CVal::Bytes(unwrap!(self.peer).signature().to_vec()),
+            )
+        ];
+
+        if unwrap!(self.peer).is_delegated() {
+            req_map.push(
+                (
+                    CVal::Text(String::from(keys::KEY_REQ_PROXY_ID)),
+                    unwrap!(self.peer).origin().to_cbor(),
+                )
+            )
+        }
+
+        if let Some(alt) = unwrap!(self.peer).alternative_url() {
+            req_map.push(
+                (
+                    CVal::Text(String::from(keys::KEY_REQ_ALT)),
+                    CVal::Text(alt.to_string()),
+                )
+            )
+        }
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text(Kind::Request.to_key().to_string());
+            let val = CVal::Map(req_map);
+            map.push((key, val));
+        }
+        root
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -58,7 +211,7 @@ impl Message {
         Self {
             base_data: MsgData::new(Kind::Request, Method::AnnouncePeer, txid),
             token: 0,
-            peers: Vec::new(),
+            peer: None,
         }
     }
 
@@ -76,20 +229,20 @@ impl Message {
         self.token
     }
 
-    pub(crate) fn peers(&self) -> &Vec<Box<Peer>> {
-        &self.peers
+    pub(crate) fn peer(&self) -> &Box<Peer> {
+        self.peer.as_ref().unwrap()
     }
 
     pub(crate) fn with_token(&mut self, token: i32) {
         self.token = token
     }
 
-    pub(crate) fn with_peers(&mut self, peers: Vec<Box<Peer>>) {
-        self.peers = peers
+    pub(crate) fn with_peer(&mut self, peer: Box<Peer>) {
+        self.peer = Some(peer)
     }
 
     pub(crate) fn target(&self) -> &Id {
-        unimplemented!()
+        unwrap!(self.peer).id()
     }
 }
 

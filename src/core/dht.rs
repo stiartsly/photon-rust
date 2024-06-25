@@ -515,8 +515,7 @@ impl DHT {
         let binding = msg.borrow();
         let req = binding.as_any().downcast_ref::<announce_peer_req::Message>().unwrap();
         if is_bogon_address(req.origin()) {
-            info!(
-                "Received an announce peer request from bogon address {}, ignored ",
+            info!("Received an announce peer request from bogon address {}, ignored ",
                 req.origin()
             );
         }
@@ -535,12 +534,10 @@ impl DHT {
             return;
         }
 
-        let peers = req.peers();
-        for peer in peers.iter() {
-            if !peer.is_valid() {
-                self.send_err(Rc::clone(&msg), 203, "One peer is invalid peer");
-                return;
-            }
+        let peer = req.peer();
+        if !peer.is_valid() {
+            self.send_err(Rc::clone(&msg), 203, "One peer is invalid peer");
+            return;
         }
 
         debug!(
@@ -551,7 +548,7 @@ impl DHT {
 
         let rsp = Rc::new(RefCell::new(announce_peer_rsp::Message::new()));
         rsp.borrow_mut().set_remote(req.id(), req.origin());
-        rsp.borrow_mut().set_txid(binding.txid());
+        rsp.borrow_mut().set_txid(req.txid());
 
         self.server.borrow_mut().send_msg(rsp);
     }
