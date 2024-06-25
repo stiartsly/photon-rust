@@ -6,10 +6,12 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
+    id::Id,
     error::Error,
 };
 
 use super::{
+    keys,
     msg::{
         Kind,
         Method,
@@ -36,12 +38,78 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn from_cbor(&mut self, _: &CVal) -> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &CVal) -> bool {
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
+
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+            match key {
+                keys::KEY_TYPE => {},
+                keys::KEY_TXID => {
+                    let txid = match val.as_integer() {
+                        Some(txid) => txid,
+                        None => return false,
+                    };
+                    self.set_txid(txid.try_into().unwrap());
+                },
+                keys::KEY_VERSION => {
+                    let ver = match val.as_integer() {
+                        Some(ver) => ver,
+                        None => return false,
+                    };
+                    self.set_ver(ver.try_into().unwrap());
+                },
+                keys::KEY_REQUEST => {
+                    let map = match val.as_map() {
+                        Some(map) => map,
+                        None => return false,
+                    };
+                    for (key, val) in map {
+                        let key = match key.as_text() {
+                            Some(key) => key,
+                            None => return false,
+                        };
+                        match key {
+                            keys::KEY_REQ_WANT => {
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                let _want: i32 = val.try_into().unwrap();
+                                self.with_want4((_want & 0x01) != 0);
+                                self.with_want6((_want & 0x01) != 0);
+                            },
+                            keys::KEY_REQ_TARGET => {
+                                let id = match Id::from_cbor(val) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                self.with_target(id)
+                            },
+                            _ => return false,
+                        }
+                    }
+                },
+                _ => return false,
+            }
+        }
+        true
     }
 
     fn ser(&self) -> CVal {
-        unimplemented!()
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text(Kind::Request.to_key().to_string());
+            let val = LookupRequest::to_cbor(self);
+            map.push((key, val));
+        }
+        root
     }
 
     fn as_any(&self) -> &dyn Any {
