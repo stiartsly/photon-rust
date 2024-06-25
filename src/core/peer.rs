@@ -1,25 +1,12 @@
 use std::fmt;
 use std::mem;
 use unicode_normalization::UnicodeNormalization;
-use ciborium::value::Value;
 
 use crate::{
     unwrap,
     id::{Id, ID_BYTES},
-    error::Error,
     signature::{self, KeyPair, PrivateKey, Signature}
 };
-
-#[derive(Clone, Debug)]
-pub struct Peer {
-    pk: Id,
-    sk: Option<PrivateKey>,
-    id: Id,
-    origin: Id,
-    port: u16,
-    url: Option<String>,
-    sig: Vec<u8>,
-}
 
 pub struct Builder<'a> {
     keypair: Option<KeyPair>,
@@ -68,6 +55,17 @@ impl<'a> Builder<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Peer {
+    pk: Id,
+    sk: Option<PrivateKey>,
+    id: Id,
+    origin: Option<Id>,
+    port: u16,
+    url: Option<String>,
+    sig: Vec<u8>,
+}
+
 impl Peer {
     fn new(b: &Builder) -> Self {
         let kp = unwrap!(b.keypair);
@@ -76,8 +74,8 @@ impl Peer {
             sk: Some(kp.private_key().clone()),
             id: b.id.clone(),
             origin: match b.origin {
-                Some(origin) => origin.clone(),
-                None => b.id.clone(),
+                Some(origin) => Some(origin.clone()),
+                None => None,
             },
             port: b.port,
             url: match b.url {
@@ -92,11 +90,6 @@ impl Peer {
         );
         peer.sig = sig;
         peer
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn try_from_cbor(_: &Value) -> Result<Self, Error> {
-        unimplemented!()
     }
 
     pub const fn id(&self) -> &Id {
@@ -115,8 +108,8 @@ impl Peer {
         &self.id
     }
 
-    pub const fn origin(&self) -> &Id {
-        &self.origin
+    pub fn origin(&self) -> &Id {
+        self.origin.as_ref().unwrap_or_else(|| self.node_id())
     }
 
     pub const fn port(&self) -> u16 {
@@ -136,7 +129,7 @@ impl Peer {
     }
 
     pub fn is_delegated(&self) -> bool {
-        self.origin != self.id
+        self.origin.is_some()
     }
 
     pub fn is_valid(&self) -> bool {
@@ -165,7 +158,8 @@ impl Peer {
 
         let mut input = Vec::<u8>::with_capacity(len);
         input.extend_from_slice(self.id.as_bytes());
-        input.extend_from_slice(self.origin.as_bytes());
+
+        input.extend_from_slice(self.origin().as_bytes());
         input.extend_from_slice(self.port.to_le_bytes().as_ref());
 
         if let Some(url) = self.url.as_ref() {
@@ -173,17 +167,13 @@ impl Peer {
         }
         input
     }
-
-    pub(crate) fn to_cbor(&self) -> Value {
-        unimplemented!()
-    }
 }
 
 impl fmt::Display for Peer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{},{},", self.pk, self.id)?;
         if self.is_delegated() {
-            write!(f, "{},", self.origin)?;
+            write!(f, "{},", self.origin())?;
         }
         write!(f, "{}", self.port)?;
         if self.url.is_some() {
