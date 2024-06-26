@@ -6,11 +6,14 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
+    id::Id,
     error::Error,
-    peer::Peer,
+    peer::{Peer, PackBuilder},
+    node_info::NodeInfo,
 };
 
 use super::{
+    keys,
     msg::{
         Kind,
         Method,
@@ -27,7 +30,7 @@ pub(crate) struct Message {
     base_data: MsgData,
     lookup_data: LookuResponseData,
 
-    peers: Option<Vec<Box<Peer>>>,
+    peers: Vec<Box<Peer>>,
 }
 
 impl Msg for Message {
@@ -39,12 +42,210 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn from_cbor(&mut self, _: &CVal) -> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &CVal) -> bool {
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
+
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+
+            match key {
+                keys::KEY_TYPE => {},
+                keys::KEY_TXID => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
+                        None => return false,
+                    };
+                    self.set_txid(val.try_into().unwrap());
+                },
+                keys::KEY_VERSION => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
+                        None => return false,
+                    };
+                    self.set_ver(val.try_into().unwrap());
+                },
+                keys::KEY_RESPONSE => {
+                    let map = match val.as_map() {
+                        Some(map) => map,
+                        None => return false,
+                    };
+
+                    for (key, val) in map {
+                        let key = match key.as_text() {
+                            Some(key) => key,
+                            None => return false,
+                        };
+                        match key {
+                            keys::KEY_RES_NODES4 => {
+                                let array = match val.as_array() {
+                                    Some(array) => array,
+                                    None => return false,
+                                };
+
+                                let mut nodes = Vec::new();
+                                for item in array.iter() {
+                                    let ni = match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => ni,
+                                        Err(_) => return false
+                                    };
+                                    nodes.push(ni);
+                                }
+                                self.populate_closest_nodes4(nodes);
+                            },
+                            keys::KEY_RES_NODES6 => {
+                                let array = match val.as_array() {
+                                    Some(array) => array,
+                                    None => return false,
+                                };
+
+                                let mut nodes = Vec::new();
+                                for item in array.iter() {
+                                    let ni = match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => ni,
+                                        Err(_) => return false
+                                    };
+                                    nodes.push(ni);
+                                }
+                                self.populate_closest_nodes6(nodes);
+                            },
+                            keys::KEY_RES_TOKEN => {
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                self.populate_token(val.try_into().unwrap());
+                            },
+                            "p" => {
+                                let array = match val.as_array() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+
+                                let peer_id = match Id::try_from_cbor(&array[0]) {
+                                    Ok(v) => v,
+                                    Err(_) => return false ,
+                                };
+                                for item in array.iter() {
+                                    if !item.is_null() {
+                                        // Do nothing.
+                                    } else if !item.is_bytes() {
+                                        // DO nothing;
+                                    } else if item.is_array() {
+                                        let arr = match item.as_array() {
+                                            Some(v) => v,
+                                            None => return false,
+                                        };
+
+                                        let node_id = match Id::try_from_cbor(&arr[0]) {
+                                            Ok(id) => id,
+                                            Err(_) => return false,
+                                        };
+                                        let _ = match Id::try_from_cbor(&arr[1]) {
+                                            Ok(id) => Some(id),
+                                            Err(_) => None,
+                                        };
+                                        let port = match arr[2].as_integer() {
+                                            Some(v) => v.try_into().unwrap(),
+                                            None => return false,
+                                        };
+                                        let alt = match arr[3].as_text() {
+                                            Some(v) => Some(v),
+                                            None => None,
+                                        };
+                                        let sig = match arr[4].as_bytes() {
+                                            Some(v) => v,
+                                            None => return false,
+                                        };
+
+                                        let mut b = PackBuilder::new();
+                                        b.with_peerid(peer_id.clone());
+                                        b.with_nodeid(node_id);
+                                        //if let Some(origin) = origin {
+                                           // b.with_origin(origin);
+                                        //}
+                                        b.with_port(port);
+                                        if let Some(alt) = alt {
+                                            b.with_alternative_url(alt);
+                                        }
+                                        b.with_sigature(sig);
+                                        self.peers.push(Box::new(b.build()));
+                                    } else {
+                                        return false;
+                                    }
+                                };
+                            }
+
+                            _ => return false
+                        }
+                    }
+                },
+                _ => return false,
+            }
+        }
+
+        true
     }
 
     fn ser(&self) -> CVal {
-        unimplemented!()
+        let peers: CVal;
+
+        if self.peers.is_empty() {
+            peers = CVal::Null;
+        } else {
+            let mut array = vec![];
+            let peer_id = self.peers[0].id();
+
+            array.push(peer_id.to_cbor());
+            self.peers.iter().for_each(|item| {
+                let node_id = item.node_id().to_cbor();
+                let origin: CVal;
+
+                if item.is_delegated() {
+                    origin = item.origin().to_cbor();
+                } else {
+                    origin = CVal::Null;
+                }
+
+                let port = CVal::Integer(item.port().into());
+                let alt: CVal;
+                if let Some(url) = item.alternative_url() {
+                    alt = CVal::Text(url.to_string());
+                } else {
+                    alt = CVal::Null;
+                }
+
+                let sig = CVal::Bytes(item.signature().to_vec());
+
+                let mut peer = vec![];
+                peer.push(node_id);
+                peer.push(origin);
+                peer.push(port);
+                peer.push(alt);
+                peer.push(sig);
+
+                array.push(CVal::Array(peer));
+            });
+            peers = CVal::Array(array);
+        }
+
+        let mut val = LookupResponse::to_cbor(self);
+        if let Some(map) = val.as_map_mut() {
+            let key = CVal::Text(String::from("p"));
+            map.push((key, peers));
+        }
+
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text(Kind::Response.to_key().to_string());
+            map.push((key, val));
+        }
+        root
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -72,7 +273,7 @@ impl Message {
         Self {
             base_data: MsgData::new(Kind::Response, Method::FindPeer, txid),
             lookup_data: LookuResponseData::new(),
-            peers: None,
+            peers: Vec::new(),
         }
     }
 
@@ -87,22 +288,21 @@ impl Message {
     }
 
     pub(crate) fn has_peers(&self) -> bool {
-        self.peers.as_ref().map_or(false, |peers| !peers.is_empty())
+        !self.peers.is_empty()
     }
 
-    pub(crate) fn peers(&self) -> Option<&[Box<Peer>]> {
-        self.peers.as_ref().map(|peers| peers.as_slice())
+    pub(crate) fn peers(&self) -> &[Box<Peer>] {
+        &self.peers
     }
 
     pub(crate) fn populate_peers(&mut self, peers: Vec<Box<Peer>>) {
-        self.peers = Some(peers);
+        self.peers = peers
     }
 }
 
 impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
+        write!(f,
             "y:{},m:{},t:{},r: {{",
             self.kind(),
             self.method(),
@@ -147,21 +347,16 @@ impl fmt::Display for Message {
             write!(f, ",tok:{}", self.token())?;
         }
 
-        match self.peers.as_ref() {
-            Some(peers) => {
-                let mut first = true;
-                if !peers.is_empty() {
-                    write!(f, ",p:")?;
-                    for item in peers.iter() {
-                        if !first {
-                            first = false;
-                            write!(f, ",")?;
-                        }
-                        write!(f, "[{}]", item)?;
-                    }
+        let mut first = true;
+        if !self.peers.is_empty() {
+            write!(f, ",p:")?;
+            for item in self.peers.iter() {
+                if !first {
+                    first = false;
+                    write!(f, ",")?;
                 }
+                write!(f, "[{}]", item)?;
             }
-            None => {}
         }
 
         write!(f, "}},v:{}", version::formatted_version(self.ver()))?;

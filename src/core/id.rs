@@ -46,7 +46,7 @@ impl Id {
         Id(bytes)
     }
 
-    pub(crate) fn from_cbor(input: &Value) -> Result<Self, Error> {
+    pub(crate) fn try_from_cbor(input: &Value) -> Result<Self, Error> {
         let bytes = match input.as_bytes() {
             Some(bytes) => bytes,
             None => return Err(Error::Protocol(format!("Invalid cobor value for Id"))),

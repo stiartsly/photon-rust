@@ -86,7 +86,7 @@ impl Msg for Message {
                                 self.with_want6((_want & 0x01) != 0);
                             },
                             keys::KEY_REQ_TARGET => {
-                                let id = match Id::from_cbor(val) {
+                                let id = match Id::try_from_cbor(val) {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };

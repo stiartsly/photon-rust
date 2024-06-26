@@ -1,6 +1,6 @@
 use std::fmt;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
-use ciborium::value::Value;
+use ciborium::Value;
 
 use crate::{
     version,
@@ -37,7 +37,7 @@ impl NodeInfo {
                 format!("Invalid cobor value for node info")))
         };
 
-        let id = match Id::from_cbor(&array[0]) {
+        let id = match Id::try_from_cbor(&array[0]) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };

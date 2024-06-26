@@ -82,14 +82,14 @@ impl Msg for Message {
                         };
                         match key {
                             keys::KEY_REQ_TARGET => {
-                                let id = match Id::from_cbor(val) {
+                                let id = match Id::try_from_cbor(val) {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };
                                 peer_id = Some(id);
                             },
                             keys::KEY_REQ_PROXY_ID => {
-                                let id = match Id::from_cbor(val) {
+                                let id = match Id::try_from_cbor(val) {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };
