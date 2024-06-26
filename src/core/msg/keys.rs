@@ -22,6 +22,8 @@ pub(crate) const KEY_REQ_TOKEN: &str    = "tok";
 pub(crate) const KEY_REQ_SIGNATURE: &str = "sig";
 pub(crate) const KEY_REQ_ALT: &str      = "alt";
 
+pub(crate) const KEY_RES_SEQ: &str      = "seq";
+
 /*
 const KEY_REQ_PUBLICKEY: &str   = "k";
 const KEY_REQ_RECIPIENT: &str   = "rec";
@@ -42,7 +44,7 @@ const KEY_RES_RECIPIENT: &str   = "rec";
 const KEY_RES_NONCE : &str      = "n";
 const KEY_RES_SIGNATURE : &str  = "sig";
 const KEY_RES_VALUE  : &str     = "v";
-const KEY_RES_SEQ  : &str       = "seq";
+
 
 const KEY_ERROR : &str          = "e";
 const KEY_ERR_CODE : &str       = "c";
