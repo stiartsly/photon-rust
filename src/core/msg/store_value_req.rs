@@ -5,8 +5,9 @@ use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
+    id::Id,
     error::Error,
-    value::Value,
+    value::{Value, PackBuilder},
 };
 
 use super::{
@@ -22,6 +23,7 @@ pub(crate) struct Message {
     base_data: MsgData,
 
     token: i32,
+    expected_seq: i32,
     value: Option<Box<Value>>,
 }
 
@@ -34,8 +36,138 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &CVal) -> bool {
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
+
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+            match key {
+                "y" => {},
+                "t" => {
+                    let txid = match val.as_integer() {
+                        Some(txid) => txid,
+                        None => return false,
+                    };
+                    let txid = txid.try_into().unwrap();
+                    self.set_txid(txid);
+                },
+                "v" => {
+                    let ver = match val.as_integer() {
+                        Some(ver) => ver,
+                        None => return false,
+                    };
+                    let ver = ver.try_into().unwrap();
+                    self.set_ver(ver);
+                },
+                "q" => {
+                    let mut pk = None;
+                    let mut recipient = None;
+                    let mut nonce = None;
+                    let mut sig = None;
+                    let mut seq = 0;
+                    let mut data = None;
+
+                    let map = match val.as_map() {
+                        Some(map) => map,
+                        None => return false,
+                    };
+                    for (key, val) in map {
+                        let key = match key.as_text() {
+                            Some(key) => key,
+                            None => return false,
+                        };
+                        match key {
+                            "k" => { // publickey
+                                let id = match Id::try_from_cbor(val) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                pk = Some(id);
+                            },
+                            "rec" => { // recipient
+                                let id = match Id::try_from_cbor(val) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                recipient = Some(id);
+                            },
+                            "n" => { // nonce
+                                let val = match val.as_bytes() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                nonce = Some(val);
+                            },
+                            "s" => { // signature
+                                let val = match val.as_bytes() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                sig = Some(val);
+                            },
+                            "seq" => { // sequence number
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false
+                                };
+                                seq = val.try_into().unwrap();
+                            },
+                            "cas" => { // expected sequence number.
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false
+                                };
+                                self.expected_seq = val.try_into().unwrap();
+                            },
+                            "tok" => {  // token
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                self.token = val.try_into().unwrap();
+                            },
+                            "v" => { // value
+                                let val = match val.as_bytes() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                data = Some(val);
+                            },
+                            _ => return false,
+                        }
+                    }
+
+                    let data = match data.take() {
+                        Some(data) => data,
+                        None => return false,
+                    };
+
+                    let mut b = PackBuilder::default(data);
+                    if let Some(pk) = pk.take() {
+                        b.with_pk(pk);
+                    }
+                    if let Some(rec) = recipient.take() {
+                        b.with_recipient(rec);
+                    }
+                    if let Some(nonce) = nonce.take() {
+                        b.with_nonce(nonce);
+                    }
+                    if let Some(sig) = sig.take() {
+                        b.with_sig(sig);
+                    }
+                    b.with_seq(seq);
+                    self.value = Some(Box::new(b.build()));
+                },
+                _ => return false,
+            }
+        }
+        true
     }
 
     fn ser(&self) -> CVal {
@@ -56,6 +188,7 @@ impl Message {
         Self {
             base_data: MsgData::new(Kind::Request, Method::StoreValue, txid),
             token: 0,
+            expected_seq: -1,
             value: None,
         }
     }

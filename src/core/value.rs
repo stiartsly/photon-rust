@@ -43,9 +43,9 @@ pub struct EncryptedBuilder<'a> {
 }
 
 pub(crate) struct PackBuilder<'a> {
-    pk: Option<&'a Id>,
-    recipient: Option<&'a Id>,
-    nonce: Option<&'a cryptobox::Nonce>,
+    pk: Option<Id>,
+    recipient: Option<Id>,
+    nonce: Option<cryptobox::Nonce>,
     sig: Option<&'a [u8]>,
     data: &'a [u8],
     seq: i32,
@@ -152,18 +152,18 @@ impl<'a> PackBuilder<'a> {
         }
     }
 
-    pub(crate) fn with_pk(&mut self, pk: &'a Id) -> &mut Self {
+    pub(crate) fn with_pk(&mut self, pk: Id) -> &mut Self {
         self.pk = Some(pk);
         self
     }
 
-    pub(crate) fn with_recipient(&mut self, recipient: &'a Id) -> &mut Self {
+    pub(crate) fn with_recipient(&mut self, recipient: Id) -> &mut Self {
         self.recipient = Some(recipient);
         self
     }
 
-    pub(crate) fn with_nonce(&mut self, nonce: &'a cryptobox::Nonce) -> &mut Self {
-        self.nonce = Some(nonce);
+    pub(crate) fn with_nonce(&mut self, nonce: &'a [u8]) -> &mut Self {
+        self.nonce = Some(cryptobox::Nonce::from(nonce));
         self
     }
 
@@ -177,7 +177,8 @@ impl<'a> PackBuilder<'a> {
         self
     }
 
-    pub(crate) fn build(&self) -> Value {
+    pub(crate) fn build(&mut
+        self) -> Value {
         Value::packed(self)
     }
 }
@@ -254,12 +255,12 @@ impl Value {
         value
     }
 
-    fn packed(b: &PackBuilder) -> Self {
+    fn packed(b: &mut PackBuilder) -> Self {
         Value {
-            pk: b.pk.map(|v| v.clone()),
+            pk: b.pk.take(),
             sk: None,
-            recipient: b.recipient.map(|v| v.clone()),
-            nonce: b.nonce.map(|v| v.clone()),
+            recipient: b.recipient.take(),
+            nonce: b.nonce.take(),
             sig: b.sig.map(|v| v.to_vec()),
             data: b.data.to_vec(),
             seq: b.seq,
