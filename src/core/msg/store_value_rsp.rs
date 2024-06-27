@@ -30,12 +30,41 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn from_cbor(&mut self, _: &CVal) -> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &CVal) -> bool {
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
+
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+            match key {
+                "y" => {},
+                "t" => {
+                    let txid = match val.as_integer() {
+                        Some(txid) => txid,
+                        None => return false,
+                    };
+                    self.set_txid(txid.try_into().unwrap());
+                },
+                "v" => {
+                    let ver = match val.as_integer() {
+                        Some(ver) => ver,
+                        None => return false,
+                    };
+                    self.set_ver(ver.try_into().unwrap());
+                },
+                _=> return false,
+            }
+        }
+        true
     }
 
     fn ser(&self) -> CVal {
-        unimplemented!()
+        Msg::to_cbor(self)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -50,7 +79,9 @@ impl Message {
 
     pub(crate) fn with_txid(txid: i32) -> Self {
         Self {
-            base_data: MsgData::new(Kind::Request, Method::StoreValue, txid),
+            base_data: MsgData::new(
+                Kind::Request, Method::StoreValue, txid
+            ),
         }
     }
 
