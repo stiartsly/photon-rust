@@ -15,8 +15,9 @@ use super::{
         Kind,
         Method,
         Msg,
-        Data as MsgData
-    }
+        Data as MsgData,
+    },
+
 };
 
 pub(crate) struct Message {
@@ -171,7 +172,67 @@ impl Msg for Message {
     }
 
     fn ser(&self) -> CVal {
-        unimplemented!()
+        let mut val = CVal::Map(vec![]);
+        if let Some(map) = val.as_map_mut() {
+            map.push((
+                CVal::Text("tok".to_string()),
+                CVal::Integer(self.token.into())
+            ));
+
+            let value = match self.value.as_ref() {
+                Some(val) => val,
+                None => {
+                    panic!("missing value");
+                }
+            };
+            if let Some(pk) = value.public_key() {
+                map.push((
+                    CVal::Text("k".to_string()),
+                    CVal::Bytes(pk.as_bytes().into())
+                ));
+            }
+            if let Some(rec) = value.recipient() {
+                map.push((
+                    CVal::Text("rec".to_string()),
+                    CVal::Bytes(rec.as_bytes().into())
+                ));
+            }
+            if let Some(nonce) = value.nonce() {
+                map.push((
+                    CVal::Text("n".to_string()),
+                    CVal::Bytes(nonce.as_bytes().into())
+                ));
+            }
+            if let Some(sig) = value.signature() {
+                map.push((
+                    CVal::Text("s".to_string()),
+                    CVal::Bytes(sig.into()),
+                ))
+            }
+            if value.sequence_number() >= 0 {
+                map.push((
+                    CVal::Text("seq".to_string()),
+                    CVal::Integer(value.sequence_number().into())
+                ));
+            }
+            if self.expected_seq >= 0 {
+                map.push((
+                    CVal::Text("cas".to_string()),
+                    CVal::Integer(self.expected_seq.into())
+                ));
+            }
+            map.push((
+                CVal::Text("v".to_string()),
+                CVal::Bytes(value.data().into()),
+            ));
+        }
+
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text("q".to_string());
+            map.push((key, val));
+        }
+        root
     }
 
     fn as_any(&self) -> &dyn Any {

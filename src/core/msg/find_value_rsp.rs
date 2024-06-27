@@ -5,8 +5,10 @@ use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
+    id::Id,
     error::Error,
-    value::Value,
+    value::{Value, PackBuilder},
+    node_info::NodeInfo,
 };
 
 use super::{
@@ -38,12 +40,219 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn from_cbor(&mut self, _: &CVal) -> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &CVal) -> bool {
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
+
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+
+            match key {
+                "y" => {},
+                "t" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
+                        None => return false,
+                    };
+                    self.set_txid(val.try_into().unwrap());
+                },
+                "v" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
+                        None => return false,
+                    };
+                    self.set_ver(val.try_into().unwrap());
+                },
+                "r" => {
+                    let mut pk = None;
+                    let mut recipient = None;
+                    let mut nonce = None;
+                    let mut sig = None;
+                    let mut data = None;
+                    let mut seq = -1;
+
+                    let map = match val.as_map() {
+                        Some(map) => map,
+                        None => return false,
+                    };
+
+                    for (key, val) in map {
+
+                        let key = match key.as_text() {
+                            Some(key) => key,
+                            None => return false,
+                        };
+                        match key {
+                            "n4" => {
+                                let array = match val.as_array() {
+                                    Some(array) => array,
+                                    None => return false,
+                                };
+
+                                let mut nodes = Vec::new();
+                                for item in array.iter() {
+                                    let ni = match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => ni,
+                                        Err(_) => return false
+                                    };
+                                    nodes.push(ni);
+                                }
+                                self.populate_closest_nodes4(nodes);
+                            },
+                            "n6" => {
+                                let array = match val.as_array() {
+                                    Some(array) => array,
+                                    None => return false,
+                                };
+
+                                let mut nodes = Vec::new();
+                                for item in array.iter() {
+                                    let ni = match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => ni,
+                                        Err(_) => return false
+                                    };
+                                    nodes.push(ni);
+                                }
+                                self.populate_closest_nodes6(nodes);
+                            },
+                            "tok" => {
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                self.populate_token(val.try_into().unwrap());
+                            },
+                            "k" => { // publickey
+                                let id = match Id::try_from_cbor(val) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                pk = Some(id);
+                            },
+                            "rec" => { // recipient
+                                let id = match Id::try_from_cbor(val) {
+                                    Ok(id) => id,
+                                    Err(_) => return false,
+                                };
+                                recipient = Some(id);
+                            },
+                            "n" => { // nonce
+                                let val = match val.as_bytes() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                nonce = Some(val);
+                            },
+                            "s" => { // signature
+                                let val = match val.as_bytes() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                sig = Some(val);
+                            },
+                            "seq" => { // sequence number
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false
+                                };
+                                seq = val.try_into().unwrap();
+                            },
+                            "v" => { // value
+                                let val = match val.as_bytes() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                data = Some(val);
+                            },
+
+                            _ => return false
+                        }
+                    }
+
+                    let data = match data.take() {
+                        Some(data) => data,
+                        None => return false,
+                    };
+
+                    let mut b = PackBuilder::default(data);
+                    if let Some(pk) = pk.take() {
+                        b.with_pk(pk);
+                    }
+                    if let Some(rec) = recipient.take() {
+                        b.with_recipient(rec);
+                    }
+                    if let Some(nonce) = nonce.take() {
+                        b.with_nonce(nonce);
+                    }
+                    if let Some(sig) = sig.take() {
+                        b.with_sig(sig);
+                    }
+                    b.with_seq(seq);
+                    self.value = Some(Box::new(b.build()));
+                },
+                _ => return false,
+            }
+        }
+
+        true
     }
 
     fn ser(&self) -> CVal {
-        unimplemented!()
+        let mut val = LookupResponse::to_cbor(self);
+        if let Some(map) = val.as_map_mut() {
+            let value = match self.value.as_ref() {
+                Some(val) => val,
+                None => {
+                    panic!("value is missing.");
+                },
+            };
+            if let Some(pk) = value.public_key() {
+                map.push((
+                    CVal::Text("k".to_string()),
+                    CVal::Bytes(pk.as_bytes().to_vec())
+                ));
+            }
+            if let Some(rec) = value.recipient() {
+                map.push((
+                    CVal::Text("rec".to_string()),
+                    CVal::Bytes(rec.as_bytes().to_vec()),
+                ));
+            }
+            if let Some(nonce) = value.nonce() {
+                map.push((
+                    CVal::Text("n".to_string()),
+                    CVal::Bytes(nonce.as_bytes().to_vec()),
+                ));
+            }
+            if value.sequence_number() >= 0 {
+                map.push((
+                    CVal::Text("seq".to_string()),
+                    CVal::Integer(value.sequence_number().into()),
+                ));
+            }
+            if let Some(sig) = value.signature() {
+                map.push((
+                    CVal::Text("s".to_string()),
+                    CVal::Bytes(sig.to_vec()),
+                ));
+            }
+            map.push((
+                CVal::Text("v".to_string()),
+                CVal::Bytes(value.data().to_vec())
+            ));
+        }
+
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text(Kind::Response.to_key().to_string());
+            map.push((key, val));
+        }
+        root
     }
 
     fn as_any(&self) -> &dyn Any {
