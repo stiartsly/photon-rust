@@ -10,6 +10,7 @@ use crate::{
 };
 
 use super::{
+    keys,
     msg::{
         Kind,
         Method,
@@ -33,12 +34,88 @@ impl Msg for Message {
         &mut self.base_data
     }
 
-    fn from_cbor(&mut self, _: &CVal) -> bool {
-        unimplemented!()
+    fn from_cbor(&mut self, input: &CVal) -> bool {
+        let root = match input.as_map() {
+            Some(root) => root,
+            None => return false,
+        };
+
+        for (key, val) in root {
+            let key = match key.as_text() {
+                Some(key) => key,
+                None => return false,
+            };
+            match key {
+                keys::KEY_TYPE => {},
+                keys::KEY_TXID => {
+                    let txid = match val.as_integer() {
+                        Some(txid) => txid,
+                        None => return false,
+                    };
+                    self.set_txid(txid.try_into().unwrap());
+                },
+                keys::KEY_VERSION => {
+                    let ver = match val.as_integer() {
+                        Some(ver) => ver,
+                        None => return false,
+                    };
+                    self.set_ver(ver.try_into().unwrap());
+                },
+                "e" => {
+                    let map = match val.as_map() {
+                        Some(map) => map,
+                        None => return false,
+                    };
+
+                    for (key,val) in map {
+                        let key = match key.as_text() {
+                            Some(key) => key,
+                            None => return false,
+                        };
+                        match key {
+                            "c" => {
+                                let val = match val.as_integer() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                self.code = val.try_into().unwrap();
+                            },
+                            "m" => {
+                                let val = match val.as_text() {
+                                    Some(val) => val,
+                                    None => return false,
+                                };
+                                self.msg = val.to_string();
+                            },
+                            _ => {
+                                return false
+                            }
+                        }
+                    }
+                }
+                _=> return false,
+            }
+        }
+        true
     }
 
     fn ser(&self) -> CVal {
-        unimplemented!()
+        let val = CVal::Map(vec![
+            (
+                CVal::Text("c".to_string()),
+                CVal::Integer(self.code.into())
+            ),
+            (
+                CVal::Text("m".to_string()),
+                CVal::Text(self.msg.clone()),
+            )
+        ]);
+        let mut root = Msg::to_cbor(self);
+        if let Some(map) = root.as_map_mut() {
+            let key = CVal::Text("e".to_string());
+            map.push((key, val));
+        }
+        root
     }
 
     fn as_any(&self) -> &dyn Any {
