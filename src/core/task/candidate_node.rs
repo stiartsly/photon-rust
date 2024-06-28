@@ -17,7 +17,6 @@ pub(crate) struct CandidateNode {
     token: i32,
 }
 
-#[allow(dead_code)]
 impl CandidateNode {
     pub(crate) fn new(node: &NodeInfo, reachable: bool) -> Self {
         CandidateNode {
@@ -60,9 +59,9 @@ impl CandidateNode {
         self.token = token
     }
 
-    pub(crate) fn token(&self) -> i32 {
-        self.token
-    }
+    // pub(crate) fn token(&self) -> i32 {
+    //    self.token
+    // }
 
     pub(crate) fn is_inflight(&self) -> bool {
         self.last_sent != SystemTime::UNIX_EPOCH

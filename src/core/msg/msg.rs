@@ -1,30 +1,34 @@
 use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::fmt;
 use std::net::SocketAddr;
-use ciborium;
+use std::fmt;
 use std::fmt::Display;
+use ciborium;
 use ciborium::Value as CVal;
 
-use crate::id::Id;
-use crate::rpccall::RpcCall;
-use crate::error::Error;
+use crate::{
+    id::Id,
+    error::Error,
+    rpccall::RpcCall
+};
 
-use super::cbor;
-use super::error;
-use super::ping_req;
-use super::ping_rsp;
-use super::find_node_req;
-use super::find_node_rsp;
-use super::announce_peer_req;
-use super::announce_peer_rsp;
-use super::find_peer_req;
-use super::find_peer_rsp;
-use super::store_value_req;
-use super::store_value_rsp;
-use super::find_value_req;
-use super::find_value_rsp;
+use super::{
+    cbor,
+    error,
+    ping_req,
+    ping_rsp,
+    find_node_req,
+    find_node_rsp,
+    announce_peer_req,
+    announce_peer_rsp,
+    find_peer_req,
+    find_peer_rsp,
+    store_value_req,
+    store_value_rsp,
+    find_value_req,
+    find_value_rsp
+};
 
 
 #[derive(PartialEq, Clone, Copy)]
@@ -139,7 +143,6 @@ pub(crate) struct Data {
     ver: i32,
 }
 
-#[allow(dead_code)]
 impl Data {
    pub(crate) fn new(kind: Kind, method: Method, txid: i32) -> Self {
         Self {
