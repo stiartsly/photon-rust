@@ -1,8 +1,6 @@
 use ciborium::Value as CVal;
 use crate::node_info::NodeInfo;
 
-use super::keys;
-
 pub(crate) struct Data {
     nodes4: Option<Vec<NodeInfo>>,
     nodes6: Option<Vec<NodeInfo>>,
@@ -61,24 +59,24 @@ pub(crate) trait Msg {
             })
         }
 
-        let mut cbor = Vec::new();
+        let mut vec = Vec::new();
         if !nodes4.is_empty() {
-            cbor.push((
-                CVal::Text(String::from(keys::KEY_RES_NODES4)),
+            vec.push((
+                CVal::Text(String::from("n4")),
                 CVal::Array(nodes4)
             ));
         }
         if !nodes6.is_empty() {
-            cbor.push((
-                CVal::Text(String::from(keys::KEY_RES_NODES6)),
+            vec.push((
+                CVal::Text(String::from("n6")),
                 CVal::Array(nodes6)
             ));
         }
-        cbor.push((
-            CVal::Text(String::from(keys::KEY_RES_TOKEN)),
+        vec.push((
+            CVal::Text(String::from("tok")),
             CVal::Integer(self.token().into())
         ));
 
-        CVal::Map(cbor)
+        CVal::Map(vec)
     }
 }

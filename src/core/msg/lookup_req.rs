@@ -1,10 +1,5 @@
-
 use ciborium::Value as CVal;
 use crate::id::Id;
-
-use super::{
-    keys,
-};
 
 pub(crate) struct Data {
     target: Option<Id>,
@@ -71,18 +66,18 @@ pub(crate) trait Msg {
         self.data_mut().want6 = want
     }
 
-    fn with_want_token(&mut self) {
-        self.data_mut().want_token = true
+    fn with_want_token(&mut self, want: bool) {
+        self.data_mut().want_token = want
     }
 
     fn to_cbor(&self) -> CVal {
         CVal::Map(vec![
             (
-                CVal::Text(String::from(keys::KEY_REQ_TARGET)),
+                CVal::Text(String::from("t")),
                 self.target().to_cbor()
             ),
             (
-                CVal::Text(String::from(keys::KEY_REQ_WANT)),
+                CVal::Text(String::from("w")),
                 CVal::Integer(self.want().into())
             )
         ])
