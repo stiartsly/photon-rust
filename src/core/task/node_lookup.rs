@@ -191,8 +191,3 @@ impl fmt::Display for NodeLookupTask {
         Ok(())
     }
 }
-
-#[allow(dead_code)]
-fn is_bogon_address(_: &SocketAddr) -> bool {
-    false
-}
