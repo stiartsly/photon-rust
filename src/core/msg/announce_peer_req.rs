@@ -6,6 +6,7 @@ use ciborium::Value as CVal;
 
 use crate::{
     unwrap,
+    version,
     error::Error,
     peer::{Peer, PackBuilder},
     id::Id,
@@ -248,7 +249,20 @@ impl Message {
 }
 
 impl fmt::Display for Message {
-    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!();
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,
+            "y:{},m:{},t:{},q: {{",
+            self.kind(),
+            self.method(),
+            self.txid()
+        )?;
+
+        // TODO:
+
+        write!(f,
+            "}},v:{}",
+            version::formatted_version(self.ver())
+        )?;
+        Ok(())
     }
 }

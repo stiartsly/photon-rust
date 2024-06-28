@@ -5,6 +5,7 @@ use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
+    version,
     error::Error,
 };
 
@@ -101,7 +102,14 @@ impl Message {
 }
 
 impl fmt::Display for Message {
-    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!();
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,
+            "y:{},m:{},t:{},v:{}",
+            self.kind(),
+            self.method(),
+            self.txid(),
+            version::formatted_version(self.ver())
+        )?;
+        Ok(())
     }
 }
