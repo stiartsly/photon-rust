@@ -1,5 +1,4 @@
 mod cbor;
-pub(crate) mod keys;
 pub(crate) mod msg;
 
 pub(crate) mod lookup_req;

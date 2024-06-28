@@ -44,18 +44,20 @@ impl Msg for Message {
             match key {
                 "y" => {},
                 "t" => {
-                    let txid = match val.as_integer() {
-                        Some(txid) => txid,
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(txid.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
                 "v" => {
-                    let ver = match val.as_integer() {
-                        Some(ver) => ver,
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(ver.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
                 _=> return false,
             }

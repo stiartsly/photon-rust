@@ -10,7 +10,6 @@ use crate::{
 };
 
 use super::{
-    keys,
     msg::{
         Kind,
         Method,
@@ -44,20 +43,22 @@ impl Msg for Message {
                 None => return false,
             };
             match key {
-                keys::KEY_TYPE => {},
-                keys::KEY_TXID => {
-                    let txid = match val.as_integer() {
-                        Some(txid) => txid,
+                "y" => {},
+                "t" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(txid.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
-                keys::KEY_VERSION => {
-                    let ver = match val.as_integer() {
-                        Some(ver) => ver,
+                "v" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(ver.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
                 _=> return false,
             }
@@ -81,7 +82,9 @@ impl Message {
 
     pub(crate) fn with_txid(txid: i32) -> Self {
         Self {
-            base_data: MsgData::new(Kind::Response, Method::Ping, txid)
+            base_data: MsgData::new(
+                Kind::Response, Method::Ping, txid
+            )
         }
     }
 

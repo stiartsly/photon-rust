@@ -11,7 +11,6 @@ use crate::id::Id;
 use crate::rpccall::RpcCall;
 use crate::error::Error;
 
-use super::keys;
 use super::cbor;
 use super::error;
 use super::ping_req;
@@ -232,15 +231,15 @@ pub(crate) trait Msg: Display {
     fn to_cbor(&self) -> CVal {
         CVal::Map(vec![
             (
-                CVal::Text(String::from(keys::KEY_TYPE)),
+                CVal::Text(String::from("y")),
                 CVal::Integer(self._type().into())
             ),
             (
-                CVal::Text(String::from(keys::KEY_TXID)),
+                CVal::Text(String::from("t")),
                 CVal::Integer(self.txid().into())
             ),
             (
-                CVal::Text(String::from(keys::KEY_VERSION)),
+                CVal::Text(String::from("v")),
                 CVal::Integer(self.ver().into())
             )
         ])
@@ -259,7 +258,7 @@ pub(crate) fn deser(buf: &[u8]) -> Result<Rc<RefCell<dyn Msg>>, Error> {
     value = ciborium::de::from_reader(reader).unwrap();
     if let Some(root) = value.as_map() {
         for (key, val) in root.iter() {
-            if key.as_text().unwrap() == keys::KEY_TYPE {
+            if key.as_text().unwrap() == "y" {
                 msg_type = val.as_integer().unwrap().try_into().unwrap();
             }
         }
