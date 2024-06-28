@@ -13,8 +13,7 @@ use crate::{
 };
 
 use super::{
-    keys,
-    msg::{
+        msg::{
         Kind,
         Method,
         Msg,
@@ -55,22 +54,24 @@ impl Msg for Message {
             };
 
             match key {
-                keys::KEY_TYPE => {},
-                keys::KEY_TXID => {
+                "y" => {},
+                "t" => {
                     let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(val.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
-                keys::KEY_VERSION => {
+                "v" => {
                     let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(val.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
-                keys::KEY_RESPONSE => {
+                "r" => {
                     let map = match val.as_map() {
                         Some(map) => map,
                         None => return false,
@@ -82,7 +83,7 @@ impl Msg for Message {
                             None => return false,
                         };
                         match key {
-                            keys::KEY_RES_NODES4 => {
+                            "n4" => {
                                 let array = match val.as_array() {
                                     Some(array) => array,
                                     None => return false,
@@ -90,15 +91,14 @@ impl Msg for Message {
 
                                 let mut nodes = Vec::new();
                                 for item in array.iter() {
-                                    let ni = match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => ni,
+                                    match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => nodes.push(ni),
                                         Err(_) => return false
                                     };
-                                    nodes.push(ni);
                                 }
                                 self.populate_closest_nodes4(nodes);
                             },
-                            keys::KEY_RES_NODES6 => {
+                            "n6" => {
                                 let array = match val.as_array() {
                                     Some(array) => array,
                                     None => return false,
@@ -106,20 +106,20 @@ impl Msg for Message {
 
                                 let mut nodes = Vec::new();
                                 for item in array.iter() {
-                                    let ni = match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => ni,
+                                    match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => nodes.push(ni),
                                         Err(_) => return false
                                     };
-                                    nodes.push(ni);
                                 }
                                 self.populate_closest_nodes6(nodes);
                             },
-                            keys::KEY_RES_TOKEN => {
+                            "tok" => {
                                 let val = match val.as_integer() {
                                     Some(val) => val,
                                     None => return false,
                                 };
-                                self.populate_token(val.try_into().unwrap());
+                                let token = val.try_into().unwrap();
+                                self.populate_token(token);
                             },
                             "p" => {
                                 let array = match val.as_array() {
@@ -128,17 +128,17 @@ impl Msg for Message {
                                 };
 
                                 let peer_id = match Id::try_from_cbor(&array[0]) {
-                                    Ok(v) => v,
+                                    Ok(val) => val,
                                     Err(_) => return false ,
                                 };
                                 for item in array.iter() {
-                                    if !item.is_null() {
+                                    if item.is_null() {
                                         // Do nothing.
-                                    } else if !item.is_bytes() {
+                                    } else if item.is_bytes() {
                                         // DO nothing;
                                     } else if item.is_array() {
                                         let arr = match item.as_array() {
-                                            Some(v) => v,
+                                            Some(val) => val,
                                             None => return false,
                                         };
 
@@ -151,15 +151,15 @@ impl Msg for Message {
                                             Err(_) => None,
                                         };
                                         let port = match arr[2].as_integer() {
-                                            Some(v) => v.try_into().unwrap(),
+                                            Some(val) => val.try_into().unwrap(),
                                             None => return false,
                                         };
                                         let alt = match arr[3].as_text() {
-                                            Some(v) => Some(v),
+                                            Some(val) => Some(val),
                                             None => None,
                                         };
                                         let sig = match arr[4].as_bytes() {
-                                            Some(v) => v,
+                                            Some(val) => val,
                                             None => return false,
                                         };
 
@@ -193,57 +193,54 @@ impl Msg for Message {
     }
 
     fn ser(&self) -> CVal {
-        let peers: CVal;
+        let mut array = vec![];
 
-        if self.peers.is_empty() {
-            peers = CVal::Null;
-        } else {
-            let mut array = vec![];
+        if self.peers.len() > 0 {
             let peer_id = self.peers[0].id();
-
             array.push(peer_id.to_cbor());
-            self.peers.iter().for_each(|item| {
-                let node_id = item.node_id().to_cbor();
-                let origin: CVal;
-
-                if item.is_delegated() {
-                    origin = item.origin().to_cbor();
-                } else {
-                    origin = CVal::Null;
-                }
-
-                let port = CVal::Integer(item.port().into());
-                let alt: CVal;
-                if let Some(url) = item.alternative_url() {
-                    alt = CVal::Text(url.to_string());
-                } else {
-                    alt = CVal::Null;
-                }
-
-                let sig = CVal::Bytes(item.signature().to_vec());
-
-                let mut peer = vec![];
-                peer.push(node_id);
-                peer.push(origin);
-                peer.push(port);
-                peer.push(alt);
-                peer.push(sig);
-
-                array.push(CVal::Array(peer));
-            });
-            peers = CVal::Array(array);
         }
 
-        let mut val = LookupResponse::to_cbor(self);
-        if let Some(map) = val.as_map_mut() {
+        self.peers.iter().for_each(|item| {
+            let node_id = item.node_id().to_cbor();
+            let port = CVal::Integer(item.port().into());
+            let sig = CVal::Bytes(item.signature().to_vec());
+
+            let origin:CVal;
+            if item.is_delegated() {
+                origin = item.origin().to_cbor();
+            } else {
+                origin = CVal::Null;
+            }
+
+            let alt: CVal;
+            if let Some(url) = item.alternative_url() {
+                alt = CVal::Text(url.to_string());
+            } else {
+                alt = CVal::Null;
+            }
+
+
+
+            let mut peer = vec![];
+            peer.push(node_id);
+            peer.push(origin);
+            peer.push(port);
+            peer.push(alt);
+            peer.push(sig);
+
+            array.push(CVal::Array(peer));
+        });
+
+        let mut rsp = LookupResponse::to_cbor(self);
+        if let Some(map) = rsp.as_map_mut() {
             let key = CVal::Text(String::from("p"));
-            map.push((key, peers));
+            map.push((key, CVal::Array(array)));
         }
 
         let mut root = Msg::to_cbor(self);
         if let Some(map) = root.as_map_mut() {
-            let key = CVal::Text(Kind::Response.to_key().to_string());
-            map.push((key, val));
+            let key = CVal::Text(String::from("r"));
+            map.push((key, rsp));
         }
         root
     }
@@ -309,38 +306,32 @@ impl fmt::Display for Message {
             self.txid()
         )?;
 
-        match self.nodes4() {
-            Some(nodes4) => {
-                let mut first = true;
-                if !nodes4.is_empty() {
-                    write!(f, "n4:")?;
-                    for item in nodes4.iter() {
-                        if !first {
-                            first = false;
-                            write!(f, ",")?;
-                        }
-                        write!(f, "[{}]", item)?;
+        if let Some(nodes4) = self.nodes4() {
+            let mut first = true;
+            if !nodes4.is_empty() {
+                write!(f, "n4:")?;
+                for item in nodes4.iter() {
+                    if !first {
+                        first = false;
+                        write!(f, ",")?;
                     }
+                    write!(f, "[{}]", item)?;
                 }
             }
-            None => {}
         }
 
-        match self.nodes6() {
-            Some(nodes6) => {
-                let mut first = true;
-                if !nodes6.is_empty() {
-                    write!(f, "n4:")?;
-                    for item in nodes6.iter() {
-                        if !first {
-                            first = false;
-                            write!(f, ",")?;
-                        }
-                        write!(f, "[{}]", item)?;
+        if let Some(nodes6) = self.nodes6() {
+            let mut first = true;
+            if !nodes6.is_empty() {
+                write!(f, "n6:")?;
+                for item in nodes6.iter() {
+                    if !first {
+                        first = false;
+                        write!(f, ",")?;
                     }
+                    write!(f, "[{}]", item)?;
                 }
             }
-            None => {}
         }
 
         if self.token() != 0 {
@@ -359,7 +350,10 @@ impl fmt::Display for Message {
             }
         }
 
-        write!(f, "}},v:{}", version::formatted_version(self.ver()))?;
+        write!(f,
+            "}},v:{}",
+            version::formatted_version(self.ver())
+        )?;
         Ok(())
     }
 }

@@ -10,10 +10,10 @@ pub(crate) const KEY_REQUEST: &str      = "q";
 pub(crate) const KEY_REQ_TARGET: &str   = "t";
 pub(crate) const KEY_REQ_WANT: &str     = "w";
 
-pub(crate) const KEY_RESPONSE: &str     = "r";
-pub(crate) const KEY_RES_NODES4: &str   = "n4";
-pub(crate) const KEY_RES_NODES6: &str   = "n6";
-pub(crate) const KEY_RES_TOKEN: &str    = "tok";
+// pub(crate) const KEY_RESPONSE: &str     = "r";
+// pub(crate) const KEY_RES_NODES4: &str   = "n4";
+// pub(crate) const KEY_RES_NODES6: &str   = "n6";
+// pub(crate) const KEY_RES_TOKEN: &str    = "tok";
 
 pub(crate) const KEY_REQ_PORT: &str     = "p";
 pub(crate) const KEY_REQ_PROXY_ID: &str = "x";
