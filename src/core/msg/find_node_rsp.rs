@@ -11,7 +11,6 @@ use crate::{
 };
 
 use super::{
-    keys,
     msg::{
         Kind,
         Method,
@@ -51,22 +50,24 @@ impl Msg for Message {
             };
 
             match key {
-                keys::KEY_TYPE => {},
-                keys::KEY_TXID => {
+                "y" => {},
+                "t" => {
                     let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(val.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
-                keys::KEY_VERSION => {
+                "v" => {
                     let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(val.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
-                keys::KEY_RESPONSE => {
+                "r" => {
                     let map = match val.as_map() {
                         Some(map) => map,
                         None => return false,
@@ -78,44 +79,43 @@ impl Msg for Message {
                             None => return false,
                         };
                         match key {
-                            keys::KEY_RES_NODES4 => {
-                                let array = match val.as_array() {
-                                    Some(array) => array,
+                            "n4" => {
+                                let val = match val.as_array() {
+                                    Some(val) => val,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in array.iter() {
-                                    let ni = match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => ni,
+                                for item in val.iter() {
+                                    match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => nodes.push(ni),
                                         Err(_) => return false
                                     };
-                                    nodes.push(ni);
                                 }
                                 self.populate_closest_nodes4(nodes);
                             },
-                            keys::KEY_RES_NODES6 => {
-                                let array = match val.as_array() {
-                                    Some(array) => array,
+                            "n6" => {
+                                let val = match val.as_array() {
+                                    Some(val) => val,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in array.iter() {
-                                    let ni = match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => ni,
+                                for item in val.iter() {
+                                    match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => nodes.push(ni),
                                         Err(_) => return false
                                     };
-                                    nodes.push(ni);
                                 }
                                 self.populate_closest_nodes6(nodes);
                             },
-                            keys::KEY_RES_TOKEN => {
+                            "tok" => {
                                 let val = match val.as_integer() {
                                     Some(val) => val,
                                     None => return false,
                                 };
-                                self.populate_token(val.try_into().unwrap());
+                                let token = val.try_into().unwrap();
+                                self.populate_token(token);
                             }
                             _ => return false
                         }
@@ -131,7 +131,7 @@ impl Msg for Message {
     fn ser(&self) -> CVal {
         let mut root = Msg::to_cbor(self);
         if let Some(map) = root.as_map_mut() {
-            let key = CVal::Text(Kind::Response.to_key().to_string());
+            let key = CVal::Text(String::from("r"));
             let val = LookupResponse::to_cbor(self);
             map.push((key, val));
         }
@@ -185,44 +185,41 @@ impl fmt::Display for Message {
             self.txid()
         )?;
 
-        match self.nodes4() {
-            Some(nodes4) => {
-                let mut first = true;
-                if !nodes4.is_empty() {
-                    write!(f, "n4:")?;
-                    for item in nodes4.iter() {
-                        if !first {
-                            first = false;
-                            write!(f, ",")?;
-                        }
-                        write!(f, "[{}]", item)?;
+        if let Some(nodes4) = self.nodes4() {
+            let mut first = true;
+            if !nodes4.is_empty() {
+                write!(f, "n4:")?;
+                for item in nodes4.iter() {
+                    if !first {
+                        first = false;
+                        write!(f, ",")?;
                     }
+                    write!(f, "[{}]", item)?;
                 }
             }
-            None => {}
         }
 
-        match self.nodes6() {
-            Some(nodes6) => {
-                let mut first = true;
-                if !nodes6.is_empty() {
-                    write!(f, "n6:")?;
-                    for item in nodes6.iter() {
-                        if !first {
-                            first = false;
-                            write!(f, ",")?;
-                        }
-                        write!(f, "[{}]", item)?;
+        if let Some(nodes6) = self.nodes6() {
+            let mut first = true;
+            if !nodes6.is_empty() {
+                write!(f, "n6:")?;
+                for item in nodes6.iter() {
+                    if !first {
+                        first = false;
+                        write!(f, ",")?;
                     }
+                    write!(f, "[{}]", item)?;
                 }
             }
-            None => {}
         }
 
         if self.token() != 0 {
             write!(f, ",tok:{}", self.token())?;
         }
-        write!(f, "}},v:{}", version::formatted_version(self.ver()))?;
+        write!(f,
+            "}},v:{}",
+            version::formatted_version(self.ver())
+        )?;
         Ok(())
     }
 }
