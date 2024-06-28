@@ -59,14 +59,16 @@ impl Msg for Message {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(val.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
                 "v" => {
                     let val = match val.as_integer() {
                         Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(val.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
                 "r" => {
                     let mut pk = None;
@@ -89,34 +91,32 @@ impl Msg for Message {
                         };
                         match key {
                             "n4" => {
-                                let array = match val.as_array() {
-                                    Some(array) => array,
+                                let val = match val.as_array() {
+                                    Some(val) => val,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in array.iter() {
-                                    let ni = match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => ni,
+                                for item in val.iter() {
+                                    match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => nodes.push(ni),
                                         Err(_) => return false
                                     };
-                                    nodes.push(ni);
                                 }
                                 self.populate_closest_nodes4(nodes);
                             },
                             "n6" => {
-                                let array = match val.as_array() {
-                                    Some(array) => array,
+                                let val = match val.as_array() {
+                                    Some(val) => val,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in array.iter() {
-                                    let ni = match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => ni,
+                                for item in val.iter() {
+                                    match NodeInfo::try_from_cbor(item) {
+                                        Ok(ni) => nodes.push(ni),
                                         Err(_) => return false
                                     };
-                                    nodes.push(ni);
                                 }
                                 self.populate_closest_nodes6(nodes);
                             },
@@ -125,7 +125,8 @@ impl Msg for Message {
                                     Some(val) => val,
                                     None => return false,
                                 };
-                                self.populate_token(val.try_into().unwrap());
+                                let token = val.try_into().unwrap();
+                                self.populate_token(token);
                             },
                             "k" => { // publickey
                                 let id = match Id::try_from_cbor(val) {
@@ -249,7 +250,7 @@ impl Msg for Message {
 
         let mut root = Msg::to_cbor(self);
         if let Some(map) = root.as_map_mut() {
-            let key = CVal::Text(Kind::Response.to_key().to_string());
+            let key = CVal::Text(String::from("r"));
             map.push((key, val));
         }
         root

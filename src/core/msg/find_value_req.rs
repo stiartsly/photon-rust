@@ -11,7 +11,6 @@ use crate::{
 };
 
 use super::{
-    keys,
     msg::{
         Kind,
         Method,
@@ -52,22 +51,24 @@ impl Msg for Message {
                 None => return false,
             };
             match key {
-                keys::KEY_TYPE => {},
-                keys::KEY_TXID => {
-                    let txid = match val.as_integer() {
-                        Some(txid) => txid,
+                "y" => {},
+                "t" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(txid.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
-                keys::KEY_VERSION => {
-                    let ver = match val.as_integer() {
-                        Some(ver) => ver,
+                "v" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(ver.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
-                keys::KEY_REQUEST => {
+                "r" => {
                     let map = match val.as_map() {
                         Some(map) => map,
                         None => return false,
@@ -78,23 +79,24 @@ impl Msg for Message {
                             None => return false,
                         };
                         match key {
-                            keys::KEY_REQ_WANT => {
+                            "w" => {
                                 let val = match val.as_integer() {
                                     Some(val) => val,
                                     None => return false,
                                 };
-                                let _want: i32 = val.try_into().unwrap();
-                                self.with_want4((_want & 0x01) != 0);
-                                self.with_want6((_want & 0x01) != 0);
+                                let want:i32 = val.try_into().unwrap();
+                                self.with_want4((want & 0x01) != 0);
+                                self.with_want6((want & 0x02) != 0);
+                                self.with_want_token((want & 0x04) != 0);
                             },
-                            keys::KEY_REQ_TARGET => {
+                            "t" => {
                                 let id = match Id::try_from_cbor(val) {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };
                                 self.with_target(id)
                             },
-                            keys::KEY_RES_SEQ => {
+                            "seq" => {
                                 let val = match val.as_integer() {
                                     Some(val) => val,
                                     None => return false,
@@ -117,7 +119,7 @@ impl Msg for Message {
     fn ser(&self) -> CVal {
         let mut val = LookupRequest::to_cbor(self);
         if let Some(map) = val.as_map_mut() {
-            let k = CVal::Text(keys::KEY_RES_SEQ.to_string());
+            let k = CVal::Text(String::from("seq"));
             let v = CVal::Integer(self.seq.into());
             map.push((k,v));
         }
@@ -145,7 +147,6 @@ impl LookupRequest for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Self::with_txid(0)
@@ -173,9 +174,9 @@ impl Message {
         self.seq
     }
 
-    pub(crate) fn with_seq(&mut self, seq: i32) {
-        self.seq = seq
-    }
+    // pub(crate) fn with_seq(&mut self, seq: i32) {
+    //    self.seq = seq
+    //}
 }
 
 impl fmt::Display for Message {
@@ -192,7 +193,10 @@ impl fmt::Display for Message {
             write!(f, ",seq:{}", self.seq)?;
         }
 
-        write!(f, ",v:{}", version::formatted_version(self.ver()))?;
+        write!(f,
+            ",v:{}",
+            version::formatted_version(self.ver())
+        )?;
         Ok(())
     }
 }

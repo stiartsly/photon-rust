@@ -219,8 +219,6 @@ impl Msg for Message {
                 alt = CVal::Null;
             }
 
-
-
             let mut peer = vec![];
             peer.push(node_id);
             peer.push(origin);
