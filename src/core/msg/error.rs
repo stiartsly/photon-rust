@@ -10,7 +10,6 @@ use crate::{
 };
 
 use super::{
-    keys,
     msg::{
         Kind,
         Method,
@@ -46,20 +45,22 @@ impl Msg for Message {
                 None => return false,
             };
             match key {
-                keys::KEY_TYPE => {},
-                keys::KEY_TXID => {
-                    let txid = match val.as_integer() {
-                        Some(txid) => txid,
+                "y" => {},
+                "t" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(txid.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
-                keys::KEY_VERSION => {
-                    let ver = match val.as_integer() {
-                        Some(ver) => ver,
+                "v"=> {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(ver.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
                 "e" => {
                     let map = match val.as_map() {
@@ -102,17 +103,17 @@ impl Msg for Message {
     fn ser(&self) -> CVal {
         let val = CVal::Map(vec![
             (
-                CVal::Text("c".to_string()),
+                CVal::Text(String::from("c")),
                 CVal::Integer(self.code.into())
             ),
             (
-                CVal::Text("m".to_string()),
+                CVal::Text(String::from("m")),
                 CVal::Text(self.msg.clone()),
             )
         ]);
         let mut root = Msg::to_cbor(self);
         if let Some(map) = root.as_map_mut() {
-            let key = CVal::Text("e".to_string());
+            let key = CVal::Text(String::from("e"));
             map.push((key, val));
         }
         root

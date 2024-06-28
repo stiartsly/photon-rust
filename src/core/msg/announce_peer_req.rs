@@ -12,7 +12,6 @@ use crate::{
 };
 
 use super::{
-    keys,
     msg::{
         Kind,
         Method,
@@ -55,22 +54,24 @@ impl Msg for Message {
                 None => return false,
             };
             match key {
-                keys::KEY_TYPE => {},
-                keys::KEY_TXID => {
-                    let txid = match val.as_integer() {
-                        Some(txid) => txid,
+                "y" => {},
+                "t" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(txid.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
-                keys::KEY_VERSION => {
-                    let ver = match val.as_integer() {
-                        Some(ver) => ver,
+                "v" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(ver.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
-                keys::KEY_REQUEST => {
+                "q" => {
                     let map = match val.as_map() {
                         Some(map) => map,
                         None => return false,
@@ -81,42 +82,42 @@ impl Msg for Message {
                             None => return false,
                         };
                         match key {
-                            keys::KEY_REQ_TARGET => {
+                            "t" => {
                                 let id = match Id::try_from_cbor(val) {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };
                                 peer_id = Some(id);
                             },
-                            keys::KEY_REQ_PROXY_ID => {
+                            "x" => {
                                 let id = match Id::try_from_cbor(val) {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };
                                 proxy_id = Some(id);
                             },
-                            keys::KEY_REQ_PORT => {
+                            "p" => {
                                 let v = match val.as_integer() {
                                     Some(v) => v.try_into().unwrap(),
                                     None => return false,
                                 };
                                 port = v;
                             },
-                            keys::KEY_REQ_ALT => {
+                            "alt" => {
                                 let v = match val.as_text() {
                                     Some(v) => v,
                                     None => return false,
                                 };
                                 alt = Some(v);
                             },
-                            keys::KEY_REQ_SIGNATURE => {
+                            "sig" => {
                                 let v = match val.as_bytes() {
                                     Some(v) => v,
                                     None => return false,
                                 };
                                 sig = Some(v);
                             },
-                            keys::KEY_REQ_TOKEN => {
+                            "tok" => {
                                 let v = match val.as_integer() {
                                     Some(v) => v,
                                     None => return false,
@@ -153,19 +154,19 @@ impl Msg for Message {
     fn ser(&self) -> CVal {
         let mut req_map = vec![
             (
-                CVal::Text(String::from(keys::KEY_REQ_TARGET)),
+                CVal::Text(String::from("t")),
                 unwrap!(self.peer).id().to_cbor(),
             ),
             (
-                CVal::Text(String::from(keys::KEY_REQ_WANT)),
+                CVal::Text(String::from("w")),
                 CVal::Integer(self.token.into()),
             ),
             (
-                CVal::Text(String::from(keys::KEY_REQ_PORT)),
+                CVal::Text(String::from("p")),
                 CVal::Integer(unwrap!(self.peer).port().into()),
             ),
             (
-                CVal::Text(String::from(keys::KEY_REQ_SIGNATURE)),
+                CVal::Text(String::from("sig")),
                 CVal::Bytes(unwrap!(self.peer).signature().to_vec()),
             )
         ];
@@ -173,7 +174,7 @@ impl Msg for Message {
         if unwrap!(self.peer).is_delegated() {
             req_map.push(
                 (
-                    CVal::Text(String::from(keys::KEY_REQ_PROXY_ID)),
+                    CVal::Text(String::from("x")),
                     unwrap!(self.peer).origin().to_cbor(),
                 )
             )
@@ -182,7 +183,7 @@ impl Msg for Message {
         if let Some(alt) = unwrap!(self.peer).alternative_url() {
             req_map.push(
                 (
-                    CVal::Text(String::from(keys::KEY_REQ_ALT)),
+                    CVal::Text(String::from("alt")),
                     CVal::Text(alt.to_string()),
                 )
             )
