@@ -11,7 +11,6 @@ use crate::{
 };
 
 use super::{
-    keys,
     msg::{
         Kind,
         Method,
@@ -50,22 +49,24 @@ impl Msg for Message {
                 None => return false,
             };
             match key {
-                keys::KEY_TYPE => {},
-                keys::KEY_TXID => {
-                    let txid = match val.as_integer() {
-                        Some(txid) => txid,
+                "y" => {},
+                "t" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_txid(txid.try_into().unwrap());
+                    let txid = val.try_into().unwrap();
+                    self.set_txid(txid);
                 },
-                keys::KEY_VERSION => {
-                    let ver = match val.as_integer() {
-                        Some(ver) => ver,
+                "v" => {
+                    let val = match val.as_integer() {
+                        Some(val) => val,
                         None => return false,
                     };
-                    self.set_ver(ver.try_into().unwrap());
+                    let ver = val.try_into().unwrap();
+                    self.set_ver(ver);
                 },
-                keys::KEY_REQUEST => {
+                "q" => {
                     let map = match val.as_map() {
                         Some(map) => map,
                         None => return false,
@@ -76,21 +77,21 @@ impl Msg for Message {
                             None => return false,
                         };
                         match key {
-                            keys::KEY_REQ_WANT => {
+                            "w" => {
                                 let val = match val.as_integer() {
                                     Some(val) => val,
                                     None => return false,
                                 };
-                                let _want: i32 = val.try_into().unwrap();
-                                self.with_want4((_want & 0x01) != 0);
-                                self.with_want6((_want & 0x01) != 0);
+                                let want: i32 = val.try_into().unwrap();
+                                self.with_want4((want & 0x01) != 0);
+                                self.with_want6((want & 0x02) != 0);
+                                self.with_want_token((want & 0x04) != 0);
                             },
-                            keys::KEY_REQ_TARGET => {
-                                let id = match Id::try_from_cbor(val) {
-                                    Ok(id) => id,
+                            "t" => {
+                                match Id::try_from_cbor(val) {
+                                    Ok(id) => self.with_target(id),
                                     Err(_) => return false,
                                 };
-                                self.with_target(id)
                             },
                             _ => return false,
                         }

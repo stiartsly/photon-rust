@@ -88,11 +88,10 @@ impl Msg for Message {
                                 self.with_want_token((want & 0x04) != 0);
                             },
                             "t" => {
-                                let id = match Id::try_from_cbor(val) {
-                                    Ok(id) => id,
+                                match Id::try_from_cbor(val) {
+                                    Ok(id) => self.with_target(id),
                                     Err(_) => return false,
                                 };
-                                self.with_target(id)
                             },
                             _ => return false,
                         }
