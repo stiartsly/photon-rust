@@ -1,3 +1,4 @@
+use std::fmt;
 use std::any::Any;
 use std::rc::Rc;
 use std::net::SocketAddr;
@@ -26,7 +27,6 @@ use super::{
     lookup_task::{LookupTask, LookupTaskData},
 };
 
-#[allow(dead_code)]
 pub(crate) struct PeerLookupTask {
     base_data: TaskData,
     lookup_data: LookupTaskData,
@@ -75,10 +75,11 @@ impl LookupTask for PeerLookupTask {
 
 impl Task for PeerLookupTask {
     fn data(&self) -> &TaskData {
-        unimplemented!()
+        &self.base_data
     }
+
     fn data_mut(&mut self) -> &mut TaskData {
-        unimplemented!()
+        &mut self.base_data
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -150,5 +151,18 @@ impl Task for PeerLookupTask {
 
     fn call_timeout(&mut self, call: &RpcCall) {
         LookupTask::call_timeout(self, call)
+    }
+}
+
+impl fmt::Display for PeerLookupTask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f,
+            "#{}[{}] DHT:{}, state:{}",
+            self.taskid(),
+            self.name(),
+            "ipv4",
+            self.state()
+        )?;
+        Ok(())
     }
 }

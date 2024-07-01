@@ -184,7 +184,7 @@ impl fmt::Display for NodeLookupTask {
             "#{}[{}] DHT:{}, state:{}",
             self.taskid(),
             self.name(),
-            "ipv4<TODO>",
+            "ipv4",
             self.state()
         )?;
         Ok(())
