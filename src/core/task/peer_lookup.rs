@@ -129,7 +129,7 @@ impl Task for PeerLookupTask {
 
             if !call.matches_id()||
                 binding.kind() != msg::Kind::Response ||
-                binding.method() != msg::Method::FindNode {
+                binding.method() != msg::Method::FindPeer {
                 return;
             }
 

@@ -602,7 +602,7 @@ impl DHT {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
         let result_shadow = Rc::clone(&result);
 
-        let task = Rc::new(RefCell::new(ValueLookupTask::new(id)));
+        let task = Rc::new(RefCell::new(ValueLookupTask::new(id, Rc::clone(&self.routing_table))));
         task.borrow_mut().set_name("value-lookup");
         task.borrow_mut().set_result_fn(move |_task, _value| {
             if let Some(_v) = _value.as_ref() {
@@ -624,9 +624,9 @@ impl DHT {
             }
         });
 
-        task.borrow_mut().add_listener(move |_| {
+        task.borrow_mut().add_listener(Box::new(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
-        });
+        }));
         self.taskman.borrow_mut().add(task);
     }
 

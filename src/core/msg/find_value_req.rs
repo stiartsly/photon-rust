@@ -174,9 +174,9 @@ impl Message {
         self.seq
     }
 
-    // pub(crate) fn with_seq(&mut self, seq: i32) {
-    //    self.seq = seq
-    //}
+    pub(crate) fn with_seq(&mut self, seq: i32) {
+        self.seq = seq
+    }
 }
 
 impl fmt::Display for Message {
