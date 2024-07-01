@@ -576,7 +576,7 @@ impl DHT {
                 .bucket_entry(id)
                 .map(|item| Box::new(item.inner_node())),
         ));
-        let result_shadow = Rc::clone(&result);
+        let cloned = Rc::clone(&result);
 
         let task = Rc::new(RefCell::new(NodeLookupTask::new(id, Rc::clone(&self.routing_table))));
         task.borrow_mut().set_name("node-lookup");
@@ -588,8 +588,9 @@ impl DHT {
                 _task.cancel()
             }
         });
+
         task.borrow_mut().add_listener(Box::new(move |_| {
-            complete_fn(result_shadow.borrow_mut().take());
+            complete_fn(cloned.borrow_mut().take());
         }));
 
         self.taskman.borrow_mut().add(task);
@@ -654,28 +655,24 @@ impl DHT {
         self.taskman.borrow_mut().add(task);
     }
 
-    pub(crate) fn find_peer<F>(
-        &self,
-        id: &Id,
-        expected: usize,
-        option: LookupOption,
-        complete_fn: F,
-    ) where
-        F: Fn(Vec<Box<Peer>>) + 'static,
+    pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
+    where F: Fn(Vec<Box<Peer>>) + 'static,
     {
-        let result = Rc::new(RefCell::new(Vec::new() as Vec<Box<Peer>>));
-        let result_shadow = Rc::clone(&result);
+        let result = Rc::new(RefCell::new(Vec::new()));
+        let cloned = Rc::clone(&result);
 
-        let task = Rc::new(RefCell::new(PeerLookupTask::new(id)));
+        let task = Rc::new(RefCell::new(PeerLookupTask::new(id, Rc::clone(&self.routing_table))));
         task.borrow_mut().set_name("peer-lookup");
         task.borrow_mut().set_result_fn(move |_task, _peers| {
-            (*result.borrow_mut()).append(_peers);
+            result.borrow_mut().append(_peers);
             if option != LookupOption::Conservative && result.borrow().len() >= expected {
                 _task.cancel()
             }
         });
 
-        task.borrow_mut().add_listener(move |_| complete_fn(result_shadow.take()));
+        task.borrow_mut().add_listener(Box::new(move |_| {
+            complete_fn(cloned.borrow_mut().drain(..).collect());
+        }));
 
         self.taskman.borrow_mut().add(task);
     }

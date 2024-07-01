@@ -8,7 +8,7 @@ use log::error;
 use crate::{
     constants,
     id::Id,
-    node_info::{NodeInfo},
+    node_info::NodeInfo,
     rpccall::RpcCall,
     routing_table::RoutingTable,
     kclosest_nodes::KClosestNodes,
@@ -39,7 +39,6 @@ pub(crate) struct NodeLookupTask {
     ni: NodeInfo,
 }
 
-#[allow(dead_code)]
 impl NodeLookupTask {
     pub(crate) fn new(target: &Id,
         routing_table: Rc<RefCell<RoutingTable>>) -> Self {
