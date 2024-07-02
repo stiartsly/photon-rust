@@ -100,12 +100,12 @@ pub(crate) trait Task {
     fn data(&self) -> &TaskData;
     fn data_mut(&mut self) -> &mut TaskData;
 
-    fn prepare(&mut self);
-    fn update(&mut self);
-    fn call_sent(&mut self, _: &RpcCall);
-    fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>);
-    fn call_error(&mut self, call: &RpcCall);
-    fn call_timeout(&mut self, call: &RpcCall);
+    fn prepare(&mut self) {}
+    fn update(&mut self) {}
+    fn call_sent(&mut self, _: &RpcCall) {}
+    fn call_responsed(&mut self, _: &RpcCall, _: Rc<RefCell<dyn Msg>>) {}
+    fn call_error(&mut self, _: &RpcCall) {}
+    fn call_timeout(&mut self, _: &RpcCall) {}
     fn as_any(&self) -> &dyn Any;
 
     fn link_self(&mut self, task: Rc<RefCell<dyn Task>>) {

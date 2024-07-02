@@ -5,66 +5,69 @@ use std::cell::RefCell;
 
 use super::{
     closest_set::ClosestSet,
+    candidate_node::CandidateNode,
     task::{Task, TaskData},
 };
 use crate::{
-    kbucket::KBucket,
-    kbucket_entry::KBucketEntry,
     value::Value,
-    rpccall::RpcCall,
-    msg::msg::Msg,
 };
 
 #[allow(dead_code)]
 pub(crate) struct ValueAnnounceTask {
-    bucket: Rc<KBucket>,
-    todo: LinkedList<Box<KBucketEntry>>,
+    base_data: TaskData,
 
-    check_all: bool,
-    probe_cache: bool,
-    remove_on_timeout: bool,
+    // TODO: todo: Rc<RefCell<LinkedList<Rc<RefCell<KBucketEntry>>>>>,
+    todo: Rc<RefCell<LinkedList<Rc<RefCell<CandidateNode>>>>>,
+    peer: Option<Box<Value>>,
 }
 
 #[allow(dead_code)]
 impl ValueAnnounceTask {
-    pub(crate) fn new(_: &ClosestSet, _: &Value) -> Self {
-        unimplemented!()
+    pub(crate) fn new(closest: &ClosestSet, value: &Value) -> Self {
+        let mut todo = LinkedList::new();
+        for item in closest.entries() {
+            todo.push_back(item);
+        }
+
+        Self {
+            base_data: TaskData::new(),
+            todo: Rc::new(RefCell::new(todo)),
+            peer: Some(Box::new(value.clone())),
+        }
     }
 }
 
 impl Task for ValueAnnounceTask {
     fn data(&self) -> &TaskData {
-        unimplemented!()
+        &self.base_data
     }
+
     fn data_mut(&mut self) -> &mut TaskData {
-        unimplemented!()
+        &mut self.base_data
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 
-    fn prepare(&mut self) {
-        unimplemented!()
-    }
-
     fn update(&mut self) {
-        unimplemented!()
-    }
+        /*
+        while !self.todo.borrow().is_empty() && self.can_request() {
+            let candidate_node = match self.todo.borrow().front() {
+                Some(node) => node,
+                None => break,
+            };
 
-    fn call_sent(&mut self, _: &RpcCall) {
-        unimplemented!()
-    }
+            let req = Rc::new(RefCell::new(announce_value_req::Message::new()));
 
-    fn call_responsed(&mut self, _: &RpcCall, _: Rc<RefCell<dyn Msg>>) {
-        unimplemented!()
-    }
-
-    fn call_error(&mut self, _: &RpcCall) {
-        unimplemented!()
-    }
-
-    fn call_timeout(&mut self, _: &RpcCall) {
+            let cloned = Rc::clone(candidate_node);
+            let cloned_todo = Rc::clone(&self.todo);
+            if let Err(err) = self.send_call(cloned, req, Box::new(move|_| {
+                cloned_todo.borrow_mut().pop_front();
+            })) {
+               error!("Error on sending 'findNode' message: {:?}", err);
+            }
+        }*/
         unimplemented!()
     }
 }

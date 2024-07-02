@@ -11,10 +11,10 @@ use crate::{
     routing_table::RoutingTable,
 };
 
-use crate::msg::{
+// use crate::msg::{
     // ping_req,
-    msg::Msg,
-};
+    // msg::Msg,
+// };
 
 use super::task::{
     Task,
@@ -61,8 +61,6 @@ impl Task for PingRefreshTask {
         self
     }
 
-    fn prepare(&mut self) {}
-
     fn update(&mut self) {
         /* while self.todo.is_empty() && self.can_request() {
             let candidate_node = match self.todo.pop_front() {
@@ -85,12 +83,6 @@ impl Task for PingRefreshTask {
         } */
         unimplemented!()
     }
-
-    fn call_sent(&mut self, _: &RpcCall) {}
-
-    fn call_responsed(&mut self, _: &RpcCall, _: Rc<RefCell<dyn Msg>>) {}
-
-    fn call_error(&mut self, _: &RpcCall) {}
 
     fn call_timeout(&mut self, call: &RpcCall) {
         if self.remove_on_timeout {

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::LinkedList;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -39,8 +40,6 @@ impl ClosestSet {
         self.closest.get(id).map(|item | Rc::clone(&item))
     }
 
-
-
     pub(crate) fn contains(&self, id: &Id) -> bool {
         self.closest.get(id).is_some()
     }
@@ -79,6 +78,10 @@ impl ClosestSet {
 
     pub(crate) fn remove(&mut self, candidate: &Id) {
         _ = self.closest.remove(candidate)
+    }
+
+    pub(crate) fn entries(&self) -> LinkedList<Rc<RefCell<CandidateNode>>> {
+        unimplemented!()
     }
 
     pub(crate) fn tail(&self) -> Id {

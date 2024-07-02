@@ -130,8 +130,6 @@ impl Task for ValueLookupTask {
         }
     }
 
-    fn call_sent(&mut self, _: &RpcCall) {}
-
     fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
         let binding = rsp.borrow();
         if let Some(downcasted) = binding.as_any().downcast_ref::<find_value_rsp::Message>() {
