@@ -549,7 +549,8 @@ impl DHT {
 
     pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
-        if !self.running || !self.server.borrow().is_reachable() {
+        if  !self.running ||
+            !self.server.borrow().is_reachable() {
             return;
         }
         self.routing_table.borrow_mut().on_timeout(call.target_id());
@@ -572,9 +573,9 @@ impl DHT {
         ));
         let cloned = Rc::clone(&result);
 
-        let task = Rc::new(RefCell::new(NodeLookupTask::new(id, Rc::clone(&self.routing_table))));
-        task.borrow_mut().set_name("node-lookup");
-        task.borrow_mut().set_result_fn(move |_task, _node| {
+        let mut task = NodeLookupTask::new(id, Rc::clone(&self.routing_table));
+        task.set_name("node-lookup");
+        task.set_result_fn(move |_task, _node| {
             if _node.is_some() {
                 *(result.borrow_mut()) = Some(_node.unwrap().clone());
             }
@@ -583,11 +584,13 @@ impl DHT {
             }
         });
 
-        task.borrow_mut().add_listener(Box::new(move |_| {
+        task.add_listener(Box::new(move |_| {
             complete_fn(cloned.borrow_mut().take());
         }));
 
-        self.taskman.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(
+            Rc::new(RefCell::new(task))
+        );
     }
 
     pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
@@ -596,9 +599,9 @@ impl DHT {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
         let result_shadow = Rc::clone(&result);
 
-        let task = Rc::new(RefCell::new(ValueLookupTask::new(id, Rc::clone(&self.routing_table))));
-        task.borrow_mut().set_name("value-lookup");
-        task.borrow_mut().set_result_fn(move |_task, _value| {
+        let mut task = ValueLookupTask::new(id, Rc::clone(&self.routing_table));
+        task.set_name("value-lookup");
+        task.set_result_fn(move |_task, _value| {
             if let Some(_v) = _value.as_ref() {
                 match result.borrow().as_ref() {
                     Some(v) => {
@@ -618,19 +621,21 @@ impl DHT {
             }
         });
 
-        task.borrow_mut().add_listener(Box::new(move |_| {
+        task.add_listener(Box::new(move |_| {
             complete_fn(result_shadow.borrow_mut().take());
         }));
-        self.taskman.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(
+            Rc::new(RefCell::new(task))
+        );
     }
 
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
-    where F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static,
+    where F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static
     {
-        let task = Rc::new(RefCell::new(NodeLookupTask::new(&value.id(), Rc::clone(&self.routing_table))));
-        task.borrow_mut().set_name("store-value");
-        task.borrow_mut().set_want_token(true);
-        task.borrow_mut().add_listener(Box::new(move |_task| {
+        let mut task = NodeLookupTask::new(&value.id(), Rc::clone(&self.routing_table));
+        task.set_name("store-value");
+        task.set_want_token(true);
+        task.add_listener(Box::new(move |_task| {
             if _task.state() != State::Finished {
                 return;
             }
@@ -646,11 +651,13 @@ impl DHT {
                 // TODO:
             }
         }));
-        self.taskman.borrow_mut().add(task);
+        self.taskman.borrow_mut().add(
+            Rc::new(RefCell::new(task))
+        );
     }
 
     pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
-    where F: Fn(Vec<Box<Peer>>) + 'static,
+    where F: Fn(Vec<Box<Peer>>) + 'static
     {
         let result = Rc::new(RefCell::new(Vec::new()));
         let cloned = Rc::clone(&result);

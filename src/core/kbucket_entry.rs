@@ -7,7 +7,7 @@ use crate::{
     constants,
     version,
     id::Id,
-    node_info::{NodeInfo, Reachable},
+    node_info::{NodeInfo, Reachable, Convertible},
 };
 
 /**
@@ -165,6 +165,12 @@ impl Reachable for KBucketEntry {
 
     fn set_reachable(&mut self, reachable: bool) {
         self.reachable = reachable
+    }
+}
+
+impl Convertible for KBucketEntry {
+    fn node(&self) -> &NodeInfo {
+        &self.ni
     }
 }
 

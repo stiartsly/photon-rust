@@ -2,16 +2,15 @@ use std::any::Any;
 use std::collections::LinkedList;
 use std::rc::Rc;
 use std::cell::RefCell;
-// use log::error;
+use log::error;
 
 use crate::{
     peer::Peer,
 };
 
-// use crate::msg::{
-//    announce_peer_req,
-//    msg::Msg,
-// };
+use crate::msg::{
+    announce_peer_req,
+};
 
 use super::{
     closest_set::ClosestSet,
@@ -23,7 +22,6 @@ use super::{
 pub(crate) struct PeerAnnounceTask {
     base_data: TaskData,
 
-    // TODO: todo: Rc<RefCell<LinkedList<Rc<RefCell<KBucketEntry>>>>>,
     todo: Rc<RefCell<LinkedList<Rc<RefCell<CandidateNode>>>>>,
     peer: Option<Box<Peer>>,
 }
@@ -58,23 +56,24 @@ impl Task for PeerAnnounceTask {
     }
 
     fn update(&mut self) {
-        /*
-        while !self.todo.borrow().is_empty() && self.can_request() {
-            let candidate_node = match self.todo.borrow().front() {
-                Some(node) => node,
-                None => break,
+        while self.can_request() {
+            let cn = {
+                let todo = self.todo.borrow();
+                let cn = match todo.front() {
+                    Some(cn) => cn,
+                    None => break,
+                };
+                Rc::clone(&cn)
             };
 
             let req = Rc::new(RefCell::new(announce_peer_req::Message::new()));
 
-            let cloned = Rc::clone(candidate_node);
             let cloned_todo = Rc::clone(&self.todo);
-            if let Err(err) = self.send_call(cloned, req, Box::new(move|_| {
+            if let Err(err) = self.send_call(cn, req, Box::new(move|_| {
                 cloned_todo.borrow_mut().pop_front();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
             }
-        }*/
-        unimplemented!()
+        }
     }
 }

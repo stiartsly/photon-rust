@@ -1,7 +1,11 @@
 use std::time::SystemTime;
 
-use crate::node_info::{NodeInfo, Reachable};
 use crate::id::Id;
+use crate::node_info::{
+    NodeInfo,
+    Convertible,
+    Reachable
+};
 
 #[derive(Clone)]
 pub(crate) struct CandidateNode {
@@ -32,10 +36,6 @@ impl CandidateNode {
 
     pub(crate) fn nodeid(&self) -> &Id {
         self.ni.id()
-    }
-
-    pub(crate) fn node(&self) -> &NodeInfo {
-        &self.ni
     }
 
     pub(crate) fn set_sent(&mut self) {
@@ -83,5 +83,11 @@ impl Reachable for CandidateNode {
 
     fn set_reachable(&mut self, reachable: bool) {
         self.reachable = reachable
+    }
+}
+
+impl Convertible for CandidateNode {
+    fn node(&self) -> &NodeInfo {
+        &self.ni
     }
 }

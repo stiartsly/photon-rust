@@ -106,14 +106,15 @@ impl Task for PeerLookupTask {
                 None => { break },
             };
 
-            let req = Rc::new(RefCell::new(find_peer_req::Message::new()));
-            req.borrow_mut().with_target(self.target().clone());
-            req.borrow_mut().with_want4(true);
-            req.borrow_mut().with_want6(false);
+            let mut req = find_peer_req::Message::new();
+            req.with_target(self.target().clone());
+            req.with_want4(true);
+            req.with_want6(false);
 
-            let cloned = Rc::clone(&next);
-            if let Err(err) = self.send_call(next, req, Box::new(move|_| {
-                cloned.borrow_mut().set_sent();
+            let cloned_text = Rc::clone(&next);
+            let cloned_req = Rc::new(RefCell::new(req));
+            if let Err(err) = self.send_call(next, cloned_req, Box::new(move|_| {
+                cloned_text.borrow_mut().set_sent();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
             }

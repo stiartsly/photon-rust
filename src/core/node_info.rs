@@ -14,6 +14,10 @@ pub(crate) trait Reachable {
     fn set_reachable(&mut self, _: bool);
 }
 
+pub(crate) trait Convertible {
+    fn node(&self) -> &NodeInfo;
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct NodeInfo {
     id: Id,
@@ -133,6 +137,12 @@ impl Reachable for NodeInfo {
     fn reachable(&self) -> bool { false }
     fn unreachable(&self) -> bool { false }
     fn set_reachable(&mut self, _: bool) {}
+}
+
+impl Convertible for NodeInfo {
+    fn node(&self) -> &NodeInfo {
+        self
+    }
 }
 
 impl fmt::Display for NodeInfo {

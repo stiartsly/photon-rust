@@ -7,15 +7,11 @@ use std::collections::HashMap;
 //use log::debug;
 
 use crate::{
-    //node_info::NodeInfo,
+    node_info::{Convertible},
     rpccall::{RpcCall, State as CallState},
     error::Error,
     msg::msg::Msg,
     server::Server,
-};
-
-use super::{
-    candidate_node::CandidateNode,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -203,7 +199,7 @@ pub(crate) trait Task {
     }
 
     fn send_call(&mut self,
-        cn: Rc<RefCell<CandidateNode>>,
+        cn: Rc<RefCell<dyn Convertible>>,
         msg: Rc<RefCell<dyn Msg>>,
         mut f: Box<dyn FnMut(Rc<RefCell<RpcCall>>)>)
     -> Result<(), Error> {
