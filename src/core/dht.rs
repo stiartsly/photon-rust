@@ -327,8 +327,9 @@ impl DHT {
     }
 
     fn on_request(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        let method = msg.borrow().method();
-        match method {
+        let binding = msg.borrow();
+        let msg = binding.deref();
+        match msg.method() {
             Method::Ping => self.on_ping(msg),
             Method::FindNode => self.on_find_node(msg),
             Method::FindValue => self.on_find_value(msg),
@@ -355,35 +356,34 @@ impl DHT {
         );
     }
 
-    fn send_err(&mut self, msg: Rc<RefCell<dyn Msg>>, code: i32, str: &str) {
-        let msg = msg.borrow();
-        let err = Rc::new(RefCell::new(error::Message::with_txid(msg.method(), msg.txid())));
+    fn send_err(&mut self, msg: &dyn Msg, code: i32, str: &str) {
+        let mut err = error::Message::with_txid(msg.method(), msg.txid());
 
-        err.borrow_mut().set_remote(msg.id(), msg.origin());
-        err.borrow_mut().set_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
-        err.borrow_mut().set_txid(msg.txid());
-        err.borrow_mut().with_msg(str);
-        err.borrow_mut().with_code(code);
+        err.set_remote(msg.id(), msg.origin());
+        err.set_ver(version::build(version::NODE_TAG_NAME, version::NODE_VERSION));
+        err.set_txid(msg.txid());
+        err.with_msg(str);
+        err.with_code(code);
 
-        self.server.borrow_mut().send_msg(err);
-    }
-
-    fn on_ping(&mut self, req: Rc<RefCell<dyn Msg>>) {
-        let binding = req.borrow();
-        let rsp = Rc::new(RefCell::new(
-            ping_rsp::Message::with_txid(binding.txid()))
+        self.server.borrow_mut().send_msg(
+            Rc::new(RefCell::new(err))
         );
-        rsp.borrow_mut().set_remote(binding.id(), binding.origin());
-
-        self.server.borrow_mut().send_msg(rsp);
     }
 
-    fn on_find_node(&mut self, req: Rc<RefCell<dyn Msg>>) {
-        let binding = req.borrow();
-        let req = binding.as_any().downcast_ref::<find_node_req::Message>().unwrap();
-        let rsp = Rc::new(RefCell::new(find_node_rsp::Message::new()));
-        rsp.borrow_mut().set_remote(req.id(), req.origin());
-        rsp.borrow_mut().set_txid(req.txid());
+    fn on_ping(&mut self, req: &dyn Msg) {
+        let mut rsp = ping_rsp::Message::with_txid(req.txid());
+        rsp.set_remote(req.id(), req.origin());
+
+        self.server.borrow_mut().send_msg(
+            Rc::new(RefCell::new(rsp))
+        );
+    }
+
+    fn on_find_node(&mut self, msg: &dyn Msg) {
+        let req = msg.as_any().downcast_ref::<find_node_req::Message>().unwrap();
+        let mut rsp = find_node_rsp::Message::new();
+        rsp.set_remote(req.id(), req.origin());
+        rsp.set_txid(req.txid());
 
         if req.want4() {
             let mut knodes = KClosestNodes::new(
@@ -392,25 +392,26 @@ impl DHT {
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
-            rsp.borrow_mut().populate_closest_nodes4(knodes.as_nodes());
+            rsp.populate_closest_nodes4(knodes.as_nodes());
         }
 
         if req.want_token() {
             let token = self.tokenman.borrow_mut().generate_token(
-                binding.id(), req.origin(), req.target()
+                req.id(), req.origin(), req.target()
             );
-            rsp.borrow_mut().populate_token(token);
+            rsp.populate_token(token);
         }
 
-        self.server.borrow_mut().send_msg(rsp);
+        self.server.borrow_mut().send_msg(
+            Rc::new(RefCell::new(rsp))
+        );
     }
 
-    fn on_find_value(&mut self, req: Rc<RefCell<dyn Msg>>) {
-        let binding = req.borrow();
-        let req = binding.as_any().downcast_ref::<find_value_req::Message>().unwrap();
-        let rsp = Rc::new(RefCell::new(find_value_rsp::Message::new()));
-        rsp.borrow_mut().set_remote(req.id(), req.origin());
-        rsp.borrow_mut().set_txid(req.txid());
+    fn on_find_value(&mut self, msg: &dyn Msg) {
+        let req = msg.as_any().downcast_ref::<find_value_req::Message>().unwrap();
+        let mut rsp = find_value_rsp::Message::new();
+        rsp.set_remote(req.id(), req.origin());
+        rsp.set_txid(req.txid());
 
         let mut has_value = false;
         let value = self.server.borrow().storage().borrow().value(req.target());
@@ -420,7 +421,7 @@ impl DHT {
                 || req.seq() <= value.as_ref().unwrap().sequence_number()
             {
                 has_value = true;
-                rsp.borrow_mut().populate_value(value.unwrap());
+                rsp.populate_value(value.unwrap());
             }
         }
 
@@ -431,22 +432,23 @@ impl DHT {
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
-            rsp.borrow_mut().populate_closest_nodes4(knodes.as_nodes());
+            rsp.populate_closest_nodes4(knodes.as_nodes());
         }
 
         if req.want_token() {
             let token = self.tokenman.borrow_mut().generate_token(
-                binding.id(), req.origin(), req.target()
+                req.id(), req.origin(), req.target()
             );
-            rsp.borrow_mut().populate_token(token);
+            rsp.populate_token(token);
         }
 
-        self.server.borrow_mut().send_msg(rsp);
+        self.server.borrow_mut().send_msg(
+            Rc::new(RefCell::new(rsp))
+        );
     }
 
-    fn on_store_value(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        let binding = msg.borrow();
-        let req = binding.as_any().downcast_ref::<store_value_req::Message>().unwrap();
+    fn on_store_value(&mut self, msg: &dyn Msg) {
+        let req = msg.as_any().downcast_ref::<store_value_req::Message>().unwrap();
         let value = req.value();
         let value_id = value.as_ref().unwrap().id();
 
@@ -454,41 +456,37 @@ impl DHT {
             req.token(), req.id(), req.origin(), &value_id,
         );
         if !valid {
-            warn!(
-                "Received a store value request with invalid token from {}",
-                binding.origin()
-            );
-            self.send_err(Rc::clone(&msg), 203,
-                "Invalid token for STORE VALUE request",
-            );
+            warn!("Received a store value request with invalid token from {}", req.origin());
+            self.send_err(msg, 203, "Invalid token for store value request");
             return;
         }
 
         if !value.as_ref().unwrap().is_valid() {
-            self.send_err(Rc::clone(&msg), 203, "Invalid value");
+            self.send_err(msg, 203, "Invalid value");
             return;
         }
 
         // TODO: store value.
-        let rsp = Rc::new(RefCell::new(store_value_rsp::Message::new()));
-        rsp.borrow_mut().set_remote(req.id(), req.origin());
-        rsp.borrow_mut().set_txid(binding.txid());
+        let mut rsp = store_value_rsp::Message::new();
+        rsp.set_remote(req.id(), req.origin());
+        rsp.set_txid(req.txid());
 
-        self.server.borrow_mut().send_msg(rsp);
+        self.server.borrow_mut().send_msg(
+            Rc::new(RefCell::new(rsp))
+        );
     }
 
-    fn on_find_peers(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        let binding = msg.borrow();
-        let req = binding.as_any().downcast_ref::<find_peer_req::Message>().unwrap();
-        let rsp = Rc::new(RefCell::new(find_peer_rsp::Message::new()));
-        rsp.borrow_mut().set_remote(req.id(), req.origin());
-        rsp.borrow_mut().set_txid(binding.txid());
+    fn on_find_peers(&mut self, msg: &dyn Msg) {
+        let req = msg.as_any().downcast_ref::<find_peer_req::Message>().unwrap();
+        let mut rsp = find_peer_rsp::Message::new();
+        rsp.set_remote(req.id(), req.origin());
+        rsp.set_txid(req.txid());
 
         let mut has_peers = false;
         let peers = self.server.borrow().storage().borrow().peers(req.target(), 8);
         if !peers.is_empty() {
             has_peers = true;
-            rsp.borrow_mut().populate_peers(peers);
+            rsp.populate_peers(peers);
         }
 
         if req.want4() && has_peers {
@@ -498,22 +496,23 @@ impl DHT {
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
-            rsp.borrow_mut().populate_closest_nodes4(knodes.as_nodes());
+            rsp.populate_closest_nodes4(knodes.as_nodes());
         }
 
         if req.want_token() {
             let token = self.tokenman.borrow_mut().generate_token(
                 req.id(), req.origin(), req.target()
             );
-            rsp.borrow_mut().populate_token(token);
+            rsp.populate_token(token);
         }
 
-        self.server.borrow_mut().send_msg(rsp);
+        self.server.borrow_mut().send_msg(
+            Rc::new(RefCell::new(rsp))
+        );
     }
 
-    fn on_announce_peer(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        let binding = msg.borrow();
-        let req = binding.as_any().downcast_ref::<announce_peer_req::Message>().unwrap();
+    fn on_announce_peer(&mut self, msg: &dyn Msg) {
+        let req = msg.as_any().downcast_ref::<announce_peer_req::Message>().unwrap();
         if is_bogon_address(req.origin()) {
             info!("Received an announce peer request from bogon address {}, ignored ",
                 req.origin()
@@ -524,33 +523,28 @@ impl DHT {
             req.token(), req.id(), req.origin(), req.target()
         );
         if !valid {
-            warn!(
-                "Received an announce peer request with invalid token from {}",
-                req.origin()
-            );
-            self.send_err(
-                Rc::clone(&msg), 203,"Invalid token for ANNOUNCE PEER request",
-            );
+            warn!("Received an announce peer request with invalid token from {}", req.origin());
+            self.send_err(msg, 203,"Invalid token for ANNOUNCE PEER request");
             return;
         }
 
         let peer = req.peer();
         if !peer.is_valid() {
-            self.send_err(Rc::clone(&msg), 203, "One peer is invalid peer");
+            self.send_err(msg, 203, "One peer is invalid peer");
             return;
         }
 
-        debug!(
-            "Received an announce peer request from {}, saving peer {}",
-            req.origin(), req.target()
-        );
+        debug!( "Received an announce peer request from {}, saving peer {}",
+            req.origin(), req.target());
         // TODO: Store peers.
 
-        let rsp = Rc::new(RefCell::new(announce_peer_rsp::Message::new()));
-        rsp.borrow_mut().set_remote(req.id(), req.origin());
-        rsp.borrow_mut().set_txid(req.txid());
+        let mut rsp = announce_peer_rsp::Message::new();
+        rsp.set_remote(req.id(), req.origin());
+        rsp.set_txid(req.txid());
 
-        self.server.borrow_mut().send_msg(rsp);
+        self.server.borrow_mut().send_msg(
+            Rc::new(RefCell::new(rsp))
+        );
     }
 
     pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
