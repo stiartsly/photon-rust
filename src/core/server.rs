@@ -1,6 +1,5 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::net::SocketAddr;
 use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
 use std::collections::{HashMap, LinkedList};
@@ -119,7 +118,6 @@ impl Server {
             error!("Attempt to open database storage failed {}", err);
             return Err(err);
         }
-
 
         self.dht4 = Some(Rc::clone(&dht4));
         let path = self.store_path.clone() + "/dht4.cache";
@@ -240,16 +238,6 @@ fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
     // let mut timestamp = SystemTime::now();
     // unimplemented!()
     // TODO:
-}
-
-// Notice: This function aims to resolve the dilemma of circular dependency between
-// the "server" instance and the two dht instances, which cannot be resolved by allowing
-// use "self" reference in engine method to create dht instances.
-pub(crate) fn start_tweak(server: Rc<RefCell<Server>>, addr4: SocketAddr) -> Result<(), Error>
-{
-    let dht4 = Rc::new(RefCell::new(DHT::new(Rc::clone(&server), addr4)));
-    dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
-    server.borrow_mut().start(dht4)
 }
 
 pub(crate) fn run_loop(server: Rc<RefCell<Server>>,

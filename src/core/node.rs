@@ -18,6 +18,7 @@ use crate::NodeStatus;
 use crate::peer::Peer;
 use crate::value::Value;
 use crate::signature::KeyPair;
+use crate::dht::DHT;
 use crate::crypto_cache::CryptoCache;
 use crate::lookup_option::LookupOption;
 use crate::server::{self, Server};
@@ -141,13 +142,15 @@ impl Node {
 
         self.thread = Some(thread::spawn(move || {
             let server = Rc::new(RefCell::new(Server::new(params)));
+            let dht4 = Rc::new(RefCell::new(DHT::new(Rc::clone(&server), addr4.unwrap())));
+            dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
 
-            match server::start_tweak(Rc::clone(&server), addr4.unwrap()) {
+            let result = server.borrow_mut().start(Rc::clone(&dht4));
+            match result {
                 Ok(_) => {
-                    let dht4 = Rc::clone(&server.borrow().dht4());
                     _ = server::run_loop(
                         Rc::clone(&server),
-                        dht4,
+                        Rc::clone(&dht4),
                         Arc::clone(&quit),
                     ).map_err(|err| {
                         error!("Unexpected error happened in the loop: {}.", err);
