@@ -47,7 +47,7 @@ impl Node {
         logger::setup();
 
         // cfg(DEVELOPMENT)
-        info!("Phone node running in development mode!!!");
+        info!("DHT node running in development mode!!!");
 
         // Standardize storage path.
         let mut path = String::from(cfg.storage_path());
@@ -66,30 +66,29 @@ impl Node {
 
         // Loading key from persistence.
         let keypath = path.clone() + "key";
-        let mut keypair = Option::default() as Option<KeyPair>;
+        let keypair;
 
         match fs::metadata(&keypath) {
             Ok(metadata) => {
                 if metadata.is_dir() {
-                    let str = format!("Bad file path: {}. DHT node will not be able to persist node key there.", keypath);
-                    error!("{}", str);
-                    return Err(Error::State(str));
+                    error!("Bad file path: {}. DHT node will not be able to persist node key there.", keypath);
+                    return Err(Error::State(format!("Bad file path {} for key storage.", keypath)));
                 };
                 keypair = load_key(&keypath)
                     .map_err(|err| {
                         error!("Loading key data error {}", err); err
-                    }).ok();
-            }
+                    }).ok().unwrap();
+            },
             Err(_) => {
-                _ = keypair.insert(KeyPair::random());
-                _ = store_key(keypair.as_ref().unwrap(), &keypath).map_err(|err| {
-                    error!("Perisisting key data error {}", err); err
+                keypair = KeyPair::random();
+                _ = store_key(&keypair, &keypath).map_err(|err| {
+                    error!("Perisisting key data error {}", err); return err
                 })
             }
         };
 
         // loading node Id from persistence
-        let id = Id::from_signature_key(unwrap!(keypair).public_key());
+        let id = Id::from_signature_key(keypair.public_key());
         let idpath = path.clone() + "id";
         store_nodeid(&id, &idpath).map_err(|err| {
             error!("Persisting node Id data error {}", err); err
@@ -101,8 +100,8 @@ impl Node {
             bootstrap_zone: Arc::new(Mutex::new(BootstrapZone::from(cfg.bootstrap_nodes()))),
             id,
             cfg,
-            signature_keypair: unwrap!(keypair).clone(),
-            encryption_keypair: cryptobox::KeyPair::from_signature_keypair(unwrap!(keypair)),
+            signature_keypair: keypair.clone(),
+            encryption_keypair: cryptobox::KeyPair::from_signature_keypair(&keypair),
             encryption_ctxts: None,
             status: NodeStatus::Stopped,
             option: LookupOption::Conservative,
