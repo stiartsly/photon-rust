@@ -6,14 +6,14 @@ use crate::{
     unwrap,
     id::Id,
     node_info::NodeInfo,
+    routing_table::RoutingTable,
     kbucket::KBucket,
     kbucket_entry::KBucketEntry,
-    routing_table::RoutingTable
 };
 
 pub(crate) struct KClosestNodes<'a> {
     target: &'a Id,
-    routing_table: Rc<RefCell<RoutingTable>>,
+    rt: Rc<RefCell<RoutingTable>>,
 
     entries: Vec<Box<KBucketEntry>>,
     capacity: usize,
@@ -24,29 +24,25 @@ pub(crate) struct KClosestNodes<'a> {
 #[allow(dead_code)]
 impl<'a> KClosestNodes<'a> {
     pub(crate) fn new(target: &'a Id,
-        routing_table: Rc<RefCell<RoutingTable>>,
+        rt: Rc<RefCell<RoutingTable>>,
         max_entries: usize
     ) -> Self {
-
-        Self {
+        Self::with_filter(
             target,
-            routing_table,
-            entries: Vec::new(),
-            capacity: max_entries,
-            filter: Box::new(|entry| entry.is_eligible_for_nodes_list()),
-        }
-
+            rt,
+            max_entries,
+            Box::new(|e: &Box<KBucketEntry>| e.is_eligible_for_nodes_list())
+        )
     }
 
-    pub(crate) fn new_with_filter<F>(target: &'a Id,
-        routing_table: Rc<RefCell<RoutingTable>>,
+    pub(crate) fn with_filter<F>(target: &'a Id,
+    rt: Rc<RefCell<RoutingTable>>,
         max_entries: usize,
         filter: F
     ) -> Self where F: Fn(&Box<KBucketEntry>) -> bool + 'static {
-
         Self {
             target,
-            routing_table,
+            rt,
             entries: Vec::new(),
             capacity: max_entries,
             filter: Box::new(filter),
@@ -64,10 +60,10 @@ impl<'a> KClosestNodes<'a> {
     pub(crate) fn fill(&mut self, include_itself: bool) {
         let mut idx = 0;
         let mut bucket = None;
-        let cloned_routing_table = Rc::clone(&self.routing_table);
-        let binding_routing_table = cloned_routing_table.borrow();
+        let rt = Rc::clone(&self.rt);
+        let rt_binding = rt.borrow();
 
-        for (k,v) in binding_routing_table.buckets().iter() {
+        for (k,v) in rt_binding.buckets().iter() {
             if self.target > k {
                 bucket = Some(v);
                 break;
@@ -78,7 +74,7 @@ impl<'a> KClosestNodes<'a> {
 
         let mut low  = idx;
         let mut high = idx;
-        let mut iter = binding_routing_table.buckets().iter();
+        let mut iter = rt_binding.buckets().iter();
         while self.entries.len() < self.capacity {
             let mut low_bucket  = None;
             let mut high_bucket = None;
@@ -129,8 +125,8 @@ impl<'a> KClosestNodes<'a> {
 
         if self.entries.len() < self.capacity && include_itself {
             let bucket_entry = Box::new(KBucketEntry::new(
-                binding_routing_table.node_id(),
-                binding_routing_table.node_addr()
+                rt_binding.node_id(),
+                rt_binding.node_addr(),
             ));
             self.entries.push(bucket_entry);
         }
@@ -143,13 +139,16 @@ impl<'a> KClosestNodes<'a> {
     }
 
     fn insert_entries(&mut self, bucket: Option<&Box<KBucket>>) {
-        if let Some(v) = bucket {
-            v.entries().iter().for_each(|(_,item)| {
-                if (self.filter)(item) {
-                    self.entries.push(item.clone())
-                }
-            })
-        }
+        let v = match bucket {
+            Some(v) => v,
+            None => return,
+        };
+
+        v.entries().iter().for_each(|(_,item)| {
+            if (self.filter)(item) {
+                self.entries.push(item.clone())
+            }
+        })
     }
 
     fn shave(&mut self) {

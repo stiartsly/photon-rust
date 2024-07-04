@@ -10,7 +10,7 @@ use crate::{
     id::Id,
     node_info::NodeInfo,
     rpccall::RpcCall,
-    routing_table::RoutingTable,
+    dht::DHT,
     kclosest_nodes::KClosestNodes,
 };
 
@@ -35,21 +35,20 @@ pub(crate) struct NodeLookupTask {
     want_token: bool,
     result_fn: Box<dyn FnMut(&mut dyn Task, Option<Box<NodeInfo>>)>,
 
-    routing_table: Rc<RefCell<RoutingTable>>,
+    dht: Rc<RefCell<DHT>>,
     ni: NodeInfo,
 }
 
 impl NodeLookupTask {
-    pub(crate) fn new(target: &Id,
-        routing_table: Rc<RefCell<RoutingTable>>) -> Self {
+    pub(crate) fn new(target: &Id, dht: Rc<RefCell<DHT>>) -> Self {
         Self {
             base_data: TaskData::new(),
             lookup_data: LookupTaskData::new(target),
             bootstrap: false,
             want_token: false,
             result_fn: Box::new(|_,_|{}),
-            ni: NodeInfo::new(routing_table.borrow().node_id(), routing_table.borrow().node_addr()),
-            routing_table: Rc::clone(&routing_table),
+            ni: NodeInfo::new(dht.borrow().node_id(), dht.borrow().socket_addr()),
+            dht: Rc::clone(&dht),
         }
     }
 
@@ -110,9 +109,9 @@ impl Task for NodeLookupTask {
         };
 
         // delay the filling of the todo list until we actually start the task
-        let mut kclosest_nodes = KClosestNodes::new_with_filter(
+        let mut kclosest_nodes = KClosestNodes::with_filter(
             &target,
-            Rc::clone(&self.routing_table),
+            self.dht.borrow().routing_table(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |e| e.is_eligible_for_nodes_list()
         );

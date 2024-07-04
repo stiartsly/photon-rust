@@ -248,6 +248,7 @@ fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
 pub(crate) fn start_tweak(server: Rc<RefCell<Server>>, addr4: SocketAddr) -> Result<(), Error>
 {
     let dht4 = Rc::new(RefCell::new(DHT::new(Rc::clone(&server), addr4)));
+    dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
     server.borrow_mut().start(dht4)
 }
 

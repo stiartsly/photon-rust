@@ -10,8 +10,8 @@ use crate::{
     id::Id,
     node_info::NodeInfo,
     value::Value,
+    dht::DHT,
     rpccall::RpcCall,
-    routing_table::RoutingTable,
     kclosest_nodes::KClosestNodes,
 };
 
@@ -32,7 +32,8 @@ pub(crate) struct ValueLookupTask {
     base_data: TaskData,
     lookup_data: LookupTaskData,
 
-    routing_table: Rc<RefCell<RoutingTable>>,
+    dht: Rc<RefCell<DHT>>,
+
     ni: NodeInfo,
 
     expected_seq: i32,
@@ -40,13 +41,12 @@ pub(crate) struct ValueLookupTask {
 }
 
 impl ValueLookupTask {
-    pub(crate) fn new(target: &Id,
-        routing_table: Rc<RefCell<RoutingTable>>) -> Self {
+    pub(crate) fn new(target: &Id, dht: Rc<RefCell<DHT>>) -> Self {
         Self {
             base_data: TaskData::new(),
             lookup_data: LookupTaskData::new(target),
-            ni: NodeInfo::new(routing_table.borrow().node_id(), routing_table.borrow().node_addr()),
-            routing_table: Rc::clone(&routing_table),
+            ni: NodeInfo::new(dht.borrow().node_id(), dht.borrow().socket_addr()),
+            dht: Rc::clone(&dht),
             expected_seq: -1,
             result_fn: Box::new(|_,_|{}),
         }
@@ -93,9 +93,9 @@ impl Task for ValueLookupTask {
     }
 
     fn prepare(&mut self) {
-        let mut kclosest_nodes = KClosestNodes::new_with_filter(
+        let mut kclosest_nodes = KClosestNodes::with_filter(
             LookupTask::target(self),
-            Rc::clone(&self.routing_table),
+            self.dht.borrow().routing_table(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |_| true
         );
