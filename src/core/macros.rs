@@ -42,3 +42,10 @@ macro_rules! as_kind_name {
         }
     }};
 }
+
+#[macro_export]
+macro_rules! is_bogon_addr {
+    ($val:expr) => {{
+        false
+    }};
+}

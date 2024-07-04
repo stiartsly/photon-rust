@@ -3,12 +3,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::{
+    is_bogon_addr,
     constants,
     id::Id,
     node_info::{NodeInfo, Reachable},
     rpccall::RpcCall,
-//    routing_table::RoutingTable,
-
 };
 
 use crate::msg::{
@@ -61,7 +60,7 @@ pub(crate) trait LookupTask {
         let mut candidates = Vec::new();
 
         for item in nodes.iter() {
-            if is_bogon_address(item.socket_addr()) ||
+            if is_bogon_addr!(item.socket_addr()) ||
                 self.node_id() == item.id() ||
                 self.node_address() == item.socket_addr() ||
                 self.data().closest_set.contains(item.id()) {
@@ -116,8 +115,4 @@ pub(crate) trait LookupTask {
             self.add_closest(cn);
         }
     }
-}
-
-fn is_bogon_address(_: &SocketAddr) -> bool {
-    false
 }

@@ -7,6 +7,7 @@ use std::ops::Deref;
 use log::{debug, info, warn, trace};
 
 use crate::{
+    is_bogon_addr,
     as_kind_name,
     as_millis,
     constants,
@@ -287,7 +288,7 @@ impl DHT {
         let from_id = msg.id();
         let from_addr = msg.origin();
 
-        if is_bogon_address(from_addr) {
+        if is_bogon_addr!(from_addr) {
             info!("Received a message from bogon address {}, ignored the potential
                   routing table operation", from_addr);
             return;
@@ -513,7 +514,7 @@ impl DHT {
 
     fn on_announce_peer(&mut self, msg: &dyn Msg) {
         let req = msg.as_any().downcast_ref::<announce_peer_req::Message>().unwrap();
-        if is_bogon_address(req.origin()) {
+        if is_bogon_addr!(req.origin()) {
             info!("Received an announce peer request from bogon address {}, ignored ",
                 req.origin()
             );
@@ -684,8 +685,4 @@ impl DHT {
     {
         unimplemented!()
     }
-}
-
-fn is_bogon_address(_: &SocketAddr) -> bool {
-    false
 }
