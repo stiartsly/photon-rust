@@ -2,13 +2,11 @@ use std::fmt;
 use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::net::SocketAddr;
 use log::{warn, error};
 
 use crate::{
     constants,
     id::Id,
-    node_info::NodeInfo,
     value::Value,
     dht::DHT,
     rpccall::RpcCall,
@@ -32,21 +30,15 @@ pub(crate) struct ValueLookupTask {
     base_data: TaskData,
     lookup_data: LookupTaskData,
 
-    dht: Rc<RefCell<DHT>>,
-
-    ni: NodeInfo,
-
     expected_seq: i32,
     result_fn: Box<dyn FnMut(&mut Box<dyn Task>, &mut Option<Box<Value>>)>,
 }
 
 impl ValueLookupTask {
-    pub(crate) fn new(target: &Id, dht: Rc<RefCell<DHT>>) -> Self {
+    pub(crate) fn new(dht: Rc<RefCell<DHT>>, target: &Id) -> Self {
         Self {
-            base_data: TaskData::new(),
+            base_data: TaskData::new(dht),
             lookup_data: LookupTaskData::new(target),
-            ni: NodeInfo::new(dht.borrow().node_id(), dht.borrow().socket_addr()),
-            dht: Rc::clone(&dht),
             expected_seq: -1,
             result_fn: Box::new(|_,_|{}),
         }
@@ -67,15 +59,13 @@ impl LookupTask for ValueLookupTask {
     fn data(&self) -> &LookupTaskData {
         &self.lookup_data
     }
+
     fn data_mut(&mut self) -> &mut LookupTaskData {
         &mut self.lookup_data
     }
 
-    fn node_id(&self) -> &Id {
-        self.ni.id()
-    }
-    fn node_address(&self) -> &SocketAddr {
-        self.ni.socket_addr()
+    fn dht(&self) -> Rc<RefCell<DHT>> {
+        Task::data(self).dht()
     }
 }
 
@@ -95,7 +85,7 @@ impl Task for ValueLookupTask {
     fn prepare(&mut self) {
         let mut kclosest_nodes = KClosestNodes::with_filter(
             LookupTask::target(self),
-            self.dht.borrow().routing_table(),
+            Task::data(self).rt(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |_| true
         );

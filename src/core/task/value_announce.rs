@@ -16,6 +16,7 @@ use crate::msg::{
 
 use crate::{
     value::Value,
+    dht::DHT,
 };
 
 #[allow(dead_code)]
@@ -28,14 +29,14 @@ pub(crate) struct ValueAnnounceTask {
 
 #[allow(dead_code)]
 impl ValueAnnounceTask {
-    pub(crate) fn new(closest: &ClosestSet, value: &Value) -> Self {
+    pub(crate) fn new(dht: Rc<RefCell<DHT>>, closest: &ClosestSet, value: &Value) -> Self {
         let mut todo = LinkedList::new();
         for item in closest.entries() {
             todo.push_back(item);
         }
 
         Self {
-            base_data: TaskData::new(),
+            base_data: TaskData::new(dht),
             todo: Rc::new(RefCell::new(todo)),
             peer: Some(Box::new(value.clone())),
         }

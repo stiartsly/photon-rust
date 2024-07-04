@@ -6,6 +6,7 @@ use log::error;
 
 use crate::{
     peer::Peer,
+    dht::DHT,
 };
 
 use crate::msg::{
@@ -28,14 +29,14 @@ pub(crate) struct PeerAnnounceTask {
 
 #[allow(dead_code)]
 impl PeerAnnounceTask {
-    pub(crate) fn new(closest: &ClosestSet, peer: &Peer) -> Self {
+    pub(crate) fn new(dht: Rc<RefCell<DHT>>, closest: &ClosestSet, peer: &Peer) -> Self {
         let mut todo = LinkedList::new();
         for item in closest.entries() {
             todo.push_back(item);
         }
 
         Self {
-            base_data: TaskData::new(),
+            base_data: TaskData::new(dht),
             todo: Rc::new(RefCell::new(todo)),
             peer: Some(Box::new(peer.clone())),
         }

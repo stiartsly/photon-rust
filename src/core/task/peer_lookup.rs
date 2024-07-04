@@ -1,7 +1,6 @@
 use std::fmt;
 use std::any::Any;
 use std::rc::Rc;
-use std::net::SocketAddr;
 use std::cell::RefCell;
 use log::error;
 
@@ -9,7 +8,6 @@ use crate::{
     constants,
     id::Id,
     peer::Peer,
-    node_info::NodeInfo,
     dht::DHT,
     rpccall::RpcCall,
     kclosest_nodes::KClosestNodes,
@@ -31,19 +29,14 @@ pub(crate) struct PeerLookupTask {
     base_data: TaskData,
     lookup_data: LookupTaskData,
 
-    dht: Rc<RefCell<DHT>>,
-    ni: NodeInfo,
-
     result_fn: Box<dyn FnMut(&mut Box<dyn Task>, &mut Vec<Box<Peer>>)>,
 }
 
 impl PeerLookupTask {
     pub(crate) fn new(target: &Id, dht: Rc<RefCell<DHT>>) -> Self {
         Self {
-            base_data: TaskData::new(),
+            base_data: TaskData::new(dht),
             lookup_data: LookupTaskData::new(target),
-            ni: NodeInfo::new(dht.borrow().node_id(), dht.borrow().socket_addr()),
-            dht: Rc::clone(&dht),
             result_fn: Box::new(|_,_|{}),
         }
     }
@@ -64,11 +57,8 @@ impl LookupTask for PeerLookupTask {
         &mut self.lookup_data
     }
 
-    fn node_id(&self) -> &Id {
-        self.ni.id()
-    }
-    fn node_address(&self) -> &SocketAddr {
-        self.ni.socket_addr()
+    fn dht(&self) -> Rc<RefCell<DHT>> {
+        Task::data(self).dht()
     }
 }
 
@@ -88,7 +78,7 @@ impl Task for PeerLookupTask {
     fn prepare(&mut self) {
         let mut kclosest_nodes = KClosestNodes::with_filter(
             LookupTask::target(self),
-            self.dht.borrow().routing_table(),
+            Task::data(self).rt(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |_| true
         );

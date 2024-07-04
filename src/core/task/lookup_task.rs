@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -8,6 +7,7 @@ use crate::{
     id::Id,
     node_info::{NodeInfo, Reachable},
     rpccall::RpcCall,
+    dht::DHT,
 };
 
 use crate::msg::{
@@ -41,8 +41,7 @@ impl LookupTaskData {
 pub(crate) trait LookupTask {
     fn data(&self) -> &LookupTaskData;
     fn data_mut(&mut self) -> &mut LookupTaskData;
-    fn node_id(&self) -> &Id;
-    fn node_address(&self) -> &SocketAddr;
+    fn dht(&self) -> Rc<RefCell<DHT>>;
 
     fn target(&self) -> &Id {
         &self.data().target
@@ -59,10 +58,12 @@ pub(crate) trait LookupTask {
     fn add_candidates(&mut self, nodes: &[NodeInfo]) {
         let mut candidates = Vec::new();
 
+        let dht = self.dht();
         for item in nodes.iter() {
             if is_bogon_addr!(item.socket_addr()) ||
-                self.node_id() == item.id() ||
-                self.node_address() == item.socket_addr() ||
+
+                dht.borrow().node_id() == item.id() ||
+                dht.borrow().socket_addr() == item.socket_addr() ||
                 self.data().closest_set.contains(item.id()) {
                 continue;
             }

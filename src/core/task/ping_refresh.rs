@@ -8,7 +8,7 @@ use crate::{
     kbucket::KBucket,
     kbucket_entry::KBucketEntry,
     rpccall::RpcCall,
-    routing_table::RoutingTable,
+    dht::DHT,
 };
 
 use crate::msg::{
@@ -23,7 +23,6 @@ use super::task::{
 #[allow(dead_code)]
 pub(crate) struct PingRefreshTask {
     base_data: TaskData,
-    routing_table: Rc<RefCell<RoutingTable>>,
 
     bucket: Option<Rc<KBucket>>,
     todo: Rc<RefCell<LinkedList<Rc<RefCell<KBucketEntry>>>>>,
@@ -35,10 +34,9 @@ pub(crate) struct PingRefreshTask {
 
 #[allow(dead_code)]
 impl PingRefreshTask {
-    pub(crate) fn new(routing_table: Rc<RefCell<RoutingTable>>) -> Self {
+    pub(crate) fn new(dht: Rc<RefCell<DHT>>) -> Self {
         Self {
-            base_data: TaskData::new(),
-            routing_table: Rc::clone(&routing_table),
+            base_data: TaskData::new(dht),
             bucket: None,
             todo: Rc::new(RefCell::new(LinkedList::new())),
             check_all: false,
@@ -97,6 +95,6 @@ impl Task for PingRefreshTask {
         // because the routing table is dynamic, maybe already changed.
         let node_id = call.target_id();
         debug!("Removing invalid entry from routingtable");
-        self.routing_table.borrow_mut().remove(node_id);
+        Task::data(self).rt().borrow_mut().remove(node_id);
     }
 }

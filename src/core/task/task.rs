@@ -7,11 +7,12 @@ use std::collections::HashMap;
 //use log::debug;
 
 use crate::{
-    node_info::{Convertible},
+    node_info::Convertible,
     rpccall::{RpcCall, State as CallState},
+    dht::DHT,
     error::Error,
     msg::msg::Msg,
-    server::Server,
+    routing_table::RoutingTable,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -64,12 +65,12 @@ pub(crate) struct TaskData {
     nested: Option<Box<dyn Task>>,
 
     ref_task: Option<Rc<RefCell<dyn Task>>>,
-    server: Option<Rc<RefCell<Server>>>,
+    dht: Rc<RefCell<DHT>>,
 }
 
 #[allow(dead_code)]
 impl TaskData {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(dht: Rc<RefCell<DHT>>) -> Self {
         Self {
             taskid: next_taskid(),
             name: "N/A".to_string(),
@@ -81,7 +82,7 @@ impl TaskData {
             listeners: Vec::new(),
 
             ref_task: None,
-            server: None,
+            dht,
         }
     }
 
@@ -89,6 +90,14 @@ impl TaskData {
         while let Some(f) = self.listeners.pop() {
             f(task)
         }
+    }
+
+    pub(crate) fn rt(&self) -> Rc<RefCell<RoutingTable>> {
+        self.dht.borrow().routing_table()
+    }
+
+    pub(crate) fn dht(&self) -> Rc<RefCell<DHT>> {
+        Rc::clone(&self.dht)
     }
 }
 
@@ -104,12 +113,8 @@ pub(crate) trait Task {
     fn call_timeout(&mut self, _: &RpcCall) {}
     fn as_any(&self) -> &dyn Any;
 
-    fn link_self(&mut self, task: Rc<RefCell<dyn Task>>) {
+    fn cloned_self(&mut self, task: Rc<RefCell<dyn Task>>) {
         self.data_mut().ref_task = Some(task)
-    }
-
-    fn link_server(&mut self, server: Rc<RefCell<Server>>)  {
-        self.data_mut().server = Some(server)
     }
 
     fn taskid(&self) -> i32 {
@@ -210,7 +215,7 @@ pub(crate) trait Task {
         let ni = Box::new(cn.borrow().node().clone());
         let call = Rc::new(RefCell::new(RpcCall::new(ni, msg)));
         let task = Rc::clone(self.data().ref_task.as_ref().unwrap());
-        let server = Rc::clone(self.data().server.as_ref().unwrap());
+        let server = self.data().dht.borrow().server();
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
             match prev_state {
                 CallState::Sent => task.borrow_mut().call_sent(call),

@@ -2,7 +2,6 @@ use std::fmt;
 use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::net::SocketAddr;
 use log::error;
 
 use crate::{
@@ -33,22 +32,17 @@ pub(crate) struct NodeLookupTask {
 
     bootstrap: bool,
     want_token: bool,
-    result_fn: Box<dyn FnMut(&mut dyn Task, Option<Box<NodeInfo>>)>,
-
-    dht: Rc<RefCell<DHT>>,
-    ni: NodeInfo,
+    result_fn: Box<dyn FnMut(&mut dyn Task, Option<Box<NodeInfo>>)>
 }
 
 impl NodeLookupTask {
     pub(crate) fn new(target: &Id, dht: Rc<RefCell<DHT>>) -> Self {
         Self {
-            base_data: TaskData::new(),
+            base_data: TaskData::new(dht),
             lookup_data: LookupTaskData::new(target),
             bootstrap: false,
             want_token: false,
-            result_fn: Box::new(|_,_|{}),
-            ni: NodeInfo::new(dht.borrow().node_id(), dht.borrow().socket_addr()),
-            dht: Rc::clone(&dht),
+            result_fn: Box::new(|_,_|{})
         }
     }
 
@@ -78,11 +72,8 @@ impl LookupTask for NodeLookupTask {
         &mut self.lookup_data
     }
 
-    fn node_id(&self) -> &Id {
-        self.ni.id()
-    }
-    fn node_address(&self) -> &SocketAddr {
-        self.ni.socket_addr()
+    fn dht(&self) -> Rc<RefCell<DHT>> {
+        Task::data(self).dht()
     }
 }
 
@@ -111,7 +102,7 @@ impl Task for NodeLookupTask {
         // delay the filling of the todo list until we actually start the task
         let mut kclosest_nodes = KClosestNodes::with_filter(
             &target,
-            self.dht.borrow().routing_table(),
+            Task::data(self).rt(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |e| e.is_eligible_for_nodes_list()
         );

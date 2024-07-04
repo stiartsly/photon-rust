@@ -127,6 +127,10 @@ impl DHT {
         Rc::clone(&self.routing_table)
     }
 
+    pub(crate) fn server(&self) -> Rc<RefCell<Server>> {
+        Rc::clone(&self.server)
+    }
+
     pub(crate) fn bootstrap(&mut self) {
         let bns = match self.bootstrap_nodes.is_empty() {
             true => self.routing_table.borrow().random_entries(8),
@@ -152,7 +156,6 @@ impl DHT {
             let taskman = Rc::clone(&self.taskman);
             let routing_table = Rc::clone(&self.routing_table);
             let bootstrap_time = Rc::clone(&self.bootstrap_time);
-            let server = Rc::clone(&self.server);
             let cloned_dht = self.cloned_dht();
             call.borrow_mut().set_state_changed_fn(move |call, _, cur| {
                 if cur == &rpccall::State::Responsed || cur == &rpccall::State::Err ||
@@ -177,8 +180,7 @@ impl DHT {
                             cloned_id.deref(), Rc::clone(&cloned_dht)
                         )));
                         let cloned_task = Rc::clone(&task);
-                        task.borrow_mut().link_self(cloned_task);
-                        task.borrow_mut().link_server(Rc::clone(&server));
+                        task.borrow_mut().cloned_self(cloned_task);
                         task.borrow_mut().set_bootstrap(true);
                         task.borrow_mut().inject_candidates(cloned_nodes.borrow().as_slice());
                         task.borrow_mut().set_name("Bootstrap: filling home bucket");
@@ -252,14 +254,12 @@ impl DHT {
         // the keyspace.
         let addr = self.addr.clone();
         let taskman = Rc::clone(&self.taskman);
-        let server = Rc::clone(&self.server);
         let cloned_dht = self.cloned_dht();
         self.scheduler.borrow_mut().add(move || {
             let task = Rc::new(RefCell::new(NodeLookupTask::new(&Id::random(), Rc::clone(&cloned_dht))));
             let name = format!("{}: random lookup", as_kind_name!(&addr));
             let task_cloned = Rc::clone(&task);
-            task.borrow_mut().link_self(task_cloned);
-            task.borrow_mut().link_server(Rc::clone(&server));
+            task.borrow_mut().cloned_self(task_cloned);
             task.borrow_mut().set_name(&name);
             task.borrow_mut().add_listener(Box::new(move |_|{}));
 
@@ -613,7 +613,7 @@ impl DHT {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
         let result_shadow = Rc::clone(&result);
 
-        let mut task = ValueLookupTask::new(id, self.cloned_dht());
+        let mut task = ValueLookupTask::new(self.cloned_dht(), id);
         task.set_name("value-lookup");
         task.set_result_fn(move |_task, _value| {
             if let Some(_v) = _value.as_ref() {
