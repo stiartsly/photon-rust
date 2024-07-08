@@ -24,6 +24,7 @@ use crate::{
     server::Server,
     scheduler::Scheduler,
     kbucket_entry::KBucketEntry,
+    data_storage::DataStorage,
 };
 
 use crate::msg::{
@@ -69,6 +70,7 @@ pub(crate) struct DHT {
     server: Rc<RefCell<Server>>,
     taskman: Rc<RefCell<TaskManager>>,
     tokenman: Rc<RefCell<TokenManager>>,
+    storage: Rc<RefCell<dyn DataStorage>>,
     scheduler: Rc<RefCell<Scheduler>>,
 
     cloned_dht: Option<Rc<RefCell<DHT>>>,
@@ -76,7 +78,7 @@ pub(crate) struct DHT {
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(server: Rc<RefCell<Server>>, binding_addr: SocketAddr) -> Self {
+    pub(crate) fn new(server: Rc<RefCell<Server>>, storage: Rc<RefCell<dyn DataStorage>>, binding_addr: SocketAddr) -> Self {
         let node_info = NodeInfo::new(server.borrow().nodeid(), &binding_addr);
 
         DHT {
@@ -92,8 +94,9 @@ impl DHT {
             bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
 
             server: Rc::clone(&server),
+            storage: storage,
             taskman:  Rc::new(RefCell::new(TaskManager::new())),
-            tokenman: Rc::clone(server.borrow().tokenman()),
+            tokenman: Rc::new(RefCell::new(TokenManager::new())),
             scheduler: server.borrow().scheduler(),
 
             cloned_dht: None,
@@ -252,6 +255,11 @@ impl DHT {
         self.taskman.borrow_mut().add(task);
     }
 
+    pub(crate) fn persist_announce(&self) {
+        info!("Reannounce the perisitent values and peers...");
+        // TODO:
+    }
+
     pub(crate) fn start(&mut self) {
         if self.running {
             return;
@@ -294,7 +302,12 @@ impl DHT {
         let cloned_dht = self.cloned_dht();
         self.scheduler.borrow_mut().add(move || {
             cloned_dht.borrow_mut().random_lookup();
-        }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL)
+        }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL);
+
+        let cloned_dht = self.cloned_dht();
+        self.scheduler.borrow_mut().add(move || {
+            cloned_dht.borrow().persist_announce();
+        }, 1000, constants::RE_ANNOUNCE_INTERVAL);
     }
 
     pub(crate) fn stop(&mut self) {
@@ -458,7 +471,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_value = false;
-        let value = self.server.borrow().storage().borrow().value(req.target());
+        let value = self.storage.borrow().value(req.target());
         if value.is_some() {
             if req.seq() < 0
                 || value.as_ref().unwrap().sequence_number() < 0
@@ -527,7 +540,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_peers = false;
-        let peers = self.server.borrow().storage().borrow().peers(req.target(), 8);
+        let peers = self.storage.borrow().peers(req.target(), 8);
         if !peers.is_empty() {
             has_peers = true;
             rsp.populate_peers(peers);

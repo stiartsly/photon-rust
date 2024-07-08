@@ -22,6 +22,8 @@ use crate::dht::DHT;
 use crate::crypto_cache::CryptoCache;
 use crate::lookup_option::LookupOption;
 use crate::server::{self, Server};
+use crate::sqlite_storage::SqliteStorage;
+use crate::data_storage::DataStorage;
 use crate::bootstrap::BootstrapZone;
 
 pub struct Node {
@@ -140,8 +142,22 @@ impl Node {
         let quit = Arc::clone(&self.quit);
 
         self.thread = Some(thread::spawn(move || {
-            let server = Rc::new(RefCell::new(Server::new(params)));
-            let dht4 = Rc::new(RefCell::new(DHT::new(Rc::clone(&server), addr4.unwrap())));
+            let server = Rc::new(RefCell::new(Server::new(params.clone())));
+
+            let storage = Rc::new(RefCell::new(SqliteStorage::new()));
+            let path = params.1.clone() + "/node.db";
+            if let Err(_) = storage.borrow_mut().open(&path) {
+                // error!("Attempt to open database storage failed {}", err);
+                // return Err(err);
+                panic!("Attempt to open database storage failed");
+            }
+
+            let dht4 = Rc::new(RefCell::new(DHT::new(
+                Rc::clone(&server),
+                Rc::clone(&(storage as Rc<RefCell<dyn DataStorage>>)),
+                addr4.unwrap()))
+            );
+
             dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
 
             let result = server.borrow_mut().start(Rc::clone(&dht4));

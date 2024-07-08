@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use std::sync::{Arc, Mutex};
 use std::collections::{HashMap, LinkedList};
 
-use log::{info, warn, error};
+use log::{info, warn};
 use tokio::io;
 use tokio::runtime;
 use tokio::net::UdpSocket;
@@ -18,9 +18,6 @@ use crate::{
     dht::DHT,
     error::Error,
     rpccall::RpcCall,
-    sqlite_storage::SqliteStorage,
-    token_man::TokenManager,
-    data_storage::DataStorage,
     lookup_option::LookupOption,
     scheduler::{self, Scheduler},
     crypto_cache,
@@ -53,8 +50,6 @@ pub(crate) struct Server<> {
     queue4: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>,
 
     scheduler:  Rc<RefCell<Scheduler>>,
-    token_man:  Rc<RefCell<TokenManager>>,
-    storage:    Rc<RefCell<dyn DataStorage>>,
     crypto_ctx: Rc<RefCell<CryptoCache>>
 }
 
@@ -82,14 +77,8 @@ impl Server {
             queue4: Rc::new(RefCell::new(LinkedList::new())),
 
             scheduler:  Rc::new(RefCell::new(Scheduler::new())),
-            token_man:  Rc::new(RefCell::new(TokenManager::new())),
-            storage:    Rc::new(RefCell::new(SqliteStorage::new())),
             crypto_ctx: Rc::new(RefCell::new(CryptoCache::new(&params.2))),
         }
-    }
-
-    pub(crate) fn tokenman(&self) -> &Rc<RefCell<TokenManager>> {
-        &self.token_man
     }
 
     pub(crate) fn scheduler(&self) -> Rc<RefCell<Scheduler>> {
@@ -108,21 +97,11 @@ impl Server {
         Rc::clone(&self.queue4)
     }
 
-    pub(crate) fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
-        Rc::clone(&self.storage)
-    }
-
     pub(crate) fn number_of_acitve_rpc_calls(&self) -> usize {
         self.calls.len()
     }
 
     pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
-        let path = self.store_path.clone() + "/node.db";
-        if let Err(err) = self.storage.borrow_mut().open(&path) {
-            error!("Attempt to open database storage failed {}", err);
-            return Err(err);
-        }
-
         self.dht4 = Some(Rc::clone(&dht4));
         let path = self.store_path.clone() + "/dht4.cache";
         dht4.borrow_mut().enable_persistence(&path);
@@ -135,14 +114,8 @@ impl Server {
             ctxts.borrow_mut().handle_expiration();
         }, 2000, crypto_cache::EXPIRED_CHECK_INTERVAL);
 
-        let storage = Rc::clone(&self.storage);
-        self.scheduler.borrow_mut().add(move || {
-            persistent_announce(&storage);
-        }, 1000, constants::RE_ANNOUNCE_INTERVAL);
-
         // A scheduled task to move bootstrap nodes from the outer (user thread)
         // to the internal DHT instance.
-        //f let Some(zone) = self.bootstrap_zone() {
         let cloned_zone = Arc::clone(&self.bootstrap_zone);
         let cloned_dht4 = self.dht4();
 
@@ -156,12 +129,12 @@ impl Server {
     }
 
     pub(crate) fn stop(&mut self) {
-        if let Some(dht) = self.dht4.take() {
+        if let Some(dht) = self.dht4.as_ref() {
             info!("Stopped RPC server on ipv4: {}", dht.borrow().socket_addr());
             dht.borrow_mut().stop();
         }
 
-        _ = self.storage.borrow_mut().close();
+        self.dht4 = None;
     }
 
     pub(crate) fn is_reachable(&self) -> bool {
@@ -171,7 +144,6 @@ impl Server {
     pub(crate) fn update_reachability(&mut self) {
         // Avoid pinging too frequently if we're not receiving any response
         // (the connection might be dead)
-
         if self.received_msgs != self.msgs_atleast_reachable_check {
             self.reachable = false;
             self.last_reachable_check = SystemTime::now();
@@ -228,14 +200,6 @@ impl Server {
             call.borrow_mut().responsed(msg)
         }
     }
-}
-
-fn persistent_announce(_: &Rc<RefCell<dyn DataStorage>>) {
-    info!("Reannounce the perisitent values and peers...");
-
-    // let mut timestamp = SystemTime::now();
-    // unimplemented!()
-    // TODO:
 }
 
 pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
