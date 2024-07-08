@@ -238,6 +238,18 @@ impl DHT {
         self.server.borrow_mut().send_call(call);
     }
 
+    pub(crate) fn random_lookup(&mut self) {
+        let mut task = NodeLookupTask::new(&Id::random(), self.cloned_dht());
+        let name = format!("{}: random lookup", as_kind_name!(&self.addr));
+        task.set_name(&name);
+        task.add_listener(Box::new(move |_|{}));
+
+        let task = Rc::new(RefCell::new(task));
+        let task_cloned = Rc::clone(&task);
+        task.borrow_mut().cloned_self(task_cloned);
+        self.taskman.borrow_mut().add(task);
+    }
+
     pub(crate) fn start(&mut self) {
         if self.running {
             return;
@@ -271,18 +283,9 @@ impl DHT {
 
         // Perform a deep lookup to familiarize ourselves with random sections of
         // the keyspace.
-        let addr = self.addr.clone();
-        let taskman = Rc::clone(&self.taskman);
         let cloned_dht = self.cloned_dht();
         self.scheduler.borrow_mut().add(move || {
-            let task = Rc::new(RefCell::new(NodeLookupTask::new(&Id::random(), Rc::clone(&cloned_dht))));
-            let name = format!("{}: random lookup", as_kind_name!(&addr));
-            let task_cloned = Rc::clone(&task);
-            task.borrow_mut().cloned_self(task_cloned);
-            task.borrow_mut().set_name(&name);
-            task.borrow_mut().add_listener(Box::new(move |_|{}));
-
-            taskman.borrow_mut().add(task);
+            cloned_dht.borrow_mut().random_lookup();
         }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL)
     }
 
