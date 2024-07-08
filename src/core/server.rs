@@ -130,12 +130,6 @@ impl Server {
 
         info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
 
-        let dht4 = Rc::clone(&dht4);
-        self.scheduler.borrow_mut().add(move || {
-            dht4.borrow_mut().update();
-        }, 100, constants::DHT_UPDATE_INTERVAL);
-
-
         let ctxts = Rc::clone(&self.crypto_ctx);
         self.scheduler.borrow_mut().add(move || {
             ctxts.borrow_mut().handle_expiration();

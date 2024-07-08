@@ -275,6 +275,12 @@ impl DHT {
         // fix the first time to persist the routing table: 2 min
         //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
 
+        // Regular dht update.
+        let cloned_dht = self.cloned_dht();
+        self.scheduler.borrow_mut().add(move || {
+            cloned_dht.borrow_mut().update();
+        }, 100, constants::DHT_UPDATE_INTERVAL);
+
         // Send a ping request to a random node to verify socket liveness.
         let cloned_dht = self.cloned_dht();
         self.scheduler.borrow_mut().add(move || {
