@@ -112,6 +112,10 @@ impl Server {
         Rc::clone(&self.storage)
     }
 
+    pub(crate) fn number_of_acitve_rpc_calls(&self) -> usize {
+        self.calls.len()
+    }
+
     pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
         let path = self.store_path.clone() + "/node.db";
         if let Err(err) = self.storage.borrow_mut().open(&path) {

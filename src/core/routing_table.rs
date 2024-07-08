@@ -93,8 +93,9 @@ impl RoutingTable {
         self.buckets.len()
     }
 
-    pub(crate) fn random_entry(&self) -> NodeInfo {
-        unimplemented!()
+    pub(crate) fn random_entry(&self) ->Option<&Box<NodeInfo>> {
+        // TODO:
+        None
     }
 
     pub(crate) fn random_entries(&self, _: i32) -> Vec<Box<NodeInfo>> {

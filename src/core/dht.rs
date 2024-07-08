@@ -220,6 +220,24 @@ impl DHT {
         }
     }
 
+    pub(crate) fn random_ping(&mut self) {
+        println!(">>>>> random_ping >>>>>");
+
+        if self.server.borrow().number_of_acitve_rpc_calls() > 0 {
+            return;
+        }
+
+        let binding = self.routing_table.borrow();
+        let entry = match binding.random_entry() {
+            Some(entry) => entry,
+            None => return,
+        };
+
+        let req = Rc::new(RefCell::new(ping_req::Message::new()));
+        let call = Rc::new(RefCell::new(RpcCall::new(entry.clone(), req)));
+        self.server.borrow_mut().send_call(call);
+    }
+
     pub(crate) fn start(&mut self) {
         if self.running {
             return;
@@ -246,8 +264,9 @@ impl DHT {
         //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
 
         // Send a ping request to a random node to verify socket liveness.
+        let cloned_dht = self.cloned_dht();
         self.scheduler.borrow_mut().add(move || {
-            // TODO;
+            cloned_dht.borrow_mut().random_ping();
         }, constants::RANDOM_PING_INTERVAL, constants::RANDOM_PING_INTERVAL);
 
         // Perform a deep lookup to familiarize ourselves with random sections of
