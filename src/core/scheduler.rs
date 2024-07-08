@@ -91,15 +91,18 @@ impl Scheduler {
 }
 
 pub(crate) fn run_jobs(scheduler: Rc<RefCell<Scheduler>>) {
-    let jobs = {
-        scheduler.borrow_mut().sync_time();
-        scheduler.borrow_mut().pop_jobs()
-    };
+    let mut binding = scheduler.borrow_mut();
+    binding.sync_time();
 
-    if let Some(mut jobs) = jobs {
-        while let Some(mut job) = jobs.pop() {
-            job.cb();
-            scheduler.borrow_mut().add_job(job.duration.clone(),job);
-        }
+    let mut jobs = match binding.pop_jobs() {
+        Some(jobs) => jobs,
+        None => return
+    };
+    drop(binding);
+
+    while let Some(mut job) = jobs.pop() {
+        job.cb();
+        let mut binding = scheduler.borrow_mut();
+        binding.add_job(job.duration,job);
     }
 }
