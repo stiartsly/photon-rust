@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::collections::BTreeMap;
 
 use crate::{
@@ -10,83 +9,54 @@ use crate::{
 };
 
 pub(crate) struct RoutingTable {
-    ni: NodeInfo,
+    node: NodeInfo,
     buckets: BTreeMap<Id, Box<KBucket>>,
 }
 
 #[allow(dead_code)]
 impl RoutingTable {
-    pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
+    pub(crate) fn new(node: NodeInfo) -> Self {
         let prefix = Prefix::new();
         let mut buckets = BTreeMap::new();
+
         buckets.insert(
             prefix.id().clone(),
             Box::new(KBucket::new(prefix, true))
         );
 
-        Self {
-            ni: NodeInfo::new(id, addr),
-            buckets,
-        }
+        Self {node, buckets}
     }
 
-    pub(crate) fn node_id(&self) -> &Id {
-        self.ni.id()
-    }
-
-    pub(crate) fn node_addr(&self) -> &SocketAddr {
-        self.ni.socket_addr()
+    pub(crate) fn node(&self) -> &NodeInfo {
+        &self.node
     }
 
     pub(crate) fn buckets(&self) -> &BTreeMap<Id, Box<KBucket>> {
         &self.buckets
     }
 
-    fn bucket_mut<'a>(&'a mut self, target: &Id) -> Option<&'a mut Box<KBucket>> {
-        let mut bucket = None;
-        let mut iter = self.buckets.iter_mut();
-        while let Some((key,val)) = iter.next() {
-            bucket = Some(val);
-            if target >= key {
-                break;
-            }
-        }
-        bucket
+    fn bucket_mut(&mut self, target: &Id) -> Option<&mut Box<KBucket>> {
+        self.buckets.iter_mut()
+            .find(|(k, _)| target >= k)
+            .map(|(_, v)| v)
     }
 
-    fn pop_bucket(&mut self, target: &Id) -> Option<Box<KBucket>> {
-        let mut bucket = None;
-        let mut iter = self.buckets.iter();
-        while let Some((key,_)) = iter.next() {
-            if target >= key {
-                bucket = Some(key.clone());
-                break;
-            }
-        }
-
-        match bucket {
-            Some(key) => self.buckets.remove(&key),
-            None => None
-        }
-    }
-
-    pub(crate) fn bucket(&self, target: &Id) -> Option<&Box<KBucket>> {
-        let mut bucket = None;
-        let mut iter = self.buckets.iter();
-        while let Some((key, val)) = iter.next() {
-            if target >= key {
-                bucket = Some(val);
-                break;
-            }
-        }
-        bucket
+    fn bucket(&self, target: &Id) -> Option<&Box<KBucket>> {
+        self.buckets.iter()
+            .find(|(k, _)| target >= k)
+            .map(|(_, v)| v)
     }
 
     pub(crate) fn bucket_entry(&self, id: &Id) -> Option<&Box<KBucketEntry>> {
-        match self.bucket(id) {
-            Some(bucket) => bucket.entry(id),
-            None => None
-        }
+        self.bucket(id).and_then(|bucket| bucket.entry(id))
+    }
+
+    fn pop_bucket(&mut self, target: &Id) -> Option<Box<KBucket>> {
+        let key = self.buckets.keys()
+            .find(|&k| target >= k)
+            .cloned();
+
+        key.and_then(|k| self.buckets.remove(&k))
     }
 
     pub(crate) fn size(&self) -> usize {
@@ -94,17 +64,17 @@ impl RoutingTable {
     }
 
     pub(crate) fn random_entry(&self) ->Option<&Box<NodeInfo>> {
-        // TODO:
+        // TODO: unimplemented!()
         None
     }
 
-    pub(crate) fn random_entries(&self, _: i32) -> Vec<Box<NodeInfo>> {
-        //unimplemented!();
-        Vec::new()
+    pub(crate) fn random_entries(&self, _: i32) -> Option<Vec<Box<NodeInfo>>> {
+        // TODO: unimplemented!()
+        Some(Vec::new())
     }
 
     fn is_home_bucket(&self, prefix: &Prefix) -> bool {
-        prefix.is_prefix_of(self.ni.id())
+        prefix.is_prefix_of(self.node().id())
     }
 
     pub(crate) fn put(&mut self, entry: Box<KBucketEntry>) {
@@ -141,7 +111,7 @@ impl RoutingTable {
         let ph = prefix.split_branch(true);
 
         let home_bucket = |prefix: &Prefix| -> bool {
-            prefix.is_prefix_of(self.node_id())
+            prefix.is_prefix_of(self.node().id())
         };
 
         let mut low  = Box::new(KBucket::new(pl.clone(), home_bucket(&pl)));
@@ -190,7 +160,7 @@ impl RoutingTable {
 }
 
 fn _needs_split(bucket: &Box<KBucket>, new_entry: &Box<KBucketEntry>) -> bool {
-    if !bucket.prefix().is_splittable() ||
+    if  !bucket.prefix().is_splittable() ||
         !bucket.is_full() ||
         !new_entry.reachable() ||
         bucket.exists(new_entry.node_id()) ||

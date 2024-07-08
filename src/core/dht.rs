@@ -77,13 +77,15 @@ pub(crate) struct DHT {
 #[allow(dead_code)]
 impl DHT {
     pub(crate) fn new(server: Rc<RefCell<Server>>, binding_addr: SocketAddr) -> Self {
+        let node_info = NodeInfo::new(server.borrow().nodeid(), &binding_addr);
+
         DHT {
             nodeid: server.borrow().nodeid().clone(),
             addr: binding_addr,
             running: false,
             persist_path: None,
             last_save: SystemTime::UNIX_EPOCH,
-            routing_table: Rc::new(RefCell::new(RoutingTable::new(server.borrow().nodeid(), &binding_addr))),
+            routing_table: Rc::new(RefCell::new(RoutingTable::new(node_info))),
 
             bootstrap_nodes: Vec::new(),
             bootstrap_need: false,
@@ -133,7 +135,7 @@ impl DHT {
 
     pub(crate) fn bootstrap(&mut self) {
         let bns = match self.bootstrap_nodes.is_empty() {
-            true => self.routing_table.borrow().random_entries(8),
+            true => self.routing_table.borrow().random_entries(8).unwrap(),
             false => self.bootstrap_nodes.clone()
         };
 

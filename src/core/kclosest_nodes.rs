@@ -125,8 +125,8 @@ impl<'a> KClosestNodes<'a> {
 
         if self.entries.len() < self.capacity && include_itself {
             let bucket_entry = Box::new(KBucketEntry::new(
-                rt_binding.node_id(),
-                rt_binding.node_addr(),
+                rt_binding.node().id(),
+                rt_binding.node().socket_addr(),
             ));
             self.entries.push(bucket_entry);
         }
