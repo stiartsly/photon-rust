@@ -356,7 +356,7 @@ where
     };
 
     if let Some(call) = msg.borrow().associated_call() {
-        dht.borrow_mut().on_send(call.borrow().target_id());
+        dht.borrow_mut().on_send(call.borrow().target_nodeid());
         call.borrow_mut().send();
         // self.scheduler.borrow_mut().add(move || {
         //    call.borrow_mut().check_timeout()

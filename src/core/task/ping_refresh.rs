@@ -93,7 +93,7 @@ impl Task for PingRefreshTask {
         // CAUSION:
         // Should not use the original bucket object,
         // because the routing table is dynamic, maybe already changed.
-        let node_id = call.target_id();
+        let node_id = call.target_nodeid();
         debug!("Removing invalid entry from routingtable");
         Task::data(self).rt().borrow_mut().remove(node_id);
     }

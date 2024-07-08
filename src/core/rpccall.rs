@@ -1,4 +1,3 @@
-use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::time::SystemTime;
@@ -40,23 +39,25 @@ pub(crate) struct RpcCall {
     timeout_fn: Box<dyn Fn(&RpcCall)>
 }
 
-static mut HASH_ID: i32 = 0;
+static mut NEXT_HASHID: i32= 0;
+
+fn next_hashid() -> i32 {
+    unsafe {
+        NEXT_HASHID += 1;
+        if NEXT_HASHID == 0 {
+            NEXT_HASHID += 1;
+        }
+        NEXT_HASHID
+    }
+}
 
 #[allow(dead_code)]
 impl RpcCall {
     pub(crate) fn new(target: Box<NodeInfo>, req: Rc<RefCell<dyn Msg>>) -> Self {
-        let hash = unsafe {
-            HASH_ID += 1;
-            if HASH_ID >= i32::MAX {
-                HASH_ID += 1;
-            }
-            HASH_ID
-        };
-
         req.borrow_mut().set_remote(target.id(), target.socket_addr());
 
         RpcCall {
-            hashid: hash,
+            hashid: next_hashid(),
             target,
             req: Some(req),
             rsp: None,
@@ -76,7 +77,7 @@ impl RpcCall {
         self.hashid
     }
 
-    pub(crate) fn target_id(&self) -> &Id {
+    pub(crate) fn target_nodeid(&self) -> &Id {
         self.target.id()
     }
 
@@ -85,38 +86,25 @@ impl RpcCall {
     }
 
     pub(crate) fn matches_id(&self) -> bool {
-        let rsp = match self.rsp.as_ref() {
-            Some(rsp) => rsp,
-            None => return false,
-        };
-        rsp.borrow().id() == self.target_id()
+        self.rsp.as_ref().and_then(|rsp| {
+            Some(rsp.borrow().id() == self.target_nodeid())
+        }).unwrap_or(false)
     }
 
     pub(crate) fn matches_addr(&self) -> bool {
-        let req = match self.req.as_ref() {
-            Some(req) => req,
-            None => return false,
-        };
-        let rsp = match self.rsp.as_ref() {
-            Some(rsp) => rsp,
-            None => return false,
-        };
-
-        rsp.borrow().origin() == req.borrow().remote_addr()
+        self.req.as_ref().and_then(|req| {
+            self.rsp.as_ref().map(|rsp| {
+                rsp.borrow().origin() == req.borrow().remote_addr()
+            })
+        }).unwrap_or(false)
     }
 
     pub(crate) fn req(&self) ->Option<Rc<RefCell<dyn Msg>>> {
-        match self.req.as_ref() {
-            Some(msg) => Some(Rc::clone(msg)),
-            None => None
-        }
+        self.req.as_ref().cloned()
     }
 
     pub(crate) fn rsp(&self) -> Option<Rc<RefCell<dyn Msg>>>  {
-        match self.rsp.as_ref() {
-            Some(msg) => Some(Rc::clone(msg)),
-            None => None
-        }
+        self.rsp.as_ref().cloned()
     }
 
     pub(crate) fn sent_time(&self) -> &SystemTime {
@@ -214,11 +202,5 @@ impl RpcCall {
         } else {
             self.update_state(State::Timeout);
         }
-    }
-}
-
-impl fmt::Display for RpcCall {
-    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unimplemented!()
     }
 }

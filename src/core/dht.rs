@@ -595,7 +595,7 @@ impl DHT {
             !self.server.borrow().is_reachable() {
             return;
         }
-        self.routing_table.borrow_mut().on_timeout(call.target_id());
+        self.routing_table.borrow_mut().on_timeout(call.target_nodeid());
     }
 
     pub(crate) fn on_send(&mut self, id: &Id) {
