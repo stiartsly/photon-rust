@@ -162,6 +162,15 @@ impl Node {
 
             dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
 
+            let scheduler = server.borrow().scheduler();
+            let cloned_zone = Arc::clone(&params.3);
+            let cloned_dht = Rc::clone(&dht4);
+            scheduler.borrow_mut().add(move || {
+                cloned_zone.lock().unwrap().pop_all(|item| {
+                    cloned_dht.borrow_mut().add_bootstrap_node(item.clone());
+                })
+            },1000, 1000);
+
             let result = server.borrow_mut().start(Rc::clone(&dht4));
             match result {
                 Ok(_) => {

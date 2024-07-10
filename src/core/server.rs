@@ -20,7 +20,6 @@ use crate::{
     rpccall::RpcCall,
     lookup_option::LookupOption,
     scheduler::{self, Scheduler},
-    crypto_cache,
     crypto_cache::CryptoCache,
     msg::msg,
     bootstrap::BootstrapZone,
@@ -39,8 +38,6 @@ pub(crate) struct Server<> {
     received_msgs: i32,
     msgs_atleast_reachable_check: i32,
     last_reachable_check: SystemTime,
-
-    bootstrap_zone: Arc<Mutex<BootstrapZone>>,
 
     //stats: RefCell<Stats>,
     calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
@@ -66,8 +63,6 @@ impl Server {
             msgs_atleast_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
-            bootstrap_zone: params.3,
-
             //stats: RefCell::new(Stats::new()),
             calls: HashMap::new(),
 
@@ -89,10 +84,6 @@ impl Server {
         &self.nodeid
     }
 
-    pub(crate) fn dht4(&self) -> Rc<RefCell<DHT>> {
-        Rc::clone(self.dht4.as_ref().unwrap())
-    }
-
     pub(crate) fn queue4(&self) -> Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>> {
         Rc::clone(&self.queue4)
     }
@@ -112,18 +103,7 @@ impl Server {
         let ctxts = Rc::clone(&self.crypto_ctx);
         self.scheduler.borrow_mut().add(move || {
             ctxts.borrow_mut().handle_expiration();
-        }, 2000, crypto_cache::EXPIRED_CHECK_INTERVAL);
-
-        // A scheduled task to move bootstrap nodes from the outer (user thread)
-        // to the internal DHT instance.
-        let cloned_zone = Arc::clone(&self.bootstrap_zone);
-        let cloned_dht4 = self.dht4();
-
-        self.scheduler.borrow_mut().add(move || {
-            cloned_zone.lock().unwrap().pop_all(|item| {
-                cloned_dht4.borrow_mut().add_bootstrap_node(item.clone());
-            })
-        },1000, 1000);
+        }, 2000, constants::EXPIRED_CHECK_INTERVAL);
 
         Ok(())
     }
