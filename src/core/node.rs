@@ -146,7 +146,7 @@ impl Node {
 
             let storage = Rc::new(RefCell::new(SqliteStorage::new()));
             let path = params.1.clone() + "/node.db";
-            if let Err(_) = storage.borrow_mut().open(&path) {
+            if let Err(_) = storage.borrow_mut().open(path) {
                 // error!("Attempt to open database storage failed {}", err);
                 // return Err(err);
                 panic!("Attempt to open database storage failed");

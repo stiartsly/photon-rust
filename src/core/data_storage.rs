@@ -6,7 +6,7 @@ use crate::value::Value;
 use crate::error::Error;
 
 pub(crate) trait DataStorage {
-    fn open(&mut self, _: &str) -> Result<(), Error>;
+    fn open(&mut self, _: String) -> Result<(), Error>;
 
     fn value(&self, _: &Id) -> Option<Box<Value>>;
     fn remove_value(&mut self, _: &Id) -> bool;

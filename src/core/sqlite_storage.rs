@@ -15,7 +15,7 @@ impl SqliteStorage {
 }
 
 impl DataStorage for SqliteStorage {
-    fn open(&mut self, _: &str) -> Result<(), Error> {
+    fn open(&mut self, _: String) -> Result<(), Error> {
         Ok(())
         //TODO
     }
