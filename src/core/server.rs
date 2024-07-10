@@ -18,9 +18,7 @@ use crate::{
     dht::DHT,
     error::Error,
     rpccall::RpcCall,
-    lookup_option::LookupOption,
     scheduler::{self, Scheduler},
-    crypto_cache::CryptoCache,
     msg::msg,
     bootstrap::BootstrapZone,
 };
@@ -42,12 +40,10 @@ pub(crate) struct Server<> {
     //stats: RefCell<Stats>,
     calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
 
-    option: LookupOption,
     dht4: Option<Rc<RefCell<DHT>>>,
     queue4: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>,
 
     scheduler:  Rc<RefCell<Scheduler>>,
-    crypto_ctx: Rc<RefCell<CryptoCache>>
 }
 
 #[allow(dead_code)]
@@ -66,13 +62,10 @@ impl Server {
             //stats: RefCell::new(Stats::new()),
             calls: HashMap::new(),
 
-
-            option: LookupOption::Conservative,
             dht4: None,
             queue4: Rc::new(RefCell::new(LinkedList::new())),
 
             scheduler:  Rc::new(RefCell::new(Scheduler::new())),
-            crypto_ctx: Rc::new(RefCell::new(CryptoCache::new(&params.2))),
         }
     }
 
@@ -82,10 +75,6 @@ impl Server {
 
     pub(crate) fn nodeid(&self) -> &Id {
         &self.nodeid
-    }
-
-    pub(crate) fn queue4(&self) -> Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>> {
-        Rc::clone(&self.queue4)
     }
 
     pub(crate) fn number_of_acitve_rpc_calls(&self) -> usize {
@@ -99,11 +88,6 @@ impl Server {
         dht4.borrow_mut().start();
 
         info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
-
-        let ctxts = Rc::clone(&self.crypto_ctx);
-        self.scheduler.borrow_mut().add(move || {
-            ctxts.borrow_mut().handle_expiration();
-        }, 2000, constants::EXPIRED_CHECK_INTERVAL);
 
         Ok(())
     }
@@ -197,7 +181,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
 
     rt.block_on(async move {
         let sock4 = UdpSocket::bind(dht4.borrow().socket_addr()).await?;
-        let queue4 = server.borrow_mut().queue4();
+        let queue4 = Rc::clone(&server.borrow_mut().queue4);
 
         let mut interval = interval_at(
             server.borrow().scheduler.borrow().next_time(),

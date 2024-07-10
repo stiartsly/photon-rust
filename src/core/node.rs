@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use crate::{
     unwrap,
     logger,
+    constants,
     signature,
     cryptobox,
     Id,
@@ -170,6 +171,11 @@ impl Node {
                     cloned_dht.borrow_mut().add_bootstrap_node(item.clone());
                 })
             },1000, 1000);
+
+            let ctxts = Rc::new(RefCell::new(CryptoCache::new(&params.2)));
+            scheduler.borrow_mut().add(move || {
+                ctxts.borrow_mut().handle_expiration();
+            }, 2000, constants::EXPIRED_CHECK_INTERVAL);
 
             let result = server.borrow_mut().start(Rc::clone(&dht4));
             match result {
