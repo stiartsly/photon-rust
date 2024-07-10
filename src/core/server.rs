@@ -104,7 +104,7 @@ impl Server {
     pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
         self.dht4 = Some(Rc::clone(&dht4));
         let path = self.store_path.clone() + "/dht4.cache";
-        dht4.borrow_mut().enable_persistence(&path);
+        dht4.borrow_mut().enable_persistence(path);
         dht4.borrow_mut().start();
 
         info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());

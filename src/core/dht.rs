@@ -103,16 +103,28 @@ impl DHT {
         }
     }
 
-    pub(crate) fn set_cloned(&mut self, cloned_dht: Rc<RefCell<DHT>>) {
-        self.cloned_dht = Some(cloned_dht);
+    pub(crate) fn set_cloned(&mut self, cloned_dht: Rc<RefCell<DHT>>) -> &mut Self {
+        self.cloned_dht = Some(cloned_dht); self
+    }
+
+    pub(crate) fn set_server(&mut self, server: Rc<RefCell<Server>>) -> &mut Self {
+        unimplemented!()
+    }
+
+    pub(crate) fn set_storage(&mut self, storage: Rc<RefCell<dyn DataStorage>>) -> &mut Self {
+        unimplemented!()
+    }
+
+    pub(crate) fn set_tokenman(&mut self, tokenman: Rc<RefCell<TokenManager>>) ->&mut Self {
+        unimplemented!()
     }
 
     pub(crate) fn cloned_dht(&self) -> Rc<RefCell<DHT>> {
         Rc::clone(self.cloned_dht.as_ref().unwrap())
     }
 
-    pub(crate) fn enable_persistence(&mut self, path: &str) {
-        self.persist_path = Some(String::from(path));
+    pub(crate) fn enable_persistence(&mut self, path: String) {
+        self.persist_path = Some(path);
     }
 
     pub(crate) fn add_bootstrap_node(&mut self, node: Box<NodeInfo>) {

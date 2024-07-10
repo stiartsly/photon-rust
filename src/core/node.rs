@@ -6,25 +6,27 @@ use std::thread::{self, JoinHandle};
 use std::{fs, fs::File, io::Write};
 use std::sync::{Arc, Mutex};
 
-use crate::unwrap;
-use crate::logger;
-use crate::signature;
-use crate::cryptobox;
-use crate::id::Id;
-use crate::error::Error;
-use crate::config::Config;
-use crate::NodeInfo;
-use crate::NodeStatus;
-use crate::peer::Peer;
-use crate::value::Value;
-use crate::signature::KeyPair;
-use crate::dht::DHT;
-use crate::crypto_cache::CryptoCache;
-use crate::lookup_option::LookupOption;
-use crate::server::{self, Server};
-use crate::sqlite_storage::SqliteStorage;
-use crate::data_storage::DataStorage;
-use crate::bootstrap::BootstrapZone;
+use crate::{
+    unwrap,
+    logger,
+    signature,
+    cryptobox,
+    Id,
+    Config,
+    Error,
+    NodeInfo,
+    NodeStatus,
+    Value,
+    Peer,
+    KeyPair,
+    LookupOption,
+    dht::DHT,
+    server::{self, Server},
+    crypto_cache::CryptoCache,
+    bootstrap::BootstrapZone,
+    data_storage::DataStorage,
+    sqlite_storage::SqliteStorage
+};
 
 pub struct Node {
     id: Id,
@@ -229,7 +231,7 @@ impl Node {
     }
 
     pub fn lookup_option(&self) -> LookupOption {
-        self.option
+        self.option.clone()
     }
 
     pub fn bootstrap(&mut self, nodes: Vec<NodeInfo>) {

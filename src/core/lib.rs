@@ -19,20 +19,27 @@ mod scheduler;
 mod stats;
 mod bootstrap;
 
+pub mod id;
 pub mod config;
 pub mod cryptobox;
 pub mod default_configuration;
 pub mod error;
-pub mod id;
 pub mod lookup_option;
-
-mod node_info;
-mod node_status;
+pub mod node_info;
+pub mod node_status;
 pub mod peer;
 pub mod prefix;
 
+pub use self::id::Id;
+pub use self::error::Error;
+pub use self::peer::Peer;
 pub use self::node_info::NodeInfo;
+pub use self::value::Value;
 pub use self::node_status::NodeStatus;
+pub use self::config::Config;
+pub use self::lookup_option::LookupOption;
+
+pub use self::signature::KeyPair;
 
 pub mod node;
 pub mod signature;
