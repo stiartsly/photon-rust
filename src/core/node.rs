@@ -1,7 +1,6 @@
 use log::{error, info};
 use std::cell::RefCell;
 use std::io::Read;
-use std::rc::Rc;
 use std::thread::{self, JoinHandle};
 use std::{fs, fs::File, io::Write};
 use std::sync::{Arc, Mutex};
@@ -9,7 +8,6 @@ use std::sync::{Arc, Mutex};
 use crate::{
     unwrap,
     logger,
-    constants,
     signature,
     cryptobox,
     Id,
@@ -21,12 +19,9 @@ use crate::{
     Peer,
     KeyPair,
     LookupOption,
-    dht::DHT,
-    server::{self, Server},
     crypto_cache::CryptoCache,
     bootstrap::BootstrapZone,
-    data_storage::DataStorage,
-    sqlite_storage::SqliteStorage
+    node_runner::NodeRunner,
 };
 
 pub struct Node {
@@ -145,62 +140,8 @@ impl Node {
         let quit = Arc::clone(&self.quit);
 
         self.thread = Some(thread::spawn(move || {
-            let server = Rc::new(RefCell::new(Server::new(params.clone())));
-
-            let storage = Rc::new(RefCell::new(SqliteStorage::new()));
-            let path = params.1.clone() + "/node.db";
-            if let Err(_) = storage.borrow_mut().open(path) {
-                // error!("Attempt to open database storage failed {}", err);
-                // return Err(err);
-                panic!("Attempt to open database storage failed");
-            }
-
-            let dht4 = Rc::new(RefCell::new(DHT::new(
-                Rc::clone(&server),
-                Rc::clone(&(storage as Rc<RefCell<dyn DataStorage>>)),
-                addr4))
-            );
-
-            dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
-
-            let scheduler = server.borrow().scheduler();
-            let cloned_zone = Arc::clone(&params.3);
-            let cloned_dht = Rc::clone(&dht4);
-            scheduler.borrow_mut().add(move || {
-                cloned_zone.lock().unwrap().pop_all(|item| {
-                    cloned_dht.borrow_mut().add_bootstrap_node(item.clone());
-                })
-            },1000, 1000);
-
-            let ctxts = Rc::new(RefCell::new(CryptoCache::new(&params.2)));
-            scheduler.borrow_mut().add(move || {
-                ctxts.borrow_mut().handle_expiration();
-            }, 2000, constants::EXPIRED_CHECK_INTERVAL);
-
-            let result = server.borrow_mut().start(Rc::clone(&dht4));
-            match result {
-                Ok(_) => {
-                    _ = server::run_loop(
-                        Rc::clone(&server),
-                        Rc::clone(&dht4),
-                        Arc::clone(&quit),
-                    ).map_err(|err| {
-                        error!("Unexpected error happened in the loop: {}.", err);
-                    });
-                    server.borrow_mut().stop();
-                },
-                Err(err) => {
-                    error!("Starting node server error {}, aborted.", err);
-                }
-            }
-
-            // Need to notify the main thread about any abnormal termination not initiated
-            // by the main thread itself.
-            let mut _quit = quit.lock().unwrap();
-            if !*_quit {
-                *_quit = true;
-            }
-            drop(_quit);
+            let mut runner = NodeRunner::new((params.0, params.1, params.3));
+            runner.start(addr4, params.2, quit);
         }));
 
         self.status = NodeStatus::Running;

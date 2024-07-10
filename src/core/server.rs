@@ -13,14 +13,12 @@ use tokio::time::{sleep, interval_at, Duration};
 use crate::{
     as_millis,
     constants,
-    cryptobox,
     id::{self, Id},
     dht::DHT,
     error::Error,
     rpccall::RpcCall,
     scheduler::{self, Scheduler},
     msg::msg,
-    bootstrap::BootstrapZone,
 };
 
 use crate::msg::msg::{Msg};
@@ -28,8 +26,6 @@ use crate::msg::msg::{Msg};
 #[allow(dead_code)]
 pub(crate) struct Server<> {
     nodeid: Id,
-    store_path: String,
-
     started: SystemTime,
 
     reachable: bool,
@@ -48,10 +44,9 @@ pub(crate) struct Server<> {
 
 #[allow(dead_code)]
 impl Server {
-    pub fn new(params: (Id, String, cryptobox::KeyPair, Arc<Mutex<BootstrapZone>>)) -> Self {
+    pub fn new(nodeid: Id) -> Self {
         Self {
-            nodeid: params.0,
-            store_path: params.1,
+            nodeid,
             started: SystemTime::UNIX_EPOCH,
 
             reachable: false,
@@ -64,8 +59,7 @@ impl Server {
 
             dht4: None,
             queue4: Rc::new(RefCell::new(LinkedList::new())),
-
-            scheduler:  Rc::new(RefCell::new(Scheduler::new())),
+            scheduler: Rc::new(RefCell::new(Scheduler::new())),
         }
     }
 
@@ -77,17 +71,16 @@ impl Server {
         &self.nodeid
     }
 
-    pub(crate) fn number_of_acitve_rpc_calls(&self) -> usize {
+    pub(crate) fn number_of_acitve_calls(&self) -> usize {
         self.calls.len()
     }
 
     pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
         self.dht4 = Some(Rc::clone(&dht4));
-        let path = self.store_path.clone() + "/dht4.cache";
-        dht4.borrow_mut().enable_persistence(path);
-        dht4.borrow_mut().start();
 
-        info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
+        if let Some(dht4) = self.dht4.as_ref() {
+            info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
+        }
 
         Ok(())
     }

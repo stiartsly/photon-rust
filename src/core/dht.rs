@@ -240,7 +240,7 @@ impl DHT {
     pub(crate) fn random_ping(&mut self) {
         println!(">>>>> random_ping >>>>>");
 
-        if self.server.borrow().number_of_acitve_rpc_calls() > 0 {
+        if self.server.borrow().number_of_acitve_calls() > 0 {
             return;
         }
 
