@@ -22,7 +22,6 @@ use crate::{
     kclosest_nodes::KClosestNodes,
     token_man::TokenManager,
     server::Server,
-    scheduler::Scheduler,
     kbucket_entry::KBucketEntry,
     data_storage::DataStorage,
 };
@@ -67,23 +66,22 @@ pub(crate) struct DHT {
     bootstrap_time: Rc<RefCell<SystemTime>>,
 
     routing_table: Rc<RefCell<RoutingTable>>,
-    server: Rc<RefCell<Server>>,
+    server: Option<Rc<RefCell<Server>>>,
     taskman: Rc<RefCell<TaskManager>>,
     tokenman: Rc<RefCell<TokenManager>>,
-    storage: Rc<RefCell<dyn DataStorage>>,
-    scheduler: Rc<RefCell<Scheduler>>,
+    storage: Option<Rc<RefCell<dyn DataStorage>>>,
 
     cloned_dht: Option<Rc<RefCell<DHT>>>,
 }
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(server: Rc<RefCell<Server>>, storage: Rc<RefCell<dyn DataStorage>>, binding_addr: SocketAddr) -> Self {
-        let node_info = NodeInfo::new(server.borrow().nodeid(), &binding_addr);
+    pub(crate) fn new(nodeid: &Id, binding_addr: &SocketAddr) -> Self {
+        let node_info = NodeInfo::new(nodeid, &binding_addr);
 
         DHT {
-            nodeid: server.borrow().nodeid().clone(),
-            addr: binding_addr,
+            nodeid: nodeid.clone(),
+            addr: binding_addr.clone(),
             running: false,
             persist_path: None,
             last_save: SystemTime::UNIX_EPOCH,
@@ -93,11 +91,10 @@ impl DHT {
             bootstrap_need: false,
             bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
 
-            server: Rc::clone(&server),
-            storage: storage,
+            server: None,
+            storage: None,
             taskman:  Rc::new(RefCell::new(TaskManager::new())),
             tokenman: Rc::new(RefCell::new(TokenManager::new())),
-            scheduler: server.borrow().scheduler(),
 
             cloned_dht: None,
         }
@@ -108,11 +105,11 @@ impl DHT {
     }
 
     pub(crate) fn set_server(&mut self, server: Rc<RefCell<Server>>) -> &mut Self {
-        unimplemented!()
+        self.server = Some(server); self
     }
 
     pub(crate) fn set_storage(&mut self, storage: Rc<RefCell<dyn DataStorage>>) -> &mut Self {
-        unimplemented!()
+        self.storage = Some(storage); self
     }
 
     pub(crate) fn set_tokenman(&mut self, tokenman: Rc<RefCell<TokenManager>>) ->&mut Self {
@@ -145,7 +142,11 @@ impl DHT {
     }
 
     pub(crate) fn server(&self) -> Rc<RefCell<Server>> {
-        Rc::clone(&self.server)
+        Rc::clone(self.server.as_ref().unwrap())
+    }
+
+    fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
+        Rc::clone(self.storage.as_ref().unwrap())
     }
 
     pub(crate) fn bootstrap(&mut self) {
@@ -209,7 +210,7 @@ impl DHT {
                 }
             });
 
-            self.server.borrow_mut().send_call(call);
+            self.server().borrow_mut().send_call(call);
         };
     }
 
@@ -240,7 +241,7 @@ impl DHT {
     pub(crate) fn random_ping(&mut self) {
         println!(">>>>> random_ping >>>>>");
 
-        if self.server.borrow().number_of_acitve_calls() > 0 {
+        if self.server().borrow().number_of_acitve_calls() > 0 {
             return;
         }
 
@@ -252,7 +253,7 @@ impl DHT {
 
         let req = Rc::new(RefCell::new(ping_req::Message::new()));
         let call = Rc::new(RefCell::new(RpcCall::new(entry.clone(), req)));
-        self.server.borrow_mut().send_call(call);
+        self.server().borrow_mut().send_call(call);
     }
 
     pub(crate) fn random_lookup(&mut self) {
@@ -289,8 +290,9 @@ impl DHT {
         self.running = true;
 
         // Task management.
+        let scheduler = self.server().borrow().scheduler();
         let taskman = Rc::clone(&self.taskman);
-        self.scheduler.borrow_mut().add(move || {
+        scheduler.borrow_mut().add(move || {
             taskman.borrow_mut().dequeue();
         }, 500, constants::DHT_UPDATE_INTERVAL);
 
@@ -299,25 +301,25 @@ impl DHT {
 
         // Regular dht update.
         let cloned_dht = self.cloned_dht();
-        self.scheduler.borrow_mut().add(move || {
+        scheduler.borrow_mut().add(move || {
             cloned_dht.borrow_mut().update();
         }, 100, constants::DHT_UPDATE_INTERVAL);
 
         // Send a ping request to a random node to verify socket liveness.
         let cloned_dht = self.cloned_dht();
-        self.scheduler.borrow_mut().add(move || {
+        scheduler.borrow_mut().add(move || {
             cloned_dht.borrow_mut().random_ping();
         }, constants::RANDOM_PING_INTERVAL, constants::RANDOM_PING_INTERVAL);
 
         // Perform a deep lookup to familiarize ourselves with random sections of
         // the keyspace.
         let cloned_dht = self.cloned_dht();
-        self.scheduler.borrow_mut().add(move || {
+        scheduler.borrow_mut().add(move || {
             cloned_dht.borrow_mut().random_lookup();
         }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL);
 
         let cloned_dht = self.cloned_dht();
-        self.scheduler.borrow_mut().add(move || {
+        scheduler.borrow_mut().add(move || {
             cloned_dht.borrow().persist_announce();
         }, 1000, constants::RE_ANNOUNCE_INTERVAL);
     }
@@ -390,7 +392,7 @@ impl DHT {
             let req = Rc::new(RefCell::new(ping_req::Message::new()));
             let ni = Box::new(new_entry.inner_node());
             let call = Rc::new(RefCell::new(RpcCall::new(ni, req)));
-            self.server.borrow_mut().send_call(call);
+            self.server().borrow_mut().send_call(call);
         }
         self.routing_table.borrow_mut().put(new_entry);
     }
@@ -434,7 +436,7 @@ impl DHT {
         err.with_msg(str);
         err.with_code(code);
 
-        self.server.borrow_mut().send_msg(
+        self.server().borrow_mut().send_msg(
             Rc::new(RefCell::new(err))
         );
     }
@@ -443,7 +445,7 @@ impl DHT {
         let mut rsp = ping_rsp::Message::with_txid(req.txid());
         rsp.set_remote(req.id(), req.origin());
 
-        self.server.borrow_mut().send_msg(
+        self.server().borrow_mut().send_msg(
             Rc::new(RefCell::new(rsp))
         );
     }
@@ -471,7 +473,7 @@ impl DHT {
             rsp.populate_token(token);
         }
 
-        self.server.borrow_mut().send_msg(
+        self.server().borrow_mut().send_msg(
             Rc::new(RefCell::new(rsp))
         );
     }
@@ -483,7 +485,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_value = false;
-        let value = self.storage.borrow().value(req.target());
+        let value = self.storage().borrow().value(req.target());
         if value.is_some() {
             if req.seq() < 0
                 || value.as_ref().unwrap().sequence_number() < 0
@@ -511,7 +513,7 @@ impl DHT {
             rsp.populate_token(token);
         }
 
-        self.server.borrow_mut().send_msg(
+        self.server().borrow_mut().send_msg(
             Rc::new(RefCell::new(rsp))
         );
     }
@@ -540,7 +542,7 @@ impl DHT {
         rsp.set_remote(req.id(), req.origin());
         rsp.set_txid(req.txid());
 
-        self.server.borrow_mut().send_msg(
+        self.server().borrow_mut().send_msg(
             Rc::new(RefCell::new(rsp))
         );
     }
@@ -552,7 +554,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_peers = false;
-        let peers = self.storage.borrow().peers(req.target(), 8);
+        let peers = self.storage().borrow().peers(req.target(), 8);
         if !peers.is_empty() {
             has_peers = true;
             rsp.populate_peers(peers);
@@ -575,7 +577,7 @@ impl DHT {
             rsp.populate_token(token);
         }
 
-        self.server.borrow_mut().send_msg(
+        self.server().borrow_mut().send_msg(
             Rc::new(RefCell::new(rsp))
         );
     }
@@ -611,7 +613,7 @@ impl DHT {
         rsp.set_remote(req.id(), req.origin());
         rsp.set_txid(req.txid());
 
-        self.server.borrow_mut().send_msg(
+        self.server().borrow_mut().send_msg(
             Rc::new(RefCell::new(rsp))
         );
     }
@@ -619,7 +621,7 @@ impl DHT {
     pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
         // ignore the timeout if the DHT is stopped or the RPC server is offline
         if  !self.running ||
-            !self.server.borrow().is_reachable() {
+            !self.server().borrow().is_reachable() {
             return;
         }
         self.routing_table.borrow_mut().on_timeout(call.target_nodeid());

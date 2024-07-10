@@ -1,14 +1,14 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
-use std::net::SocketAddr;
-use log::error;
+use log::{info, error};
 
 use crate::{
     constants,
     cryptobox,
     Id,
     dht::DHT,
+    config::Config,
     data_storage::DataStorage,
     sqlite_storage::SqliteStorage,
     server::{self, Server},
@@ -50,7 +50,19 @@ impl NodeRunner {
         }
     }
 
-    pub(crate) fn start(&mut self, addr4: SocketAddr, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
+    fn server(&self) -> Rc<RefCell<Server>> {
+        Rc::clone(&self.server)
+    }
+
+    //fn tokenman(&self) -> Rc<RefCell<TokenManager>> {
+    //    Rc::clone(&self.tokenman)
+    //}
+
+    fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
+        Rc::clone(&self.storage)
+    }
+
+    pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
         let path = self.storage_path.clone() + "/node.db";
         if let Err(_) = self.storage.borrow_mut().open(path) {
             // error!("Attempt to open database storage failed {}", err);
@@ -58,20 +70,20 @@ impl NodeRunner {
             panic!("Attempt to open database storage failed");
         }
 
-        let dht4 = Rc::new(RefCell::new(DHT::new(
-            Rc::clone(&self.server),
-            Rc::clone(&(self.storage)),
-            addr4))
-        );
+        if let Some(addr4) = cfg.lock().unwrap().addr4() {
+            let mut dht = DHT::new(&self.nodeid, addr4);
+            dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
+            self.dht4 = Some(Rc::new(RefCell::new(dht)));
+        }
 
-        dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
-
-        let path = self.storage_path.clone() + "/dht4.cache";
-        dht4.borrow_mut().enable_persistence(path);
-        dht4.borrow_mut().start();
+        if let Some(addr6) = cfg.lock().unwrap().addr6() {
+            let mut dht = DHT::new(&self.nodeid, addr6);
+            dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
+            self.dht4 = Some(Rc::new(RefCell::new(dht)));
+        }
 
         let scheduler = self.server.borrow().scheduler();
-        let cloned_dht = Rc::clone(&dht4);
+        let cloned_dht = Rc::clone(self.dht4.as_ref().unwrap());
         let bootstrap_zone = Arc::clone(&self.bootstrap_zone);
         scheduler.borrow_mut().add(move || {
             bootstrap_zone.lock().unwrap().pop_all(|item| {
@@ -84,12 +96,32 @@ impl NodeRunner {
             ctxts.borrow_mut().handle_expiration();
         }, 2000, constants::EXPIRED_CHECK_INTERVAL);
 
-        let result = self.server.borrow_mut().start(Rc::clone(&dht4));
+        if let Some(dht4) = self.dht4.as_ref() {
+            dht4.borrow_mut()
+                .set_server(self.server())
+                .set_storage(self.storage())
+                .set_cloned(Rc::clone(&dht4))
+                .start();
+
+            info!("Started DHT node on ipv4 address: {}", dht4.borrow().socket_addr());
+        }
+
+        if let Some(dht6) = self.dht6.as_ref() {
+            dht6.borrow_mut()
+                .set_server(self.server())
+                .set_storage(self.storage())
+                .set_cloned(Rc::clone(&dht6))
+                .start();
+
+            info!("Started DHT node on ipv4 address: {}", dht6.borrow().socket_addr());
+        }
+
+        let result = self.server.borrow_mut().start(Rc::clone(self.dht4.as_ref().unwrap()));
         match result {
             Ok(_) => {
                 _ = server::run_loop(
                     Rc::clone(&self.server),
-                    Rc::clone(&dht4),
+                    Rc::clone(self.dht4.as_ref().unwrap()),
                     Arc::clone(&quit),
                 ).map_err(|err| {
                     error!("Unexpected error happened in the loop: {}.", err);

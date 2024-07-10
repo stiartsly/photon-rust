@@ -26,7 +26,7 @@ use crate::{
 
 pub struct Node {
     id: Id,
-    cfg: Box<dyn Config>, //config for this node.
+    cfg: Arc<Mutex<Box<dyn Config>>>, //config for this node.
 
     signature_keypair: signature::KeyPair,
     encryption_keypair: cryptobox::KeyPair,
@@ -99,7 +99,7 @@ impl Node {
         Ok(Node {
             bootstrap_zone: Arc::new(Mutex::new(BootstrapZone::from(cfg.bootstrap_nodes()))),
             id,
-            cfg,
+            cfg: Arc::new(Mutex::new(cfg)),
             signature_keypair: keypair.clone(),
             encryption_keypair: cryptobox::KeyPair::from_signature_keypair(&keypair),
             encryption_ctxts: None,
@@ -134,14 +134,14 @@ impl Node {
         // Parameters used to run the server instance.
         // - addr4: socket ipv4 address
         // - addr6: socket ipv6 address
-        let addr4 = self.cfg.addr4().unwrap().clone();
+        let cfg = Arc::clone(&self.cfg);
 
         // Flag used to signal the spawned thread to stop execution.
         let quit = Arc::clone(&self.quit);
 
         self.thread = Some(thread::spawn(move || {
             let mut runner = NodeRunner::new((params.0, params.1, params.3));
-            runner.start(addr4, params.2, quit);
+            runner.start(cfg, params.2, quit);
         }));
 
         self.status = NodeStatus::Running;
