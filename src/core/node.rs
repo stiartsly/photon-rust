@@ -136,7 +136,7 @@ impl Node {
         // Parameters used to run the server instance.
         // - addr4: socket ipv4 address
         // - addr6: socket ipv6 address
-        let addr4 = self.cfg.addr4().clone();
+        let addr4 = self.cfg.addr4().unwrap().clone();
 
         // Flag used to signal the spawned thread to stop execution.
         let quit = Arc::clone(&self.quit);
@@ -155,7 +155,7 @@ impl Node {
             let dht4 = Rc::new(RefCell::new(DHT::new(
                 Rc::clone(&server),
                 Rc::clone(&(storage as Rc<RefCell<dyn DataStorage>>)),
-                addr4.unwrap()))
+                addr4))
             );
 
             dht4.borrow_mut().set_cloned(Rc::clone(&dht4));
@@ -238,58 +238,44 @@ impl Node {
         drop(zone);
     }
 
-    pub async fn find_node_with_option(
-        &self,
-        _: &Id,
-        _: LookupOption,
-    ) -> Result<Option<NodeInfo>, Error> {
+    pub async fn find_node(&self, _: &Id, _: &LookupOption) -> Result<Option<NodeInfo>, Error> {
         unimplemented!()
     }
 
-    pub async fn find_node(&self, node_id: &Id) -> Result<Option<NodeInfo>, Error> {
-        self.find_node_with_option(node_id, self.option).await
+    pub async fn find_node_simple(&self, node_id: &Id) -> Result<Option<NodeInfo>, Error> {
+        self.find_node(node_id, &self.option).await
     }
 
-    pub async fn find_value_with_option(
-        &self,
-        _: &Id,
-        _: LookupOption,
-    ) -> Result<Option<Value>, Error> {
+    pub async fn find_value(&self, _: &Id, _: &LookupOption) -> Result<Option<Value>, Error> {
         unimplemented!()
     }
 
-    pub async fn find_value(&self, value_id: &Id) -> Result<Option<Value>, Error> {
-        self.find_value_with_option(value_id, self.option).await
+    pub async fn find_value_simple(&self, value_id: &Id) -> Result<Option<Value>, Error> {
+        self.find_value(value_id, &self.option).await
     }
 
-    pub async fn find_peer_with_option(
-        &self,
-        _: &Id,
-        _: i32,
-        _: LookupOption,
-    ) -> Result<Vec<Peer>, Error> {
+    pub async fn find_peer(&self, _: &Id, _: i32, _: &LookupOption) -> Result<Vec<Peer>, Error> {
         unimplemented!()
     }
 
-    pub async fn find_peer(&self, peer_id: &Id, expected_num: i32) -> Result<Vec<Peer>, Error> {
-        self.find_peer_with_option(peer_id, expected_num, self.option)
-            .await
+    pub async fn find_peer_simple(&self, peer_id: &Id, expected_num: i32) -> Result<Vec<Peer>, Error> {
+        self.find_peer(peer_id, expected_num, &self.option).await
     }
 
-    pub async fn store_value_with_persistence(&mut self, _: &Value, _: bool) -> Result<(), Error> {
+    pub async fn store_value(&mut self, _: &Value, _: bool) -> Result<(), Error> {
         unimplemented!()
     }
 
-    pub async fn store_value(&mut self, value: &Value, _: bool) -> Result<(), Error> {
-        self.store_value_with_persistence(value, false).await
+    pub async fn store_value_simple(&mut self, value: &Value, _: bool) -> Result<(), Error> {
+        self.store_value(value, false).await
     }
 
-    pub async fn announce_peer_with_persistence(&mut self, _: &Peer, _: bool) -> Result<(), Error> {
+    pub async fn announce_peer(&mut self, _: &Peer, _: bool) -> Result<(), Error> {
         unimplemented!()
     }
 
-    pub async fn announce_peer(&mut self, peer: &Peer) -> Result<(), Error> {
-        self.announce_peer_with_persistence(peer, false).await
+    pub async fn announce_peer_simple(&mut self, peer: &Peer) -> Result<(), Error> {
+        self.announce_peer(peer, false).await
     }
 
     pub fn encrypt_into(&self, recipient: &Id, plain: &[u8]) -> Result<Vec<u8>, Error> {

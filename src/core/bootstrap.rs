@@ -6,7 +6,6 @@ pub(crate) struct BootstrapZone {
     updated: bool,
 }
 
-#[allow(dead_code)]
 impl BootstrapZone {
     pub(crate) fn from(input: Vec<NodeInfo>) -> Self {
         let mut bs = Self {
@@ -29,8 +28,10 @@ impl BootstrapZone {
         self.updated = true;
     }
 
-    pub(crate) fn pop_all<F>(&mut self, mut f: F) where F: FnMut(Box<NodeInfo>) {
+    pub(crate) fn pop_all<F>(&mut self, mut f: F)
+    where F: FnMut(Box<NodeInfo>) {
         if !self.updated {
+            assert!(self.nodes.is_empty());
             return;
         }
 
@@ -39,6 +40,5 @@ impl BootstrapZone {
         }
 
         self.updated = false;
-        assert!(self.nodes.is_empty());
     }
 }

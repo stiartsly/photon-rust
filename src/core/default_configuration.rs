@@ -1,20 +1,21 @@
 use std::env;
 use std::fmt;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{
+    IpAddr,
+    Ipv4Addr,
+    Ipv6Addr,
+    SocketAddr
+};
 
-use crate::{config::Config, error::Error, node_info::NodeInfo};
-
-pub struct DefaultConfiguration {
-    addr4: Option<SocketAddr>,
-    addr6: Option<SocketAddr>,
-
-    storage_path: String,
-    bootstrap_nodes: Vec<NodeInfo>,
-}
+use crate::{
+    config::Config,
+    error::Error,
+    node_info::NodeInfo
+};
 
 pub struct Builder<'a> {
-    input_ipv4: Option<&'a str>,
-    input_ipv6: Option<&'a str>,
+    ipv4: Option<&'a str>,
+    ipv6: Option<&'a str>,
     port: u16,
 
     addr4: Option<SocketAddr>,
@@ -23,85 +24,33 @@ pub struct Builder<'a> {
     bootstrap_nodes: Vec<NodeInfo>,
 }
 
-impl DefaultConfiguration {
-    fn new(b: &mut Builder) -> Self {
-        DefaultConfiguration {
-            addr4: b.addr4.take(),
-            addr6: b.addr6.take(),
-            storage_path: std::mem::take(&mut b.storage_path),
-            bootstrap_nodes: std::mem::take(&mut b.bootstrap_nodes),
-        }
-    }
-}
-
-impl Config for DefaultConfiguration {
-    fn addr4(&self) -> &Option<SocketAddr> {
-        &self.addr4
-    }
-
-    fn addr6(&self) -> &Option<SocketAddr> {
-        &self.addr6
-    }
-
-    fn storage_path(&self) -> &str {
-        &self.storage_path
-    }
-
-    fn bootstrap_nodes(&self) -> Vec<NodeInfo> {
-        self.bootstrap_nodes.clone()
-    }
-
-    fn dump(&self) {
-        println!("config: {}", self);
-    }
-}
-
-impl fmt::Display for DefaultConfiguration {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.addr4.is_some() {
-            write!(f, "ipv4:{},", self.addr4.unwrap())?;
-        }
-        if self.addr6.is_some() {
-            write!(f, "ipv6:{},", self.addr6.unwrap())?;
-        }
-
-        write!(f, "storage:{},", self.storage_path.as_str())?;
-        write!(f, "bootstraps: [")?;
-        for item in self.bootstrap_nodes.iter() {
-            write!(f, "{}, ", item)?;
-        }
-        write!(f, "]")?;
-        Ok(())
-    }
-}
-
 impl<'a> Builder<'a> {
     pub fn new() -> Builder<'a> {
-        let def_path = match env::var("HOME") {
+        let path = match env::var("HOME") {
             Ok(value) => value,
             Err(_) => ".".to_string(),
         };
 
-        Builder {
-            input_ipv4: None,
-            input_ipv6: None,
+        Self {
+            ipv4: None,
+            ipv6: None,
             port: 0,
 
             addr4: None,
             addr6: None,
 
-            storage_path: def_path,
+            storage_path: path,
             bootstrap_nodes: Vec::new(),
         }
     }
 
     pub fn with_ipv4(&mut self, input: &'a str) -> &mut Self {
-        self.input_ipv4 = Some(input);
+        self.ipv4 = Some(input);
         self
     }
 
     pub fn with_ipv6(&mut self, input: &'a str) -> &mut Self {
-        self.input_ipv6 = Some(input);
+        self.ipv6 = Some(input);
         self
     }
 
@@ -141,19 +90,11 @@ impl<'a> Builder<'a> {
 
     pub fn check_valid(&self) -> Result<bool, Error> {
         if self.port == 0 {
-            return Err(Error::Argument(format!("Invalid port value {}", self.port)));
+            return Err(Error::Argument(format!("error: port can't be 0")));
         }
 
-        if self.input_ipv4.is_some() {
-            match self.input_ipv4.unwrap().parse::<Ipv4Addr>() {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(Error::Argument(format!("error: {}", e)));
-                }
-            };
-        }
-        if self.input_ipv6.is_some() {
-            match self.input_ipv6.unwrap().parse::<Ipv6Addr>() {
+        if let Some(addr) = self.ipv4.as_ref() {
+            match addr.parse::<Ipv4Addr>() {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(Error::Argument(format!("error: {}", e)));
@@ -161,7 +102,16 @@ impl<'a> Builder<'a> {
             };
         }
 
-        if self.input_ipv4.is_none() && self.input_ipv6.is_none() {
+        if let Some(addr) = self.ipv6.as_ref() {
+            match addr.parse::<Ipv4Addr>() {
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(Error::Argument(format!("error: {}", e)));
+                }
+            };
+        }
+
+        if self.ipv4.is_none() && self.ipv6.is_none() {
             return Err(Error::Argument(format!(
                 "No valid IPv4 or IPv6 address was specified."
             )));
@@ -176,16 +126,77 @@ impl<'a> Builder<'a> {
             Err(e) => return Err(e),
         }
 
-        if self.input_ipv4.is_some() {
-            let addr = self.input_ipv4.unwrap().parse::<Ipv4Addr>().unwrap();
+        if let Some(addr) = self.ipv4.as_ref() {
+            let addr = addr.parse::<Ipv4Addr>().unwrap();
             self.addr4 = Some(SocketAddr::new(IpAddr::V4(addr), self.port));
         }
 
-        if self.input_ipv6.is_some() {
-            let addr = self.input_ipv6.unwrap().parse::<Ipv6Addr>().unwrap();
+        if let Some(addr) = self.ipv6.as_ref() {
+            let addr = addr.parse::<Ipv6Addr>().unwrap();
             self.addr6 = Some(SocketAddr::new(IpAddr::V6(addr), self.port));
         }
 
-        Ok(Box::new(DefaultConfiguration::new(self)) as Box<dyn Config>)
+        Ok(Box::new(DefaultConfiguration::new(self)))
+    }
+}
+
+pub struct DefaultConfiguration {
+    addr4: Option<SocketAddr>,
+    addr6: Option<SocketAddr>,
+
+    storage_path: String,
+    bootstrap_nodes: Vec<NodeInfo>,
+}
+
+impl DefaultConfiguration {
+    fn new(b: &mut Builder) -> Self {
+        Self {
+            addr4: b.addr4.take(),
+            addr6: b.addr6.take(),
+            storage_path: std::mem::take(&mut b.storage_path),
+            bootstrap_nodes: std::mem::take(&mut b.bootstrap_nodes),
+        }
+    }
+}
+
+impl Config for DefaultConfiguration {
+    fn addr4(&self) -> Option<&SocketAddr> {
+        self.addr4.as_ref()
+    }
+
+    fn addr6(&self) -> Option<&SocketAddr> {
+        self.addr6.as_ref()
+    }
+
+    fn storage_path(&self) -> String {
+        self.storage_path.clone()
+    }
+
+    fn bootstrap_nodes(&self) -> Vec<NodeInfo> {
+        self.bootstrap_nodes.clone()
+    }
+
+    fn dump(&self) {
+        println!("config: {}", self);
+    }
+}
+
+impl fmt::Display for DefaultConfiguration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(addr) = self.addr4.as_ref() {
+            write!(f, "ipv4:{},", addr)?;
+        }
+        if let Some(addr) = self.addr6.as_ref() {
+            write!(f, "ipv4:{},", addr)?;
+        }
+
+        write!(f, "storage:{},", &self.storage_path)?;
+
+        write!(f, "bootstraps: [")?;
+        for item in self.bootstrap_nodes.iter() {
+            write!(f, "{}, ", item)?;
+        }
+        write!(f, "]")?;
+        Ok(())
     }
 }
