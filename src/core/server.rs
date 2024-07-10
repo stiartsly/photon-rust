@@ -86,11 +86,6 @@ impl Server {
     }
 
     pub(crate) fn stop(&mut self) {
-        if let Some(dht) = self.dht4.as_ref() {
-            info!("Stopped RPC server on ipv4: {}", dht.borrow().socket_addr());
-            dht.borrow_mut().stop();
-        }
-
         self.dht4 = None;
     }
 

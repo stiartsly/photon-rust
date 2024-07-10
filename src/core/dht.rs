@@ -66,11 +66,11 @@ pub(crate) struct DHT {
     bootstrap_time: Rc<RefCell<SystemTime>>,
 
     routing_table: Rc<RefCell<RoutingTable>>,
-    server: Option<Rc<RefCell<Server>>>,
     taskman: Rc<RefCell<TaskManager>>,
-    tokenman: Rc<RefCell<TokenManager>>,
-    storage: Option<Rc<RefCell<dyn DataStorage>>>,
 
+    server: Option<Rc<RefCell<Server>>>,
+    tokenman: Option<Rc<RefCell<TokenManager>>>,
+    storage: Option<Rc<RefCell<dyn DataStorage>>>,
     cloned_dht: Option<Rc<RefCell<DHT>>>,
 }
 
@@ -85,7 +85,9 @@ impl DHT {
             running: false,
             persist_path: None,
             last_save: SystemTime::UNIX_EPOCH,
+
             routing_table: Rc::new(RefCell::new(RoutingTable::new(node_info))),
+            taskman:  Rc::new(RefCell::new(TaskManager::new())),
 
             bootstrap_nodes: Vec::new(),
             bootstrap_need: false,
@@ -93,9 +95,7 @@ impl DHT {
 
             server: None,
             storage: None,
-            taskman:  Rc::new(RefCell::new(TaskManager::new())),
-            tokenman: Rc::new(RefCell::new(TokenManager::new())),
-
+            tokenman: None,
             cloned_dht: None,
         }
     }
@@ -113,7 +113,7 @@ impl DHT {
     }
 
     pub(crate) fn set_tokenman(&mut self, tokenman: Rc<RefCell<TokenManager>>) ->&mut Self {
-        unimplemented!()
+        self.tokenman = Some(tokenman); self
     }
 
     pub(crate) fn cloned_dht(&self) -> Rc<RefCell<DHT>> {
@@ -145,8 +145,12 @@ impl DHT {
         Rc::clone(self.server.as_ref().unwrap())
     }
 
-    fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
-        Rc::clone(self.storage.as_ref().unwrap())
+    fn storage(&self) -> &Rc<RefCell<dyn DataStorage>> {
+        self.storage.as_ref().unwrap()
+    }
+
+    fn tokenman(&self) -> &Rc<RefCell<TokenManager>> {
+        self.tokenman.as_ref().unwrap()
     }
 
     pub(crate) fn bootstrap(&mut self) {
@@ -467,7 +471,7 @@ impl DHT {
         }
 
         if req.want_token() {
-            let token = self.tokenman.borrow_mut().generate_token(
+            let token = self.tokenman().borrow_mut().generate_token(
                 req.id(), req.origin(), req.target()
             );
             rsp.populate_token(token);
@@ -507,7 +511,7 @@ impl DHT {
         }
 
         if req.want_token() {
-            let token = self.tokenman.borrow_mut().generate_token(
+            let token = self.tokenman().borrow_mut().generate_token(
                 req.id(), req.origin(), req.target()
             );
             rsp.populate_token(token);
@@ -523,7 +527,7 @@ impl DHT {
         let value = req.value();
         let value_id = value.as_ref().unwrap().id();
 
-        let valid = self.tokenman.borrow_mut().verify_token(
+        let valid = self.tokenman().borrow_mut().verify_token(
             req.token(), req.id(), req.origin(), &value_id,
         );
         if !valid {
@@ -571,7 +575,7 @@ impl DHT {
         }
 
         if req.want_token() {
-            let token = self.tokenman.borrow_mut().generate_token(
+            let token = self.tokenman().borrow_mut().generate_token(
                 req.id(), req.origin(), req.target()
             );
             rsp.populate_token(token);
@@ -590,7 +594,7 @@ impl DHT {
             );
         }
 
-        let valid = self.tokenman.borrow_mut().verify_token(
+        let valid = self.tokenman().borrow_mut().verify_token(
             req.token(), req.id(), req.origin(), req.target()
         );
         if !valid {
