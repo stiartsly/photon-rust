@@ -232,7 +232,7 @@ impl Node {
         self.option
     }
 
-    pub fn bootstrap(&mut self, nodes: &[NodeInfo]) {
+    pub fn bootstrap(&mut self, nodes: Vec<NodeInfo>) {
         let mut zone = self.bootstrap_zone.lock().unwrap();
         zone.push_many(nodes);
         drop(zone);

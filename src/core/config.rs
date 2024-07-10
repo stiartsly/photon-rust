@@ -6,7 +6,7 @@ pub trait Config {
     fn addr6(&self) -> &Option<SocketAddr>;
 
     fn storage_path(&self) -> &str;
-    fn bootstrap_nodes(&self) -> &[NodeInfo];
+    fn bootstrap_nodes(&self) -> Vec<NodeInfo>;
 
     fn dump(&self);
 }

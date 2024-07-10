@@ -47,8 +47,8 @@ impl Config for DefaultConfiguration {
         &self.storage_path
     }
 
-    fn bootstrap_nodes(&self) -> &[NodeInfo] {
-        &self.bootstrap_nodes
+    fn bootstrap_nodes(&self) -> Vec<NodeInfo> {
+        self.bootstrap_nodes.clone()
     }
 
     fn dump(&self) {
@@ -75,7 +75,6 @@ impl fmt::Display for DefaultConfiguration {
     }
 }
 
-#[allow(dead_code)]
 impl<'a> Builder<'a> {
     pub fn new() -> Builder<'a> {
         let def_path = match env::var("HOME") {
