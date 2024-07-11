@@ -1,9 +1,10 @@
-use log::{error, info};
+use std::rc::Rc;
 use std::cell::RefCell;
 use std::io::Read;
 use std::thread::{self, JoinHandle};
 use std::{fs, fs::File, io::Write};
 use std::sync::{Arc, Mutex};
+use log::{error, info};
 
 use crate::{
     unwrap,
@@ -140,8 +141,11 @@ impl Node {
         let quit = Arc::clone(&self.quit);
 
         self.thread = Some(thread::spawn(move || {
-            let mut runner = NodeRunner::new((params.0, params.1, params.3));
-            runner.start(cfg, params.2, quit);
+            let runner = Rc::new(RefCell::new(
+                    NodeRunner::new((params.0, params.1, params.3))
+                ));
+            runner.borrow_mut().set_cloned(&runner);
+            runner.borrow_mut().start(cfg, params.2, quit);
         }));
 
         self.status = NodeStatus::Running;

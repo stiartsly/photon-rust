@@ -30,31 +30,30 @@ pub(crate) struct Server<> {
 
     reachable: bool,
     received_msgs: i32,
-    msgs_atleast_reachable_check: i32,
+    msg_at_least_reachable_check: i32,
     last_reachable_check: SystemTime,
 
-    //stats: RefCell<Stats>,
     calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
 
     dht4: Option<Rc<RefCell<DHT>>>,
     queue4: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>,
 
     scheduler:  Rc<RefCell<Scheduler>>,
+
 }
 
-#[allow(dead_code)]
+// #[allow(dead_code)]
 impl Server {
-    pub fn new(nodeid: Id) -> Self {
+    pub fn new(nodeid: Id, ) -> Self {
         Self {
             nodeid,
             started: SystemTime::UNIX_EPOCH,
 
             reachable: false,
             received_msgs: 0,
-            msgs_atleast_reachable_check: 0,
+            msg_at_least_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
-            //stats: RefCell::new(Stats::new()),
             calls: HashMap::new(),
 
             dht4: None,
@@ -96,10 +95,10 @@ impl Server {
     pub(crate) fn update_reachability(&mut self) {
         // Avoid pinging too frequently if we're not receiving any response
         // (the connection might be dead)
-        if self.received_msgs != self.msgs_atleast_reachable_check {
+        if self.received_msgs != self.msg_at_least_reachable_check {
             self.reachable = false;
             self.last_reachable_check = SystemTime::now();
-            self.msgs_atleast_reachable_check = self.received_msgs;
+            self.msg_at_least_reachable_check = self.received_msgs;
             return;
         }
 
@@ -108,9 +107,9 @@ impl Server {
         }
     }
 
-    fn decrypt_into(&self, _: &Id, _: &[u8]) -> Result<Vec<u8>, Error> {
-        unimplemented!()
-    }
+    //fn decrypt_into(&self, _: &Id, _: &[u8]) -> Result<Vec<u8>, Error> {
+    //    unimplemented!()
+    // }
 
     pub(crate) fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         msg.borrow_mut().set_id(self.nodeid());
@@ -127,30 +126,39 @@ impl Server {
     }
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
-        let msg = call.borrow_mut().req();
-        let hashid = call.borrow().hash();
-        let cloned = Rc::clone(&call);
+        let mut binding = call.borrow_mut();
+        let hash = binding.hash();
 
-        call.borrow_mut().set_responsed_fn(|_,_| {});
-        call.borrow_mut().set_timeout_fn(|_call| {
+        binding.set_responsed_fn(|_,_| {});
+        binding.set_timeout_fn(|_call| {
             // self.on_timeout(_call);
         });
+        drop(binding);
 
-        self.calls.insert(call.borrow().hash(), Rc::clone(&call));
+        self.calls.insert(hash, Rc::clone(&call));
 
-        if let Some(msg) = msg {
-            msg.borrow_mut().set_txid(hashid);
-            msg.borrow_mut().with_associated_call(cloned);
-            self.send_msg(msg);
-        }
+        let req = match call.borrow().req() {
+            Some(msg) => msg,
+            None => return,
+        };
+
+        let mut binding = req.borrow_mut();
+        binding.set_txid(hash);
+        binding.with_associated_call(Rc::clone(&call));
+        drop(binding);
+
+        self.send_msg(req);
     }
 
     fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         let txid = msg.borrow().txid();
-        if let Some(call) = self.calls.remove(&txid) {
-            msg.borrow_mut().with_associated_call(Rc::clone(&call));
-            call.borrow_mut().responsed(msg)
-        }
+        let call = match self.calls.remove(&txid) {
+            Some(call) => call,
+            None => return,
+        };
+
+        msg.borrow_mut().with_associated_call(Rc::clone(&call));
+        call.borrow_mut().responsed(msg);
     }
 }
 

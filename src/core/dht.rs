@@ -7,6 +7,7 @@ use std::ops::Deref;
 use log::{debug, info, warn, trace};
 
 use crate::{
+    unwrap,
     is_bogon_addr,
     as_kind_name,
     as_millis,
@@ -100,24 +101,24 @@ impl DHT {
         }
     }
 
-    pub(crate) fn set_cloned(&mut self, cloned_dht: Rc<RefCell<DHT>>) -> &mut Self {
-        self.cloned_dht = Some(cloned_dht); self
+    pub(crate) fn set_cloned(&mut self, dht: &Rc<RefCell<DHT>>) {
+        self.cloned_dht = Some(Rc::clone(dht));
     }
 
-    pub(crate) fn set_server(&mut self, server: Rc<RefCell<Server>>) -> &mut Self {
-        self.server = Some(server); self
+    pub(crate) fn set_server(&mut self, server: &Rc<RefCell<Server>>) {
+        self.server = Some(Rc::clone(server));
     }
 
-    pub(crate) fn set_storage(&mut self, storage: Rc<RefCell<dyn DataStorage>>) -> &mut Self {
-        self.storage = Some(storage); self
+    pub(crate) fn set_storage(&mut self, storage: &Rc<RefCell<dyn DataStorage>>) {
+        self.storage = Some(Rc::clone(storage));
     }
 
-    pub(crate) fn set_tokenman(&mut self, tokenman: Rc<RefCell<TokenManager>>) ->&mut Self {
-        self.tokenman = Some(tokenman); self
+    pub(crate) fn set_tokenman(&mut self, tokenman: &Rc<RefCell<TokenManager>>) {
+        self.tokenman = Some(Rc::clone(tokenman));
     }
 
-    pub(crate) fn cloned_dht(&self) -> Rc<RefCell<DHT>> {
-        Rc::clone(self.cloned_dht.as_ref().unwrap())
+    pub(crate) fn cloned(&self) -> Rc<RefCell<DHT>> {
+        Rc::clone(unwrap!(self.cloned_dht))
     }
 
     pub(crate) fn enable_persistence(&mut self, path: String) {
@@ -178,7 +179,7 @@ impl DHT {
             let taskman = Rc::clone(&self.taskman);
             let routing_table = Rc::clone(&self.routing_table);
             let bootstrap_time = Rc::clone(&self.bootstrap_time);
-            let cloned_dht = self.cloned_dht();
+            let cloned_dht = self.cloned();
             call.borrow_mut().set_state_changed_fn(move |call, _, cur| {
                 if cur == &rpccall::State::Responsed || cur == &rpccall::State::Err ||
                     cur == &rpccall::State::Timeout {
@@ -224,7 +225,7 @@ impl DHT {
         }
 
         trace!("DHT/{} regularly update...", as_kind_name!(&self.addr));
-        //self.server.borrow_mut().update_reachability();
+        self.server().borrow_mut().update_reachability();
         self.routing_table.borrow_mut().maintenance();
 
         if self.bootstrap_need || self.routing_table.borrow().size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
@@ -261,7 +262,7 @@ impl DHT {
     }
 
     pub(crate) fn random_lookup(&mut self) {
-        let mut task = NodeLookupTask::new(&Id::random(), self.cloned_dht());
+        let mut task = NodeLookupTask::new(&Id::random(), self.cloned());
         let name = format!("{}: random lookup", as_kind_name!(&self.addr));
         task.set_name(&name);
         task.add_listener(Box::new(move |_|{}));
@@ -304,25 +305,25 @@ impl DHT {
         //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
 
         // Regular dht update.
-        let cloned_dht = self.cloned_dht();
+        let cloned_dht = self.cloned();
         scheduler.borrow_mut().add(move || {
             cloned_dht.borrow_mut().update();
         }, 100, constants::DHT_UPDATE_INTERVAL);
 
         // Send a ping request to a random node to verify socket liveness.
-        let cloned_dht = self.cloned_dht();
+        let cloned_dht = self.cloned();
         scheduler.borrow_mut().add(move || {
             cloned_dht.borrow_mut().random_ping();
         }, constants::RANDOM_PING_INTERVAL, constants::RANDOM_PING_INTERVAL);
 
         // Perform a deep lookup to familiarize ourselves with random sections of
         // the keyspace.
-        let cloned_dht = self.cloned_dht();
+        let cloned_dht = self.cloned();
         scheduler.borrow_mut().add(move || {
             cloned_dht.borrow_mut().random_lookup();
         }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL);
 
-        let cloned_dht = self.cloned_dht();
+        let cloned_dht = self.cloned();
         scheduler.borrow_mut().add(move || {
             cloned_dht.borrow().persist_announce();
         }, 1000, constants::RE_ANNOUNCE_INTERVAL);
@@ -623,9 +624,8 @@ impl DHT {
     }
 
     pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
-        // ignore the timeout if the DHT is stopped or the RPC server is offline
-        if  !self.running ||
-            !self.server().borrow().is_reachable() {
+        // Ignore the timeout if the DHT is stopped or the RPC server is offline
+        if !self.running || !self.server().borrow().is_reachable() {
             return;
         }
         self.routing_table.borrow_mut().on_timeout(call.target_nodeid());
@@ -648,7 +648,7 @@ impl DHT {
         ));
         let cloned = Rc::clone(&result);
 
-        let mut task = NodeLookupTask::new(id, self.cloned_dht());
+        let mut task = NodeLookupTask::new(id, self.cloned());
         task.set_name("node-lookup");
         task.set_result_fn(move |_task, _node| {
             if _node.is_some() {
@@ -674,7 +674,7 @@ impl DHT {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
         let result_shadow = Rc::clone(&result);
 
-        let mut task = ValueLookupTask::new(self.cloned_dht(), id);
+        let mut task = ValueLookupTask::new(self.cloned(), id);
         task.set_name("value-lookup");
         task.set_result_fn(move |_task, _value| {
             if let Some(_v) = _value.as_ref() {
@@ -707,7 +707,7 @@ impl DHT {
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
     where F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static
     {
-        let mut task = NodeLookupTask::new(&value.id(), self.cloned_dht());
+        let mut task = NodeLookupTask::new(&value.id(), self.cloned());
         task.set_name("store-value");
         task.set_want_token(true);
         task.add_listener(Box::new(move |_task| {
@@ -737,7 +737,7 @@ impl DHT {
         let result = Rc::new(RefCell::new(Vec::new()));
         let cloned = Rc::clone(&result);
 
-        let mut task = PeerLookupTask::new(id, self.cloned_dht());
+        let mut task = PeerLookupTask::new(id, self.cloned());
         task.set_name("peer-lookup");
         task.set_result_fn(move |_task, _peers| {
             result.borrow_mut().append(_peers);

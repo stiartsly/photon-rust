@@ -45,24 +45,16 @@ impl NodeRunner {
             dht6: None,
             dht_num: 0,
 
-            storage: Rc::new(RefCell::new(SqliteStorage::new())),
-            server: Rc::new(RefCell::new(Server::new(params.0))),
-            tokenman: Rc::new(RefCell::new(TokenManager::new())),
+            storage:    Rc::new(RefCell::new(SqliteStorage::new())),
+            tokenman:   Rc::new(RefCell::new(TokenManager::new())),
+            server:     Rc::new(RefCell::new(Server::new(params.0))),
             cloned: None,
             bootstrap_zone: Arc::clone(&params.2),
         }
     }
 
-    fn server(&self) -> Rc<RefCell<Server>> {
-        Rc::clone(&self.server)
-    }
-
-    //fn tokenman(&self) -> Rc<RefCell<TokenManager>> {
-    //    Rc::clone(&self.tokenman)
-    //}
-
-    fn storage(&self) -> Rc<RefCell<dyn DataStorage>> {
-        Rc::clone(&self.storage)
+    pub(crate) fn set_cloned(&mut self, runner: &Rc<RefCell<NodeRunner>>) {
+        self.cloned = Some(Rc::clone(&runner));
     }
 
     pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
@@ -100,23 +92,25 @@ impl NodeRunner {
         }, 2000, constants::EXPIRED_CHECK_INTERVAL);
 
         if let Some(dht4) = self.dht4.as_ref() {
-            dht4.borrow_mut()
-                .set_server(self.server())
-                .set_storage(self.storage())
-                .set_cloned(Rc::clone(&dht4))
-                .start();
+            let mut dht = dht4.borrow_mut();
 
-            info!("Started DHT node on ipv4 address: {}", dht4.borrow().socket_addr());
+            dht.set_server(&self.server);
+            dht.set_storage(&self.storage);
+            dht.set_cloned(&dht4);
+            dht.start();
+
+            info!("Started DHT node on ipv4 address: {}", dht.socket_addr());
         }
 
         if let Some(dht6) = self.dht6.as_ref() {
-            dht6.borrow_mut()
-                .set_server(self.server())
-                .set_storage(self.storage())
-                .set_cloned(Rc::clone(&dht6))
-                .start();
+            let mut dht = dht6.borrow_mut();
 
-            info!("Started DHT node on ipv4 address: {}", dht6.borrow().socket_addr());
+            dht.set_server(&self.server);
+            dht.set_storage(&self.storage);
+            dht.set_cloned(&dht6);
+            dht.start();
+
+            info!("Started DHT node on ipv4 address: {}", dht.socket_addr());
         }
 
         let result = self.server.borrow_mut().start(Rc::clone(self.dht4.as_ref().unwrap()));
