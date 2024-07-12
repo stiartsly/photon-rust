@@ -13,7 +13,6 @@ use crate::{
     sqlite_storage::SqliteStorage,
     token_man::TokenManager,
     server::{self, Server},
-    bootstrap::BootstrapZone,
     crypto_cache::CryptoCache,
 };
 
@@ -31,15 +30,13 @@ pub(crate) struct NodeRunner {
     tokenman: Rc<RefCell<TokenManager>>,
 
     cloned: Option<Rc<RefCell<NodeRunner>>>,
-
-    bootstrap_zone: Arc<Mutex<BootstrapZone>>,
 }
 
 impl NodeRunner {
-    pub(crate) fn new(params: (Id, String, Arc<Mutex<BootstrapZone>>)) -> Self {
+    pub(crate) fn new(nodeid: Id, storage_path: String) -> Self {
         Self {
-            nodeid: params.0.clone(),
-            storage_path: params.1,
+            nodeid: nodeid.clone(),
+            storage_path: storage_path,
 
             dht4: None,
             dht6: None,
@@ -47,9 +44,8 @@ impl NodeRunner {
 
             storage:    Rc::new(RefCell::new(SqliteStorage::new())),
             tokenman:   Rc::new(RefCell::new(TokenManager::new())),
-            server:     Rc::new(RefCell::new(Server::new(params.0))),
+            server:     Rc::new(RefCell::new(Server::new(nodeid))),
             cloned: None,
-            bootstrap_zone: Arc::clone(&params.2),
         }
     }
 
@@ -58,13 +54,15 @@ impl NodeRunner {
     }
 
     pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
-        if let Some(addr4) = cfg.lock().unwrap().addr4() {
+        let cfg = cfg.lock().unwrap();
+
+        if let Some(addr4) = cfg.addr4() {
             let mut dht = DHT::new(&self.nodeid, addr4);
             dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
             self.dht4 = Some(Rc::new(RefCell::new(dht)));
         }
 
-        if let Some(addr6) = cfg.lock().unwrap().addr6() {
+        if let Some(addr6) = cfg.addr6() {
             let mut dht = DHT::new(&self.nodeid, addr6);
             dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
             self.dht4 = Some(Rc::new(RefCell::new(dht)));
@@ -78,14 +76,6 @@ impl NodeRunner {
         }
 
         let scheduler = self.server.borrow().scheduler();
-        let cloned_dht = Rc::clone(self.dht4.as_ref().unwrap());
-        let bootstrap_zone = Arc::clone(&self.bootstrap_zone);
-        scheduler.borrow_mut().add(move || {
-            bootstrap_zone.lock().unwrap().pop_all(|item| {
-                cloned_dht.borrow_mut().add_bootstrap_node(item.clone());
-            })
-        },1000, 1000);
-
         let ctxts = Rc::new(RefCell::new(CryptoCache::new(&keypair)));
         scheduler.borrow_mut().add(move || {
             ctxts.borrow_mut().handle_expiration();
@@ -97,7 +87,7 @@ impl NodeRunner {
             dht.set_server(&self.server);
             dht.set_storage(&self.storage);
             dht.set_cloned(&dht4);
-            dht.start();
+            dht.start(&cfg.bootstrap_nodes());
 
             info!("Started DHT node on ipv4 address: {}", dht.socket_addr());
         }
@@ -108,7 +98,7 @@ impl NodeRunner {
             dht.set_server(&self.server);
             dht.set_storage(&self.storage);
             dht.set_cloned(&dht6);
-            dht.start();
+            dht.start(&cfg.bootstrap_nodes());
 
             info!("Started DHT node on ipv4 address: {}", dht.socket_addr());
         }

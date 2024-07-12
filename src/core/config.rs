@@ -5,8 +5,8 @@ pub trait Config: Send + Sync {
     fn addr4(&self) -> Option<&SocketAddr>;
     fn addr6(&self) -> Option<&SocketAddr>;
 
-    fn storage_path(&self) -> String;
-    fn bootstrap_nodes(&self) -> Vec<NodeInfo>;
+    fn storage_path(&self) -> &str;
+    fn bootstrap_nodes(&self) -> &[NodeInfo];
 
     fn dump(&self);
 }

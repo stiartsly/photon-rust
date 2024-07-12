@@ -17,7 +17,6 @@ mod token_man;
 mod version;
 mod scheduler;
 mod stats;
-mod bootstrap;
 mod node_runner;
 
 pub mod id;

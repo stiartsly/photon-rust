@@ -21,7 +21,6 @@ use crate::{
     KeyPair,
     LookupOption,
     crypto_cache::CryptoCache,
-    bootstrap::BootstrapZone,
     node_runner::NodeRunner,
 };
 
@@ -36,8 +35,6 @@ pub struct Node {
     option: LookupOption,
     status: NodeStatus,
     storage_path: String,
-
-    bootstrap_zone: Arc<Mutex<BootstrapZone>>,
 
     thread: Option<JoinHandle<()>>, // engine working thread.
     quit: Arc<Mutex<bool>>, // notification handle
@@ -98,7 +95,6 @@ impl Node {
         info!("Current DHT node Id {}", id);
 
         Ok(Node {
-            bootstrap_zone: Arc::new(Mutex::new(BootstrapZone::from(cfg.bootstrap_nodes()))),
             id,
             cfg: Arc::new(Mutex::new(cfg)),
             signature_keypair: keypair.clone(),
@@ -120,21 +116,9 @@ impl Node {
         self.status = NodeStatus::Initializing;
         info!("DHT node {} is starting...", self.id);
 
-        // Parameters used to create the working server instance:
-        // - node id: Unique identifier for the node.
-        // - storage path: Path used to save key information for this node.
-        // - encryption keypair: Used for encrypting and decrypting incoming and
-        //   outgoing messages.
-        let params = (
-            self.id.clone(),
-            self.storage_path.clone(),
-            self.encryption_keypair.clone(),
-            Arc::clone(&self.bootstrap_zone),
-        );
-
-        // Parameters used to run the server instance.
-        // - addr4: socket ipv4 address
-        // - addr6: socket ipv6 address
+        let id = self.id.clone();
+        let storage_path = self.storage_path.clone();
+        let keypair = self.encryption_keypair.clone();
         let cfg = Arc::clone(&self.cfg);
 
         // Flag used to signal the spawned thread to stop execution.
@@ -142,10 +126,10 @@ impl Node {
 
         self.thread = Some(thread::spawn(move || {
             let runner = Rc::new(RefCell::new(
-                    NodeRunner::new((params.0, params.1, params.3))
+                    NodeRunner::new(id, storage_path)
                 ));
             runner.borrow_mut().set_cloned(&runner);
-            runner.borrow_mut().start(cfg, params.2, quit);
+            runner.borrow_mut().start(cfg, keypair, quit);
         }));
 
         self.status = NodeStatus::Running;
@@ -194,10 +178,8 @@ impl Node {
         self.option.clone()
     }
 
-    pub fn bootstrap(&mut self, nodes: Vec<NodeInfo>) {
-        let mut zone = self.bootstrap_zone.lock().unwrap();
-        zone.push_many(nodes);
-        drop(zone);
+    pub fn bootstrap(&mut self, _: &[NodeInfo]) {
+       unimplemented!()
     }
 
     pub async fn find_node(&self, _: &Id, _: &LookupOption) -> Result<Option<NodeInfo>, Error> {

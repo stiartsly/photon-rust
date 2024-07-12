@@ -168,12 +168,12 @@ impl Config for DefaultConfiguration {
         self.addr6.as_ref()
     }
 
-    fn storage_path(&self) -> String {
-        self.storage_path.clone()
+    fn storage_path(&self) -> &str {
+        self.storage_path.as_str()
     }
 
-    fn bootstrap_nodes(&self) -> Vec<NodeInfo> {
-        self.bootstrap_nodes.clone()
+    fn bootstrap_nodes(&self) -> &[NodeInfo] {
+        &self.bootstrap_nodes
     }
 
     fn dump(&self) {

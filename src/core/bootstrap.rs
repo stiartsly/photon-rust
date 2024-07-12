@@ -6,6 +6,7 @@ pub(crate) struct BootstrapZone {
     updated: bool,
 }
 
+#[allow(dead_code)]
 impl BootstrapZone {
     pub(crate) fn from(input: Vec<NodeInfo>) -> Self {
         let mut bs = Self {

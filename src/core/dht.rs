@@ -278,7 +278,7 @@ impl DHT {
         // TODO:
     }
 
-    pub(crate) fn start(&mut self) {
+    pub(crate) fn start(&mut self, bootstrap_nodes: &[NodeInfo]) {
         if self.running {
             return;
         }
@@ -289,7 +289,9 @@ impl DHT {
             self.routing_table.borrow_mut().load(path);
         }
 
-        // TODO: bootstrap nodes.
+        bootstrap_nodes.iter().for_each(|item| {
+            self.bootstrap_nodes.push(Box::new(item.clone()));
+        });
 
         info!("Starting DHT/{} on {}", as_kind_name!(&self.addr), self.addr);
         self.running = true;
