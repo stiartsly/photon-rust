@@ -13,10 +13,10 @@ use crate::{
     as_millis,
     constants,
     version,
-    id::Id,
-    node_info::NodeInfo,
-    peer::Peer,
-    value::Value,
+    Id,
+    NodeInfo,
+    Peer,
+    Value,
     rpccall::{self, RpcCall},
     lookup_option::LookupOption,
     routing_table::RoutingTable,
@@ -59,7 +59,7 @@ pub(crate) struct DHT {
     nodeid: Id,
     addr: SocketAddr,
     persist_path: Option<String>,
-    last_save: SystemTime,
+    last_saved: SystemTime,
     running: bool,
 
     bootstrap_need: bool,
@@ -85,7 +85,7 @@ impl DHT {
             addr: binding_addr.clone(),
             running: false,
             persist_path: None,
-            last_save: SystemTime::UNIX_EPOCH,
+            last_saved: SystemTime::UNIX_EPOCH,
 
             routing_table: Rc::new(RefCell::new(RoutingTable::new(node_info))),
             taskman:  Rc::new(RefCell::new(TaskManager::new())),
@@ -117,17 +117,8 @@ impl DHT {
         self.tokenman = Some(Rc::clone(tokenman));
     }
 
-    pub(crate) fn cloned(&self) -> Rc<RefCell<DHT>> {
-        Rc::clone(unwrap!(self.cloned_dht))
-    }
-
     pub(crate) fn enable_persistence(&mut self, path: String) {
         self.persist_path = Some(path);
-    }
-
-    pub(crate) fn add_bootstrap_node(&mut self, node: Box<NodeInfo>) {
-        self.bootstrap_nodes.push(node);
-        self.bootstrap_need = true;
     }
 
     pub(crate) fn socket_addr(&self) -> &SocketAddr {
@@ -143,19 +134,15 @@ impl DHT {
     }
 
     pub(crate) fn server(&self) -> Rc<RefCell<Server>> {
-        Rc::clone(self.server.as_ref().unwrap())
+        Rc::clone(unwrap!(self.server))
     }
 
-    fn storage(&self) -> &Rc<RefCell<dyn DataStorage>> {
-        self.storage.as_ref().unwrap()
-    }
-
-    fn tokenman(&self) -> &Rc<RefCell<TokenManager>> {
-        self.tokenman.as_ref().unwrap()
+    pub(crate) fn cloned(&self) -> Rc<RefCell<DHT>> {
+        Rc::clone(unwrap!(self.cloned_dht))
     }
 
     pub(crate) fn bootstrap(&mut self) {
-        let bns = match self.bootstrap_nodes.is_empty() {
+        let bootstrap_nodes = match self.bootstrap_nodes.is_empty() {
             true => self.routing_table.borrow().random_entries(8).unwrap(),
             false => self.bootstrap_nodes.clone()
         };
@@ -165,7 +152,7 @@ impl DHT {
         let nodes = Rc::new(RefCell::new(Vec::new())) as Rc<RefCell<Vec<NodeInfo>>>;
         let count = Rc::new(RefCell::new(0));
 
-        for item in bns.iter() {
+        for item in bootstrap_nodes.iter() {
             let mut req = find_node_req::Message::new();
             req.set_remote(item.id(), item.socket_addr());
             req.with_target(Id::random());
@@ -174,7 +161,7 @@ impl DHT {
             let req = Rc::new(RefCell::new(req));
 
             let call = Rc::new(RefCell::new(RpcCall::new(item.clone(), req)));
-            let len = bns.len();
+            let len = bootstrap_nodes.len();
             let cloned_nodes = Rc::clone(&nodes);
             let cloned_count = Rc::clone(&count);
             let bootstrap_time = Rc::clone(&self.bootstrap_time);
@@ -241,10 +228,10 @@ impl DHT {
             self.bootstrap();
         }
 
-        if as_millis!(self.last_save) > constants::ROUTING_TABLE_PERSIST_INTERVAL {
+        if as_millis!(self.last_saved) > constants::ROUTING_TABLE_PERSIST_INTERVAL {
             info!("Persisting routing table ....");
             self.routing_table.borrow_mut().save(self.persist_path.as_ref().unwrap().as_str());
-            self.last_save = SystemTime::now();
+            self.last_saved = SystemTime::now();
         }
     }
 
@@ -479,7 +466,7 @@ impl DHT {
         }
 
         if req.want_token() {
-            let token = self.tokenman().borrow_mut().generate_token(
+            let token = unwrap!(self.tokenman).borrow_mut().generate_token(
                 req.id(), req.origin(), req.target()
             );
             rsp.populate_token(token);
@@ -497,7 +484,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_value = false;
-        let value = self.storage().borrow().value(req.target());
+        let value = unwrap!(self.storage).borrow().value(req.target());
         if value.is_some() {
             if req.seq() < 0
                 || value.as_ref().unwrap().sequence_number() < 0
@@ -519,7 +506,7 @@ impl DHT {
         }
 
         if req.want_token() {
-            let token = self.tokenman().borrow_mut().generate_token(
+            let token = unwrap!(self.tokenman).borrow_mut().generate_token(
                 req.id(), req.origin(), req.target()
             );
             rsp.populate_token(token);
@@ -535,7 +522,7 @@ impl DHT {
         let value = req.value();
         let value_id = value.as_ref().unwrap().id();
 
-        let valid = self.tokenman().borrow_mut().verify_token(
+        let valid = unwrap!(self.tokenman).borrow_mut().verify_token(
             req.token(), req.id(), req.origin(), &value_id,
         );
         if !valid {
@@ -566,7 +553,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_peers = false;
-        let peers = self.storage().borrow().peers(req.target(), 8);
+        let peers = unwrap!(self.storage).borrow().peers(req.target(), 8);
         if !peers.is_empty() {
             has_peers = true;
             rsp.populate_peers(peers);
@@ -583,7 +570,7 @@ impl DHT {
         }
 
         if req.want_token() {
-            let token = self.tokenman().borrow_mut().generate_token(
+            let token = unwrap!(self.tokenman).borrow_mut().generate_token(
                 req.id(), req.origin(), req.target()
             );
             rsp.populate_token(token);
@@ -602,7 +589,7 @@ impl DHT {
             );
         }
 
-        let valid = self.tokenman().borrow_mut().verify_token(
+        let valid = unwrap!(self.tokenman).borrow_mut().verify_token(
             req.token(), req.id(), req.origin(), req.target()
         );
         if !valid {
