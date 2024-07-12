@@ -165,58 +165,63 @@ impl DHT {
         let nodes = Rc::new(RefCell::new(Vec::new())) as Rc<RefCell<Vec<NodeInfo>>>;
         let count = Rc::new(RefCell::new(0));
 
-        for node in bns.iter() {
-            let req = Rc::new(RefCell::new(find_node_req::Message::new()));
-            req.borrow_mut().set_remote(node.id(), node.socket_addr());
-            req.borrow_mut().with_target(Id::random());
-            req.borrow_mut().with_want4(true);
+        for item in bns.iter() {
+            let mut req = find_node_req::Message::new();
+            req.set_remote(item.id(), item.socket_addr());
+            req.with_target(Id::random());
+            req.with_want4(true);
 
-            let call = Rc::new(RefCell::new(RpcCall::new(node.clone(), req)));
+            let req = Rc::new(RefCell::new(req));
+
+            let call = Rc::new(RefCell::new(RpcCall::new(item.clone(), req)));
             let len = bns.len();
             let cloned_nodes = Rc::clone(&nodes);
             let cloned_count = Rc::clone(&count);
-            let cloned_id = Rc::new(node.id().clone());
-            let taskman = Rc::clone(&self.taskman);
-            let routing_table = Rc::clone(&self.routing_table);
             let bootstrap_time = Rc::clone(&self.bootstrap_time);
             let cloned_dht = self.cloned();
-            call.borrow_mut().set_state_changed_fn(move |call, _, cur| {
-                if cur == &rpccall::State::Responsed || cur == &rpccall::State::Err ||
-                    cur == &rpccall::State::Timeout {
-                    if let Some(rsp) = call.rsp() {
-                        if let Some(downcasted) = rsp.borrow().as_any().downcast_ref::<find_node_rsp::Message>() {
-                            cloned_nodes.borrow_mut().extend_from_slice(downcasted.nodes4().unwrap());
-                        }
+            call.borrow_mut().set_state_changed_fn(move |_call, _, _cur| {
+                match _cur {
+                    rpccall::State::Responsed => {},
+                    rpccall::State::Err => {},
+                    rpccall::State::Timeout => {},
+                    _ => return,
+                }
+
+                if let Some(rsp) = _call.rsp() {
+                    if let Some(downcasted) = rsp.borrow().as_any().downcast_ref::<find_node_rsp::Message>() {
+                        cloned_nodes.borrow_mut().extend_from_slice(downcasted.nodes4().unwrap());
                     }
+                }
 
-                    *cloned_count.borrow_mut() += 1;
-                    if *cloned_count.borrow() == len {
-
-                        *bootstrap_time.borrow_mut() = SystemTime::now();
-                        if routing_table.borrow().size() == 0 &&
-                            cloned_nodes.borrow().is_empty() {
-                            return;
-                        }
-
-
-                        let task = Rc::new(RefCell::new(NodeLookupTask::new(
-                            cloned_id.deref(), Rc::clone(&cloned_dht)
-                        )));
-                        let cloned_task = Rc::clone(&task);
-                        task.borrow_mut().cloned_self(cloned_task);
-                        task.borrow_mut().set_bootstrap(true);
-                        task.borrow_mut().inject_candidates(cloned_nodes.borrow().as_slice());
-                        task.borrow_mut().set_name("Bootstrap: filling home bucket");
-                        task.borrow_mut().add_listener(Box::new(move |_| {
-                             println!(">>>>>> listener invoked!!!! >>>>");
-                        }));
-                        taskman.borrow_mut().add(task);
-                    }
+                *cloned_count.borrow_mut() += 1;
+                if *cloned_count.borrow() == len {
+                    *bootstrap_time.borrow_mut() = SystemTime::now();
+                    cloned_dht.borrow().fill_home_bucket(cloned_nodes.borrow().as_slice());
                 }
             });
 
             self.server().borrow_mut().send_call(call);
         };
+    }
+
+    fn fill_home_bucket(&self, nodes: &[NodeInfo]) {
+        if self.routing_table.borrow().size() == 0 &&
+            nodes.is_empty() {
+            return;
+        }
+
+        let mut task = NodeLookupTask::new(&self.nodeid, self.cloned());
+        task.set_bootstrap(true);
+        task.inject_candidates(nodes);
+        task.set_name("Bootstrap: filling home bucket");
+        task.add_listener(Box::new(move |_| {
+            println!(">>>>>> listener invoked!!!! >>>>");
+       }));
+
+       let task = Rc::new(RefCell::new(task));
+       let cloned_task = Rc::clone(&task);
+       task.borrow_mut().cloned_self(cloned_task);
+       self.taskman.borrow_mut().add(task);
     }
 
     pub(crate) fn update(&mut self) {
