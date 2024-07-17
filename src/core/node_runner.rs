@@ -1,9 +1,11 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
+
 use log::{info, error};
 
 use crate::{
+    unwrap,
     constants,
     cryptobox,
     Id,
@@ -14,12 +16,15 @@ use crate::{
     token_man::TokenManager,
     server::{self, Server},
     crypto_cache::CryptoCache,
+    bootstrap_cache::BootstrapCache,
 };
 
 #[allow(dead_code)]
 pub(crate) struct NodeRunner {
     nodeid: Id,
     storage_path: String,
+
+    bootstrap_cache: Option<Arc<Mutex<BootstrapCache>>>,
 
     dht4: Option<Rc<RefCell<DHT>>>,
     dht6: Option<Rc<RefCell<DHT>>>,
@@ -38,6 +43,8 @@ impl NodeRunner {
             nodeid: nodeid.clone(),
             storage_path: storage_path,
 
+            bootstrap_cache: None,
+
             dht4: None,
             dht6: None,
             dht_num: 0,
@@ -51,6 +58,10 @@ impl NodeRunner {
 
     pub(crate) fn set_cloned(&mut self, runner: &Rc<RefCell<NodeRunner>>) {
         self.cloned = Some(Rc::clone(&runner));
+    }
+
+    pub(crate) fn set_bootstrap(&mut self, cache: Arc<Mutex<BootstrapCache>>) {
+        self.bootstrap_cache = Some(cache)
     }
 
     pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
@@ -75,12 +86,6 @@ impl NodeRunner {
             panic!("Attempt to open database storage failed");
         }
 
-        let scheduler = self.server.borrow().scheduler();
-        let ctxts = Rc::new(RefCell::new(CryptoCache::new(&keypair)));
-        scheduler.borrow_mut().add(move || {
-            ctxts.borrow_mut().handle_expiration();
-        }, 2000, constants::EXPIRED_CHECK_INTERVAL);
-
         if let Some(dht4) = self.dht4.as_ref() {
             let mut dht = dht4.borrow_mut();
 
@@ -102,6 +107,27 @@ impl NodeRunner {
 
             info!("Started DHT node on ipv4 address: {}", dht.socket_addr());
         }
+
+        let scheduler = self.server.borrow().scheduler();
+        let ctxts = Rc::new(RefCell::new(CryptoCache::new(&keypair)));
+        scheduler.borrow_mut().add(move || {
+            ctxts.borrow_mut().handle_expiration();
+        }, 2000, constants::EXPIRED_CHECK_INTERVAL);
+
+        let bcache = Arc::clone(unwrap!(self.bootstrap_cache));
+        let dht4 = self.dht4.as_ref().map(|item| Rc::clone(&item));
+        let dht6 = self.dht6.as_ref().map(|item| Rc::clone(&item));
+        scheduler.borrow_mut().add(move || {
+            let mut bcache = bcache.lock().unwrap();
+            bcache.pop_all(|item| {
+                if let Some(dht) = dht4.as_ref() {
+                    dht.borrow_mut().add_bootstrap_node(item.clone());
+                }
+                if let Some(dht) = dht6.as_ref() {
+                    dht.borrow_mut().add_bootstrap_node(item.clone());
+                }
+            });
+        }, 1, 60*10);
 
         let result = self.server.borrow_mut().start(Rc::clone(self.dht4.as_ref().unwrap()));
         match result {

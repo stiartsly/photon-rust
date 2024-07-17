@@ -18,6 +18,7 @@ mod version;
 mod scheduler;
 mod stats;
 mod node_runner;
+mod bootstrap_cache;
 
 pub mod id;
 pub mod config;

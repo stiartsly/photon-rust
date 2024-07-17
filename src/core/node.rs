@@ -21,12 +21,15 @@ use crate::{
     KeyPair,
     LookupOption,
     crypto_cache::CryptoCache,
+    bootstrap_cache::BootstrapCache,
     node_runner::NodeRunner,
 };
 
 pub struct Node {
     id: Id,
     cfg: Arc<Mutex<Box<dyn Config>>>, //config for this node.
+
+    bootstrap_cache: Arc<Mutex<BootstrapCache>>,
 
     signature_keypair: signature::KeyPair,
     encryption_keypair: cryptobox::KeyPair,
@@ -97,6 +100,7 @@ impl Node {
         Ok(Node {
             id,
             cfg: Arc::new(Mutex::new(cfg)),
+            bootstrap_cache: Arc::new(Mutex::new(BootstrapCache::new())),
             signature_keypair: keypair.clone(),
             encryption_keypair: cryptobox::KeyPair::from_signature_keypair(&keypair),
             encryption_ctxts: None,
@@ -122,6 +126,7 @@ impl Node {
         let cfg = Arc::clone(&self.cfg);
 
         // Flag used to signal the spawned thread to stop execution.
+        let cache = Arc::clone(&self.bootstrap_cache);
         let quit = Arc::clone(&self.quit);
 
         self.thread = Some(thread::spawn(move || {
@@ -129,6 +134,7 @@ impl Node {
                     NodeRunner::new(id, storage_path)
                 ));
             runner.borrow_mut().set_cloned(&runner);
+            runner.borrow_mut().set_bootstrap(cache);
             runner.borrow_mut().start(cfg, keypair, quit);
         }));
 
@@ -178,8 +184,8 @@ impl Node {
         self.option.clone()
     }
 
-    pub fn bootstrap(&mut self, _: &[NodeInfo]) {
-       unimplemented!()
+    pub fn bootstrap(&mut self, nodes: &[NodeInfo]) {
+        self.bootstrap_cache.lock().unwrap().push_many(nodes);
     }
 
     pub async fn find_node(&self, _: &Id, _: &LookupOption) -> Result<Option<NodeInfo>, Error> {

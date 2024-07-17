@@ -109,7 +109,7 @@ fn test_find_node() {
 
         let remoteid = runner2.id();
         println!("Trying to find node {}", remoteid);
-        let _ = runner1.find_node(&remoteid);
+        let _ = runner1.find_node_simple(&remoteid);
     }
     teardown()
 }

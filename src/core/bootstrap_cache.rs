@@ -1,31 +1,29 @@
 
 use crate::node_info::NodeInfo;
 
-pub(crate) struct BootstrapZone {
+pub(crate) struct BootstrapCache {
     nodes: Vec<Box<NodeInfo>>,
     updated: bool,
 }
 
 #[allow(dead_code)]
-impl BootstrapZone {
-    pub(crate) fn from(input: Vec<NodeInfo>) -> Self {
-        let mut bs = Self {
+impl BootstrapCache {
+    pub(crate) fn new() -> Self {
+        Self {
             nodes: Vec::new(),
             updated: false,
-        };
-        bs.push_many(input);
-        bs
+        }
     }
 
-    pub(crate) fn push(&mut self, node: NodeInfo) {
-        self.nodes.push(Box::new(node));
+    pub(crate) fn push(&mut self, node: &NodeInfo) {
+        self.nodes.push(Box::new(node.clone()));
         self.updated = true;
     }
 
-    pub(crate) fn push_many(&mut self, mut nodes: Vec<NodeInfo>) {
-        while let Some(item) = nodes.pop() {
-            self.push(item)
-        }
+    pub(crate) fn push_many(&mut self, nodes: &[NodeInfo]) {
+        nodes.iter().for_each(|item| {
+            self.nodes.push(Box::new(item.clone()));
+        });
         self.updated = true;
     }
 

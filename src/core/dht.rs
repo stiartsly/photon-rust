@@ -141,6 +141,10 @@ impl DHT {
         Rc::clone(unwrap!(self.cloned_dht))
     }
 
+    pub(crate) fn add_bootstrap_node(&mut self, node: Box<NodeInfo>) {
+        self.bootstrap_nodes.push(node)
+    }
+
     pub(crate) fn bootstrap(&mut self) {
         let bootstrap_nodes = match self.bootstrap_nodes.is_empty() {
             true => self.routing_table.borrow().random_entries(8).unwrap(),
