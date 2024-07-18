@@ -123,19 +123,20 @@ impl Node {
         let id = self.id.clone();
         let storage_path = self.storage_path.clone();
         let keypair = self.encryption_keypair.clone();
-        let cfg = Arc::clone(&self.cfg);
-
-        // Flag used to signal the spawned thread to stop execution.
-        let cache = Arc::clone(&self.bootstrap_cache);
-        let quit = Arc::clone(&self.quit);
+        let cfg = self.cfg.clone();
+        let cache = self.bootstrap_cache.clone();
+        let quit = self.quit.clone();
 
         self.thread = Some(thread::spawn(move || {
-            let runner = Rc::new(RefCell::new(
-                    NodeRunner::new(id, storage_path)
-                ));
-            runner.borrow_mut().set_cloned(&runner);
-            runner.borrow_mut().set_bootstrap(cache);
-            runner.borrow_mut().start(cfg, keypair, quit);
+            let runner = Rc::new(RefCell::new(NodeRunner::new(
+                id, storage_path
+            )));
+
+            let mut binding = runner.borrow_mut();
+
+            binding.set_cloned(&runner);
+            binding.set_bootstrap(cache);
+            binding.start(cfg, keypair, quit);
         }));
 
         self.status = NodeStatus::Running;
