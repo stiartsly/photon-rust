@@ -56,7 +56,7 @@ use crate::task::{
 };
 
 pub(crate) struct DHT {
-    nodeid: Id,
+    nodeid: Rc<Id>,
     addr: SocketAddr,
     persist_path: Option<String>,
     last_saved: SystemTime,
@@ -66,18 +66,18 @@ pub(crate) struct DHT {
     bootstrap_nodes: Vec<Rc<NodeInfo>>,
     bootstrap_time: Rc<RefCell<SystemTime>>,
 
-    routing_table: Rc<RefCell<RoutingTable>>,
-    taskman: Rc<RefCell<TaskManager>>,
+    rtable:     Rc<RefCell<RoutingTable>>,
+    taskman:    Rc<RefCell<TaskManager>>,
 
-    server: Option<Rc<RefCell<Server>>>,
-    tokenman: Option<Rc<RefCell<TokenManager>>>,
-    storage: Option<Rc<RefCell<dyn DataStorage>>>,
-    cloned_dht: Option<Rc<RefCell<DHT>>>,
+    server:     Option<Rc<RefCell<Server>>>,
+    tokenman:   Option<Rc<RefCell<TokenManager>>>,
+    storage:    Option<Rc<RefCell<dyn DataStorage>>>,
+    cloned:     Option<Rc<RefCell<DHT>>>,
 }
 
 #[allow(dead_code)]
 impl DHT {
-    pub(crate) fn new(nodeid: &Id, binding_addr: &SocketAddr) -> Self {
+    pub(crate) fn new(nodeid: &Rc<Id>, binding_addr: &SocketAddr) -> Self {
         let node_info = NodeInfo::new(nodeid, &binding_addr);
 
         DHT {
@@ -87,34 +87,34 @@ impl DHT {
             persist_path: None,
             last_saved: SystemTime::UNIX_EPOCH,
 
-            routing_table: Rc::new(RefCell::new(RoutingTable::new(node_info))),
-            taskman:  Rc::new(RefCell::new(TaskManager::new())),
-
             bootstrap_nodes: Vec::new(),
             bootstrap_need: false,
             bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
 
-            server: None,
-            storage: None,
-            tokenman: None,
-            cloned_dht: None,
+            rtable:     Rc::new(RefCell::new(RoutingTable::new(node_info))),
+            taskman:    Rc::new(RefCell::new(TaskManager::new())),
+
+            server:     None,
+            storage:    None,
+            tokenman:   None,
+            cloned:     None,
         }
     }
 
     pub(crate) fn set_cloned(&mut self, dht: &Rc<RefCell<DHT>>) {
-        self.cloned_dht = Some(Rc::clone(dht));
+        self.cloned = Some(dht.clone());
     }
 
     pub(crate) fn set_server(&mut self, server: &Rc<RefCell<Server>>) {
-        self.server = Some(Rc::clone(server));
+        self.server = Some(server.clone());
     }
 
     pub(crate) fn set_storage(&mut self, storage: &Rc<RefCell<dyn DataStorage>>) {
-        self.storage = Some(Rc::clone(storage));
+        self.storage = Some(storage.clone());
     }
 
     pub(crate) fn set_tokenman(&mut self, tokenman: &Rc<RefCell<TokenManager>>) {
-        self.tokenman = Some(Rc::clone(tokenman));
+        self.tokenman = Some(tokenman.clone());
     }
 
     pub(crate) fn enable_persistence(&mut self, path: String) {
@@ -130,15 +130,15 @@ impl DHT {
     }
 
     pub(crate) fn routing_table(&self) -> Rc<RefCell<RoutingTable>> {
-        Rc::clone(&self.routing_table)
+        self.rtable.clone()
     }
 
     pub(crate) fn server(&self) -> Rc<RefCell<Server>> {
-        Rc::clone(unwrap!(self.server))
+        unwrap!(self.server).clone()
     }
 
-    pub(crate) fn cloned(&self) -> Rc<RefCell<DHT>> {
-        Rc::clone(unwrap!(self.cloned_dht))
+    fn cloned(&self) -> Rc<RefCell<DHT>> {
+        unwrap!(self.cloned).clone()
     }
 
     pub(crate) fn add_bootstrap_node(&mut self, node: &Rc<NodeInfo>) {
@@ -147,7 +147,7 @@ impl DHT {
 
     pub(crate) fn bootstrap(&mut self) {
         let bootstrap_nodes = match self.bootstrap_nodes.is_empty() {
-            true => self.routing_table.borrow().random_nodes(8).unwrap(),
+            true => self.rtable.borrow().random_nodes(8).unwrap(),
             false => self.bootstrap_nodes.clone()
         };
 
@@ -157,20 +157,20 @@ impl DHT {
         let count = Rc::new(RefCell::new(0));
 
         for item in bootstrap_nodes.iter() {
-            let mut req = find_node_req::Message::new();
-            req.set_remote(item.id(), item.socket_addr());
-            req.with_target(Id::random());
-            req.with_want4(true);
+            let mut msg = find_node_req::Message::new();
+            msg.set_remote(item.id(), item.socket_addr());
+            msg.with_target(Id::random());
+            msg.with_want4(true);
 
-            let req = Rc::new(RefCell::new(req));
-
-            let call = Rc::new(RefCell::new(RpcCall::new(&item, req)));
+            let msg  = Rc::new(RefCell::new(msg));
+            let call = Rc::new(RefCell::new(RpcCall::new(&item, msg)));
             let len = bootstrap_nodes.len();
 
             let cloned_nodes = nodes.clone();
             let cloned_count = count.clone();
-            let bootstrap_time = self.bootstrap_time.clone();
             let cloned_dht = self.cloned();
+            let cloned_bootstrap_time = self.bootstrap_time.clone();
+
             call.borrow_mut().set_state_changed_fn(move |_call, _, _cur| {
                 match _cur {
                     rpccall::State::Responsed => {},
@@ -179,15 +179,15 @@ impl DHT {
                     _ => return,
                 }
 
-                if let Some(rsp) = _call.rsp() {
-                    if let Some(downcasted) = rsp.borrow().as_any().downcast_ref::<find_node_rsp::Message>() {
+                if let Some(msg) = _call.rsp() {
+                    if let Some(downcasted) = msg.borrow().as_any().downcast_ref::<find_node_rsp::Message>() {
                         cloned_nodes.borrow_mut().extend_from_slice(downcasted.nodes4().unwrap());
                     }
                 }
 
                 *cloned_count.borrow_mut() += 1;
                 if *cloned_count.borrow() == len {
-                    *bootstrap_time.borrow_mut() = SystemTime::now();
+                    *cloned_bootstrap_time.borrow_mut() = SystemTime::now();
                     cloned_dht.borrow().fill_home_bucket(cloned_nodes.borrow().as_slice());
                 }
             });
@@ -197,7 +197,7 @@ impl DHT {
     }
 
     fn fill_home_bucket(&self, nodes: &[NodeInfo]) {
-        if self.routing_table.borrow().size() == 0 &&
+        if self.rtable.borrow().size() == 0 &&
             nodes.is_empty() {
             return;
         }
@@ -211,7 +211,7 @@ impl DHT {
        }));
 
        let task = Rc::new(RefCell::new(task));
-       task.borrow_mut().cloned_self(task.clone());
+       task.borrow_mut().set_cloned(task.clone());
        self.taskman.borrow_mut().add(task);
     }
 
@@ -222,9 +222,9 @@ impl DHT {
 
         trace!("DHT/{} regularly update...", as_kind_name!(&self.addr));
         self.server().borrow_mut().update_reachability();
-        self.routing_table.borrow_mut().maintenance();
+        self.rtable.borrow_mut().maintenance();
 
-        if self.bootstrap_need || self.routing_table.borrow().size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
+        if self.bootstrap_need || self.rtable.borrow().size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
             as_millis!(self.bootstrap_time.borrow()) > constants::SELF_LOOKUP_INTERVAL {
 
             self.bootstrap_need = false;
@@ -234,27 +234,21 @@ impl DHT {
 
         if as_millis!(self.last_saved) > constants::ROUTING_TABLE_PERSIST_INTERVAL {
             info!("Persisting routing table ....");
-            self.routing_table.borrow_mut().save(self.persist_path.as_ref().unwrap().as_str());
+            self.rtable.borrow_mut().save(self.persist_path.as_ref().unwrap().as_str());
             self.last_saved = SystemTime::now();
         }
     }
 
     pub(crate) fn random_ping(&mut self) {
-        println!(">>>>> random_ping >>>>>");
-
         if self.server().borrow().number_of_acitve_calls() > 0 {
             return;
         }
 
-        let binding = self.routing_table.borrow();
-        let entry = match binding.random_node() {
-            Some(entry) => entry,
-            None => return,
-        };
-
-        let req = Rc::new(RefCell::new(ping_req::Message::new()));
-        let call = Rc::new(RefCell::new(RpcCall::new(&entry, req)));
-        self.server().borrow_mut().send_call(call);
+        if let Some(entry) = self.rtable.borrow().random_node() {
+            let msg  = Rc::new(RefCell::new(ping_req::Message::new()));
+            let call = Rc::new(RefCell::new(RpcCall::new(&entry, msg)));
+            self.server().borrow_mut().send_call(call);
+        }
     }
 
     pub(crate) fn random_lookup(&mut self) {
@@ -264,7 +258,7 @@ impl DHT {
         task.add_listener(Box::new(move |_|{}));
 
         let task = Rc::new(RefCell::new(task));
-        task.borrow_mut().cloned_self(task.clone());
+        task.borrow_mut().set_cloned(task.clone());
         self.taskman.borrow_mut().add(task);
     }
 
@@ -281,7 +275,7 @@ impl DHT {
         // Load neighboring nodes from cache storage if they exist.
         if let Some(path) = self.persist_path.as_ref() {
             info!("Loading routing table from [{}] ...", path);
-            self.routing_table.borrow_mut().load(path);
+            self.rtable.borrow_mut().load(path);
         }
 
         bootstrap_nodes.iter().for_each(|item| {
@@ -334,23 +328,21 @@ impl DHT {
         info!("{} initiated shutdown ...", as_kind_name!(&self.addr));
         info!("stopping servers ...");
 
-        self.cloned_dht = None;
+        self.cloned = None;
         self.running = false;
 
         info!("Persisting routing table on shutdown ...");
         if let Some(path) = self.persist_path.as_ref() {
-            self.routing_table.borrow_mut().save(path);
+            self.rtable.borrow_mut().save(path);
         }
         self.taskman.borrow_mut().cancel_all();
     }
 
     pub(crate) fn on_message(&mut self, msg: Rc<RefCell<dyn Msg>>) {
-        let kind = msg.borrow().kind();
-        let cloned = Rc::clone(&msg);
-        match kind {
-            Kind::Error => self.on_error(cloned),
-            Kind::Request => self.on_request(cloned),
-            Kind::Response => self.on_response(cloned),
+        match msg.borrow().kind() {
+            Kind::Error => self.on_error(msg.clone()),
+            Kind::Request => self.on_request(msg.clone()),
+            Kind::Response => self.on_response(msg.clone()),
         };
         self.received(msg);
     }
@@ -376,7 +368,7 @@ impl DHT {
         }
 
         let mut entry_found = false;
-        if let Some(old) = self.routing_table.borrow().bucket_entry(from_id) {
+        if let Some(old) = self.rtable.borrow().bucket_entry(from_id) {
             // this might happen if one node changes ports (broken NAT?) or IP address
             // ignore until routing table entry times out
             if old.node_addr() != self.socket_addr() {
@@ -396,7 +388,7 @@ impl DHT {
             let call = Rc::new(RefCell::new(RpcCall::new(&ni, req)));
             self.server().borrow_mut().send_call(call);
         }
-        self.routing_table.borrow_mut().put(new_entry);
+        self.rtable.borrow_mut().put(new_entry);
     }
 
     fn on_request(&mut self, msg: Rc<RefCell<dyn Msg>>) {
@@ -625,25 +617,25 @@ impl DHT {
         if !self.running || !self.server().borrow().is_reachable() {
             return;
         }
-        self.routing_table.borrow_mut().on_timeout(call.target_nodeid());
+        self.rtable.borrow_mut().on_timeout(call.target_nodeid());
     }
 
     pub(crate) fn on_send(&mut self, id: &Id) {
         if !self.running {
             return;
         }
-        self.routing_table.borrow_mut().on_send(id)
+        self.rtable.borrow_mut().on_send(id)
     }
 
     pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
     where F: Fn(Option<Box<NodeInfo>>) + 'static
     {
         let result = Rc::new(RefCell::new(
-            self.routing_table.borrow()
+            self.rtable.borrow()
                 .bucket_entry(id)
                 .map(|item| Box::new(item.inner_node())),
         ));
-        let cloned = Rc::clone(&result);
+        let cloned = result.clone();
 
         let mut task = NodeLookupTask::new(id, self.cloned());
         task.set_name("node-lookup");
@@ -669,7 +661,7 @@ impl DHT {
     where F: Fn(Option<Box<Value>>) + 'static,
     {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
-        let result_shadow = Rc::clone(&result);
+        let result_shadow = result.clone();
 
         let mut task = ValueLookupTask::new(self.cloned(), id);
         task.set_name("value-lookup");
@@ -732,7 +724,7 @@ impl DHT {
     where F: Fn(Vec<Box<Peer>>) + 'static
     {
         let result = Rc::new(RefCell::new(Vec::new()));
-        let cloned = Rc::clone(&result);
+        let cloned = result.clone();
 
         let mut task = PeerLookupTask::new(id, self.cloned());
         task.set_name("peer-lookup");

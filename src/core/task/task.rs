@@ -64,7 +64,7 @@ pub(crate) struct TaskData {
 
     nested: Option<Box<dyn Task>>,
 
-    ref_task: Option<Rc<RefCell<dyn Task>>>,
+    cloned: Option<Rc<RefCell<dyn Task>>>,
     dht: Rc<RefCell<DHT>>,
 }
 
@@ -81,7 +81,7 @@ impl TaskData {
             inflights: HashMap::new(),
             listeners: Vec::new(),
 
-            ref_task: None,
+            cloned: None,
             dht,
         }
     }
@@ -113,8 +113,8 @@ pub(crate) trait Task {
     fn call_timeout(&mut self, _: &RpcCall) {}
     fn as_any(&self) -> &dyn Any;
 
-    fn cloned_self(&mut self, task: Rc<RefCell<dyn Task>>) {
-        self.data_mut().ref_task = Some(task)
+    fn set_cloned(&mut self, task: Rc<RefCell<dyn Task>>) {
+        self.data_mut().cloned = Some(task.clone())
     }
 
     fn taskid(&self) -> i32 {
@@ -214,7 +214,7 @@ pub(crate) trait Task {
 
         let ni = Rc::new(cn.borrow().node().clone());
         let call = Rc::new(RefCell::new(RpcCall::new(&ni, msg)));
-        let task = Rc::clone(self.data().ref_task.as_ref().unwrap());
+        let task = Rc::clone(self.data().cloned.as_ref().unwrap());
         let server = self.data().dht.borrow().server();
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
             match prev_state {
