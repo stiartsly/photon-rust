@@ -23,7 +23,7 @@ pub(crate) enum State {
 
 pub(crate) struct RpcCall {
     hashid: i32,
-    target: Box<NodeInfo>,
+    target: Rc<NodeInfo>,
 
     req: Option<Rc<RefCell<dyn Msg>>>,
     rsp: Option<Rc<RefCell<dyn Msg>>>,
@@ -53,12 +53,12 @@ fn next_hashid() -> i32 {
 
 #[allow(dead_code)]
 impl RpcCall {
-    pub(crate) fn new(target: Box<NodeInfo>, req: Rc<RefCell<dyn Msg>>) -> Self {
+    pub(crate) fn new(target: &Rc<NodeInfo>, req: Rc<RefCell<dyn Msg>>) -> Self {
         req.borrow_mut().set_remote(target.id(), target.socket_addr());
 
         RpcCall {
             hashid: next_hashid(),
-            target,
+            target: target.clone(),
             req: Some(req),
             rsp: None,
 
@@ -81,8 +81,8 @@ impl RpcCall {
         self.target.id()
     }
 
-    pub(crate) fn target(&self) -> &Box<NodeInfo> {
-        &self.target
+    pub(crate) fn target(&self) -> Rc<NodeInfo> {
+        self.target.clone()
     }
 
     pub(crate) fn matches_id(&self) -> bool {

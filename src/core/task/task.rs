@@ -212,8 +212,8 @@ pub(crate) trait Task {
             return Ok(())
         }
 
-        let ni = Box::new(cn.borrow().node().clone());
-        let call = Rc::new(RefCell::new(RpcCall::new(ni, msg)));
+        let ni = Rc::new(cn.borrow().node().clone());
+        let call = Rc::new(RefCell::new(RpcCall::new(&ni, msg)));
         let task = Rc::clone(self.data().ref_task.as_ref().unwrap());
         let server = self.data().dht.borrow().server();
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {

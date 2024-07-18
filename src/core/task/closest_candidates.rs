@@ -102,7 +102,7 @@ impl ClosestCandidates {
             }
 
             filtered.push(
-                Rc::new(RefCell::new(CandidateNode::new(item, false)))
+                Rc::new(RefCell::new(CandidateNode::new(&Rc::new(item.clone()), false)))
             );
         }
 

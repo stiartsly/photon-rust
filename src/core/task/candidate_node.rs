@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::time::SystemTime;
 
 use crate::id::Id;
@@ -9,7 +10,7 @@ use crate::node_info::{
 
 #[derive(Clone)]
 pub(crate) struct CandidateNode {
-    ni: NodeInfo,
+    ni: Rc<NodeInfo>,
 
     last_sent: SystemTime,
     last_replied: SystemTime,
@@ -22,7 +23,7 @@ pub(crate) struct CandidateNode {
 }
 
 impl CandidateNode {
-    pub(crate) fn new(node: &NodeInfo, reachable: bool) -> Self {
+    pub(crate) fn new(node: &Rc<NodeInfo>, reachable: bool) -> Self {
         CandidateNode {
             ni: node.clone(),
             last_sent: SystemTime::UNIX_EPOCH,

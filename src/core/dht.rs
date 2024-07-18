@@ -63,7 +63,7 @@ pub(crate) struct DHT {
     running: bool,
 
     bootstrap_need: bool,
-    bootstrap_nodes: Vec<Box<NodeInfo>>,
+    bootstrap_nodes: Vec<Rc<NodeInfo>>,
     bootstrap_time: Rc<RefCell<SystemTime>>,
 
     routing_table: Rc<RefCell<RoutingTable>>,
@@ -141,13 +141,13 @@ impl DHT {
         Rc::clone(unwrap!(self.cloned_dht))
     }
 
-    pub(crate) fn add_bootstrap_node(&mut self, node: Box<NodeInfo>) {
-        self.bootstrap_nodes.push(node)
+    pub(crate) fn add_bootstrap_node(&mut self, node: &Rc<NodeInfo>) {
+        self.bootstrap_nodes.push(node.clone())
     }
 
     pub(crate) fn bootstrap(&mut self) {
         let bootstrap_nodes = match self.bootstrap_nodes.is_empty() {
-            true => self.routing_table.borrow().random_entries(8).unwrap(),
+            true => self.routing_table.borrow().random_nodes(8).unwrap(),
             false => self.bootstrap_nodes.clone()
         };
 
@@ -164,11 +164,12 @@ impl DHT {
 
             let req = Rc::new(RefCell::new(req));
 
-            let call = Rc::new(RefCell::new(RpcCall::new(item.clone(), req)));
+            let call = Rc::new(RefCell::new(RpcCall::new(&item, req)));
             let len = bootstrap_nodes.len();
-            let cloned_nodes = Rc::clone(&nodes);
-            let cloned_count = Rc::clone(&count);
-            let bootstrap_time = Rc::clone(&self.bootstrap_time);
+
+            let cloned_nodes = nodes.clone();
+            let cloned_count = count.clone();
+            let bootstrap_time = self.bootstrap_time.clone();
             let cloned_dht = self.cloned();
             call.borrow_mut().set_state_changed_fn(move |_call, _, _cur| {
                 match _cur {
@@ -210,8 +211,7 @@ impl DHT {
        }));
 
        let task = Rc::new(RefCell::new(task));
-       let cloned_task = Rc::clone(&task);
-       task.borrow_mut().cloned_self(cloned_task);
+       task.borrow_mut().cloned_self(task.clone());
        self.taskman.borrow_mut().add(task);
     }
 
@@ -247,13 +247,13 @@ impl DHT {
         }
 
         let binding = self.routing_table.borrow();
-        let entry = match binding.random_entry() {
+        let entry = match binding.random_node() {
             Some(entry) => entry,
             None => return,
         };
 
         let req = Rc::new(RefCell::new(ping_req::Message::new()));
-        let call = Rc::new(RefCell::new(RpcCall::new(entry.clone(), req)));
+        let call = Rc::new(RefCell::new(RpcCall::new(&entry, req)));
         self.server().borrow_mut().send_call(call);
     }
 
@@ -264,8 +264,7 @@ impl DHT {
         task.add_listener(Box::new(move |_|{}));
 
         let task = Rc::new(RefCell::new(task));
-        let task_cloned = Rc::clone(&task);
-        task.borrow_mut().cloned_self(task_cloned);
+        task.borrow_mut().cloned_self(task.clone());
         self.taskman.borrow_mut().add(task);
     }
 
@@ -286,7 +285,7 @@ impl DHT {
         }
 
         bootstrap_nodes.iter().for_each(|item| {
-            self.bootstrap_nodes.push(Box::new(item.clone()));
+            self.bootstrap_nodes.push(Rc::new(item.clone()));
         });
 
         info!("Starting DHT/{} on {}", as_kind_name!(&self.addr), self.addr);
@@ -294,7 +293,7 @@ impl DHT {
 
         // Task management.
         let scheduler = self.server().borrow().scheduler();
-        let taskman = Rc::clone(&self.taskman);
+        let taskman = self.taskman.clone();
         scheduler.borrow_mut().add(move || {
             taskman.borrow_mut().dequeue();
         }, 500, constants::DHT_UPDATE_INTERVAL);
@@ -393,8 +392,8 @@ impl DHT {
             new_entry.merge_request_time(call.borrow().sent_time().clone());
         } else if !entry_found {
             let req = Rc::new(RefCell::new(ping_req::Message::new()));
-            let ni = Box::new(new_entry.inner_node());
-            let call = Rc::new(RefCell::new(RpcCall::new(ni, req)));
+            let ni = Rc::new(new_entry.inner_node());
+            let call = Rc::new(RefCell::new(RpcCall::new(&ni, req)));
             self.server().borrow_mut().send_call(call);
         }
         self.routing_table.borrow_mut().put(new_entry);

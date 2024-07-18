@@ -123,11 +123,12 @@ impl NodeRunner {
         scheduler.borrow_mut().add(move || {
             let mut bcache = bcache.lock().unwrap();
             bcache.pop_all(|item| {
+                let node = Rc::new(item.clone());
                 if let Some(dht) = dht4.as_ref() {
-                    dht.borrow_mut().add_bootstrap_node(item.clone());
+                    dht.borrow_mut().add_bootstrap_node(&node);
                 }
                 if let Some(dht) = dht6.as_ref() {
-                    dht.borrow_mut().add_bootstrap_node(item.clone());
+                    dht.borrow_mut().add_bootstrap_node(&node);
                 }
             });
         }, 1, 60*10);

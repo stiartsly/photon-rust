@@ -100,7 +100,7 @@ pub(crate) trait LookupTask {
     }
 
     fn call_timeout(&mut self, call: &RpcCall) {
-        let mut candidate = Box::new(CandidateNode::new(call.target(), false));
+        let mut candidate = Box::new(CandidateNode::new(&call.target(), false));
         if candidate.unreachable() {
             self.remove_candidate(candidate.nodeid());
             return;

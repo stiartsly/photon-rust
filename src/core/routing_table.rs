@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::collections::BTreeMap;
 
 use crate::{
@@ -70,6 +71,16 @@ impl RoutingTable {
 
     pub(crate) fn random_entries(&self, _: i32) -> Option<Vec<Box<NodeInfo>>> {
         // TODO: unimplemented!()
+        Some(Vec::new())
+    }
+
+    pub(crate) fn random_node(&self) -> Option<Rc<NodeInfo>> {
+        // TODO:
+        None
+    }
+
+    pub(crate) fn random_nodes(&self, _: i32) -> Option<Vec<Rc<NodeInfo>>> {
+        // TODO:
         Some(Vec::new())
     }
 
