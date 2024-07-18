@@ -25,7 +25,7 @@ use crate::msg::msg::{Msg};
 
 #[allow(dead_code)]
 pub(crate) struct Server<> {
-    nodeid: Id,
+    nodeid: Rc<Id>,
     started: SystemTime,
 
     reachable: bool,
@@ -44,9 +44,9 @@ pub(crate) struct Server<> {
 
 // #[allow(dead_code)]
 impl Server {
-    pub fn new(nodeid: Id, ) -> Self {
+    pub fn new(input_nodeid: Rc<Id>) -> Self {
         Self {
-            nodeid,
+            nodeid: input_nodeid,
             started: SystemTime::UNIX_EPOCH,
 
             reachable: false,

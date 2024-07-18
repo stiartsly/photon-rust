@@ -135,7 +135,7 @@ impl Node {
             let mut binding = runner.borrow_mut();
 
             binding.set_cloned(&runner);
-            binding.set_bootstrap(cache);
+            binding.set_bootstrap(&cache);
             binding.start(cfg, keypair, quit);
         }));
 

@@ -19,49 +19,50 @@ use crate::{
     bootstrap_cache::BootstrapCache,
 };
 
-#[allow(dead_code)]
 pub(crate) struct NodeRunner {
-    nodeid: Id,
+    nodeid: Rc<Id>,
     storage_path: String,
 
     bootstrap_cache: Option<Arc<Mutex<BootstrapCache>>>,
 
     dht4: Option<Rc<RefCell<DHT>>>,
     dht6: Option<Rc<RefCell<DHT>>>,
-    dht_num: i32,
+    // dht_num: i32,
 
-    storage: Rc<RefCell<dyn DataStorage>>,
-    server: Rc<RefCell<Server>>,
     tokenman: Rc<RefCell<TokenManager>>,
+    storage:  Rc<RefCell<dyn DataStorage>>,
+    server:   Rc<RefCell<Server>>,
 
     cloned: Option<Rc<RefCell<NodeRunner>>>,
 }
 
 impl NodeRunner {
-    pub(crate) fn new(nodeid: Id, storage_path: String) -> Self {
+    pub(crate) fn new(input_nodeid: Id, input_storage_path: String) -> Self {
+        let id = Rc::new(input_nodeid);
+
         Self {
-            nodeid: nodeid.clone(),
-            storage_path: storage_path,
+            nodeid: id.clone(),
+            storage_path: input_storage_path,
 
             bootstrap_cache: None,
 
             dht4: None,
             dht6: None,
-            dht_num: 0,
+            // dht_num: 0,
 
             storage:    Rc::new(RefCell::new(SqliteStorage::new())),
             tokenman:   Rc::new(RefCell::new(TokenManager::new())),
-            server:     Rc::new(RefCell::new(Server::new(nodeid))),
+            server:     Rc::new(RefCell::new(Server::new(id.clone()))),
             cloned: None,
         }
     }
 
     pub(crate) fn set_cloned(&mut self, runner: &Rc<RefCell<NodeRunner>>) {
-        self.cloned = Some(Rc::clone(&runner));
+        self.cloned = Some(runner.clone());
     }
 
-    pub(crate) fn set_bootstrap(&mut self, cache: Arc<Mutex<BootstrapCache>>) {
-        self.bootstrap_cache = Some(cache)
+    pub(crate) fn set_bootstrap(&mut self, cache: &Arc<Mutex<BootstrapCache>>) {
+        self.bootstrap_cache = Some(cache.clone());
     }
 
     pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
@@ -91,6 +92,7 @@ impl NodeRunner {
 
             dht.set_server(&self.server);
             dht.set_storage(&self.storage);
+            dht.set_tokenman(&self.tokenman);
             dht.set_cloned(&dht4);
             dht.start(&cfg.bootstrap_nodes());
 
@@ -102,6 +104,7 @@ impl NodeRunner {
 
             dht.set_server(&self.server);
             dht.set_storage(&self.storage);
+            dht.set_tokenman(&self.tokenman);
             dht.set_cloned(&dht6);
             dht.start(&cfg.bootstrap_nodes());
 
@@ -114,9 +117,9 @@ impl NodeRunner {
             ctxts.borrow_mut().handle_expiration();
         }, 2000, constants::EXPIRED_CHECK_INTERVAL);
 
-        let bcache = Arc::clone(unwrap!(self.bootstrap_cache));
-        let dht4 = self.dht4.as_ref().map(|item| Rc::clone(&item));
-        let dht6 = self.dht6.as_ref().map(|item| Rc::clone(&item));
+        let bcache = unwrap!(self.bootstrap_cache).clone();
+        let dht4 = self.dht4.as_ref().map(|v| v.clone());
+        let dht6 = self.dht6.as_ref().map(|v| v.clone());
         scheduler.borrow_mut().add(move || {
             let mut bcache = bcache.lock().unwrap();
             bcache.pop_all(|item| {
@@ -129,13 +132,13 @@ impl NodeRunner {
             });
         }, 1, 60*10);
 
-        let result = self.server.borrow_mut().start(Rc::clone(self.dht4.as_ref().unwrap()));
+        let result = self.server.borrow_mut().start(unwrap!(self.dht4).clone());
         match result {
             Ok(_) => {
                 _ = server::run_loop(
-                    Rc::clone(&self.server),
-                    Rc::clone(self.dht4.as_ref().unwrap()),
-                    Arc::clone(&quit),
+                    self.server.clone(),
+                    unwrap!(self.dht4).clone(),
+                    quit.clone()
                 ).map_err(|err| {
                     error!("Unexpected error happened in the loop: {}.", err);
                 });
@@ -166,7 +169,5 @@ impl NodeRunner {
             info!("Started RPC server on ipv6 address: {}", dht6.borrow().socket_addr());
             self.dht6 = None;
         }
-
-
     }
 }
