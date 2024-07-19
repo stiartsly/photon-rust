@@ -93,7 +93,7 @@ impl ClosestCandidates {
         }
     }
 
-    pub(crate) fn add(&mut self, candidates: &[NodeInfo]) {
+    pub(crate) fn add(&mut self, candidates: &[Rc<NodeInfo>]) {
         let mut filtered = Vec::new();
         for item in candidates.iter() {
             if !self.dedup_ids.insert(item.id().clone()) ||
@@ -102,7 +102,7 @@ impl ClosestCandidates {
             }
 
             filtered.push(
-                Rc::new(RefCell::new(CandidateNode::new(&Rc::new(item.clone()), false)))
+                Rc::new(RefCell::new(CandidateNode::new(item, false)))
             );
         }
 

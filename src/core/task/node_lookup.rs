@@ -54,7 +54,7 @@ impl NodeLookupTask {
         self.want_token = token
     }
 
-    pub(crate) fn inject_candidates(&mut self, nodes: &[NodeInfo]) {
+    pub(crate) fn inject_candidates(&mut self, nodes: &[Rc<NodeInfo>]) {
         self.add_candidates(nodes)
     }
 

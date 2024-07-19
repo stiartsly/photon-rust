@@ -55,15 +55,16 @@ pub(crate) trait LookupTask {
         self.data_mut().closest_candidates.next()
     }
 
-    fn add_candidates(&mut self, nodes: &[NodeInfo]) {
+    fn add_candidates(&mut self, nodes: &[Rc<NodeInfo>]) {
         let mut candidates = Vec::new();
 
         let dht = self.dht();
+        let binding_dht = dht.borrow();
+
         for item in nodes.iter() {
             if is_bogon_addr!(item.socket_addr()) ||
-
-                dht.borrow().node_id() == item.id() ||
-                dht.borrow().socket_addr() == item.socket_addr() ||
+                binding_dht.node_id() == item.id() ||
+                binding_dht.socket_addr() == item.socket_addr() ||
                 self.data().closest_set.contains(item.id()) {
                 continue;
             }

@@ -166,7 +166,7 @@ impl KClosestNodes {
         // all kbucketEntry inside.
     }
 
-    pub(crate) fn as_nodes(&self) -> Vec<NodeInfo> {
-        self.entries.iter().map(|x| x.inner_node()).collect()
+    pub(crate) fn as_nodes(&self) -> Vec<Rc<NodeInfo>> {
+        self.entries.iter().map(|x| Rc::new(x.inner_node())).collect()
     }
 }

@@ -153,7 +153,7 @@ impl DHT {
 
         info!("DHT/{} bootstraping ....", as_kind_name!(&self.addr));
 
-        let nodes = Rc::new(RefCell::new(Vec::new())) as Rc<RefCell<Vec<NodeInfo>>>;
+        let nodes = Rc::new(RefCell::new(Vec::new())) as Rc<RefCell<Vec<Rc<NodeInfo>>>>;
         let count = Rc::new(RefCell::new(0));
 
         for item in bootstrap_nodes.iter() {
@@ -196,7 +196,7 @@ impl DHT {
         };
     }
 
-    fn fill_home_bucket(&self, nodes: &[NodeInfo]) {
+    fn fill_home_bucket(&self, nodes: &[Rc<NodeInfo>]) {
         if self.rtable.borrow().size() == 0 &&
             nodes.is_empty() {
             return;

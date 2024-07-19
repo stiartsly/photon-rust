@@ -92,7 +92,7 @@ impl Msg for Message {
                                 let mut nodes = Vec::new();
                                 for item in array.iter() {
                                     match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => nodes.push(ni),
+                                        Ok(ni) => nodes.push(Rc::new(ni)),
                                         Err(_) => return false
                                     };
                                 }
@@ -107,7 +107,7 @@ impl Msg for Message {
                                 let mut nodes = Vec::new();
                                 for item in array.iter() {
                                     match NodeInfo::try_from_cbor(item) {
-                                        Ok(ni) => nodes.push(ni),
+                                        Ok(ni) => nodes.push(Rc::new(ni)),
                                         Err(_) => return false
                                     };
                                 }
