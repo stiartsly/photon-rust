@@ -1,8 +1,12 @@
+use std::rc::Rc;
 use ciborium::Value as CVal;
-use crate::id::Id;
+use crate::{
+    unwrap,
+    id::Id
+};
 
 pub(crate) struct Data {
-    target: Option<Id>,
+    target: Option<Rc<Id>>,
     want4: bool,
     want6: bool,
     want_token: bool,
@@ -23,8 +27,8 @@ pub(crate) trait Msg {
     fn data(&self) -> &Data;
     fn data_mut(&mut self) -> &mut Data;
 
-    fn target(&self) -> &Id {
-        &self.data().target.as_ref().unwrap()
+    fn target(&self) -> Rc<Id> {
+        unwrap!(self.data().target).clone()
     }
 
     fn want4(&self) -> bool {
@@ -54,7 +58,7 @@ pub(crate) trait Msg {
         want
     }
 
-    fn with_target(&mut self, target: Id) {
+    fn with_target(&mut self, target: Rc<Id>) {
         self.data_mut().target = Some(target)
     }
 

@@ -159,7 +159,7 @@ impl DHT {
         for item in bootstrap_nodes.iter() {
             let mut msg = find_node_req::Message::new();
             msg.set_remote(item.id(), item.socket_addr());
-            msg.with_target(Id::random());
+            msg.with_target(Rc::new(Id::random()));
             msg.with_want4(true);
 
             let msg  = Rc::new(RefCell::new(msg));
@@ -252,7 +252,7 @@ impl DHT {
     }
 
     pub(crate) fn random_lookup(&mut self) {
-        let mut task = NodeLookupTask::new(&Id::random(), self.cloned());
+        let mut task = NodeLookupTask::new(&Rc::new(Id::random()), self.cloned());
         let name = format!("{}: random lookup", as_kind_name!(&self.addr));
         task.set_name(&name);
         task.add_listener(Box::new(move |_|{}));
@@ -462,7 +462,7 @@ impl DHT {
 
         if req.want_token() {
             let token = unwrap!(self.tokenman).borrow_mut().generate_token(
-                req.id(), req.origin(), req.target()
+                req.id(), req.origin(), req.target().as_ref()
             );
             rsp.populate_token(token);
         }
@@ -479,7 +479,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_value = false;
-        let value = unwrap!(self.storage).borrow().value(req.target());
+        let value = unwrap!(self.storage).borrow().value(req.target().as_ref());
         if value.is_some() {
             if req.seq() < 0
                 || value.as_ref().unwrap().sequence_number() < 0
@@ -502,7 +502,7 @@ impl DHT {
 
         if req.want_token() {
             let token = unwrap!(self.tokenman).borrow_mut().generate_token(
-                req.id(), req.origin(), req.target()
+                req.id(), req.origin(), req.target().as_ref(),
             );
             rsp.populate_token(token);
         }
@@ -548,7 +548,7 @@ impl DHT {
         rsp.set_txid(req.txid());
 
         let mut has_peers = false;
-        let peers = unwrap!(self.storage).borrow().peers(req.target(), 8);
+        let peers = unwrap!(self.storage).borrow().peers(req.target().as_ref(), 8);
         if !peers.is_empty() {
             has_peers = true;
             rsp.populate_peers(peers);
@@ -566,7 +566,7 @@ impl DHT {
 
         if req.want_token() {
             let token = unwrap!(self.tokenman).borrow_mut().generate_token(
-                req.id(), req.origin(), req.target()
+                req.id(), req.origin(), req.target().as_ref(),
             );
             rsp.populate_token(token);
         }
@@ -627,7 +627,7 @@ impl DHT {
         self.rtable.borrow_mut().on_send(id)
     }
 
-    pub(crate) fn find_node<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
+    pub(crate) fn find_node<F>(&self, id: &Rc<Id>, option: LookupOption, complete_fn: F)
     where F: Fn(Option<Box<NodeInfo>>) + 'static
     {
         let result = Rc::new(RefCell::new(
@@ -657,7 +657,7 @@ impl DHT {
         );
     }
 
-    pub(crate) fn find_value<F>(&self, id: &Id, option: LookupOption, complete_fn: F)
+    pub(crate) fn find_value<F>(&self, id: &Rc<Id>, option: LookupOption, complete_fn: F)
     where F: Fn(Option<Box<Value>>) + 'static,
     {
         let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
@@ -696,7 +696,7 @@ impl DHT {
     pub(crate) fn store_value<F>(&self, value: &Value, complete_fn: F)
     where F: Fn(Option<Vec<Box<NodeInfo>>>) + 'static
     {
-        let mut task = NodeLookupTask::new(&value.id(), self.cloned());
+        let mut task = NodeLookupTask::new(&Rc::new(value.id()), self.cloned());
         task.set_name("store-value");
         task.set_want_token(true);
         task.add_listener(Box::new(move |_task| {
@@ -720,7 +720,7 @@ impl DHT {
         );
     }
 
-    pub(crate) fn find_peer<F>(&self, id: &Id, expected: usize, option: LookupOption, complete_fn: F)
+    pub(crate) fn find_peer<F>(&self, id: &Rc<Id>, expected: usize, option: LookupOption, complete_fn: F)
     where F: Fn(Vec<Box<Peer>>) + 'static
     {
         let result = Rc::new(RefCell::new(Vec::new()));

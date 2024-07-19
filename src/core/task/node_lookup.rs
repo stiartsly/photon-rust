@@ -36,7 +36,7 @@ pub(crate) struct NodeLookupTask {
 }
 
 impl NodeLookupTask {
-    pub(crate) fn new(target: &Id, dht: Rc<RefCell<DHT>>) -> Self {
+    pub(crate) fn new(target: &Rc<Id>, dht: Rc<RefCell<DHT>>) -> Self {
         Self {
             base_data: TaskData::new(dht),
             lookup_data: LookupTaskData::new(target),
@@ -95,13 +95,13 @@ impl Task for NodeLookupTask {
         // possible distance from ourselves so we discover new things along
         // the (longer) path.
         let target = match self.bootstrap {
-            true => self.target().distance(&Id::max()),
+            true => Rc::new(self.target().distance(&Id::max())),
             false => self.target().clone()
         };
 
         // delay the filling of the todo list until we actually start the task
         let mut kclosest_nodes = KClosestNodes::with_filter(
-            &target,
+            target,
             Task::data(self).rt(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |e| e.is_eligible_for_nodes_list()
@@ -150,7 +150,7 @@ impl Task for NodeLookupTask {
                 }
 
                 for item in nodes.iter() {
-                    if item.id() == self.target() {
+                    if item.id() == self.target().as_ref() {
                         //(self.result_fn)(self.clone(), None)
                     }
                 }

@@ -11,8 +11,8 @@ use crate::{
     kbucket_entry::KBucketEntry,
 };
 
-pub(crate) struct KClosestNodes<'a> {
-    target: &'a Id,
+pub(crate) struct KClosestNodes {
+    target: Rc<Id>,
     rt: Rc<RefCell<RoutingTable>>,
 
     entries: Vec<Box<KBucketEntry>>,
@@ -22,8 +22,8 @@ pub(crate) struct KClosestNodes<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> KClosestNodes<'a> {
-    pub(crate) fn new(target: &'a Id,
+impl KClosestNodes {
+    pub(crate) fn new(target: Rc<Id>,
         rt: Rc<RefCell<RoutingTable>>,
         max_entries: usize
     ) -> Self {
@@ -35,8 +35,8 @@ impl<'a> KClosestNodes<'a> {
         )
     }
 
-    pub(crate) fn with_filter<F>(target: &'a Id,
-    rt: Rc<RefCell<RoutingTable>>,
+    pub(crate) fn with_filter<F>(target: Rc<Id>,
+        rt: Rc<RefCell<RoutingTable>>,
         max_entries: usize,
         filter: F
     ) -> Self where F: Fn(&Box<KBucketEntry>) -> bool + 'static {
@@ -49,8 +49,8 @@ impl<'a> KClosestNodes<'a> {
         }
     }
 
-    pub(crate) const fn target(&self) -> &Id {
-        &self.target
+    pub(crate) fn target(&self) -> Rc<Id> {
+        self.target.clone()
     }
 
     pub(crate) fn size(&self) -> usize {
@@ -60,11 +60,11 @@ impl<'a> KClosestNodes<'a> {
     pub(crate) fn fill(&mut self, include_itself: bool) {
         let mut idx = 0;
         let mut bucket = None;
-        let rt = Rc::clone(&self.rt);
+        let rt = self.rt.clone();
         let rt_binding = rt.borrow();
 
         for (k,v) in rt_binding.buckets().iter() {
-            if self.target > k {
+            if self.target.as_ref() > k {
                 bucket = Some(v);
                 break;
             }

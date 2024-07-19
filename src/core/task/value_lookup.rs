@@ -35,7 +35,7 @@ pub(crate) struct ValueLookupTask {
 }
 
 impl ValueLookupTask {
-    pub(crate) fn new(dht: Rc<RefCell<DHT>>, target: &Id) -> Self {
+    pub(crate) fn new(dht: Rc<RefCell<DHT>>, target: &Rc<Id>) -> Self {
         Self {
             base_data: TaskData::new(dht),
             lookup_data: LookupTaskData::new(target),
@@ -134,7 +134,7 @@ impl Task for ValueLookupTask {
 
             if let Some(value) = downcasted.value() {
                 let id = value.id();
-                if &id == LookupTask::target(self) {
+                if &id == LookupTask::target(self).as_ref() {
                     warn!("Responsed value id {} mismatched with expected {}", id, LookupTask::target(self));
                     return;
                 }

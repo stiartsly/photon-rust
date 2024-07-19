@@ -4,9 +4,10 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::time::SystemTime;
 use std::collections::HashMap;
-//use log::debug;
+use log::debug;
 
 use crate::{
+    unwrap,
     node_info::Convertible,
     rpccall::{RpcCall, State as CallState},
     dht::DHT,
@@ -73,7 +74,7 @@ impl TaskData {
     pub(crate) fn new(dht: Rc<RefCell<DHT>>) -> Self {
         Self {
             taskid: next_taskid(),
-            name: "N/A".to_string(),
+            name: "".to_string(),
             state: State::Initial,
             nested: None,
             started_time: SystemTime::UNIX_EPOCH,
@@ -97,7 +98,7 @@ impl TaskData {
     }
 
     pub(crate) fn dht(&self) -> Rc<RefCell<DHT>> {
-        Rc::clone(&self.dht)
+        self.dht.clone()
     }
 }
 
@@ -214,8 +215,9 @@ pub(crate) trait Task {
 
         let ni = Rc::new(cn.borrow().node().clone());
         let call = Rc::new(RefCell::new(RpcCall::new(&ni, msg)));
-        let task = Rc::clone(self.data().cloned.as_ref().unwrap());
+        let task = unwrap!(self.data().cloned).clone();
         let server = self.data().dht.borrow().server();
+
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
             match prev_state {
                 CallState::Sent => task.borrow_mut().call_sent(call),
@@ -233,8 +235,8 @@ pub(crate) trait Task {
                         task.borrow_mut().call_timeout(call);
                     }
                 },
-                CallState::Timeout => {}
-                _ => {}
+                CallState::Timeout => {panic!("bbbb");}
+                _ => {println!("task state {:?}", prev_state);}
             }
 
             //if need_update {
@@ -243,10 +245,14 @@ pub(crate) trait Task {
             println!("state change invoked: prev: {:?} >>>>>>>>>>", prev_state);
         });
 
-        (f)(Rc::clone(&call));
-        self.data_mut().inflights.insert(call.borrow().hash(), Rc::clone(&call));
+        (f)(call.clone());
+        self.data_mut().inflights.insert(call.borrow().hash(), call.clone());
 
-        // debug!("Task#{} sending call to {}{}", self.taskid(), node, msg.addr());
+        debug!("Task#{} sending call to {}{}",
+            self.taskid(),
+            self.data().dht.borrow().node_id(),
+            self.data().dht.borrow().socket_addr()
+        );
         server.borrow_mut().send_call(call);
 
         println!("send call>>>>>>");

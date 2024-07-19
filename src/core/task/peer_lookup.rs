@@ -33,7 +33,7 @@ pub(crate) struct PeerLookupTask {
 }
 
 impl PeerLookupTask {
-    pub(crate) fn new(target: &Id, dht: Rc<RefCell<DHT>>) -> Self {
+    pub(crate) fn new(target: &Rc<Id>, dht: Rc<RefCell<DHT>>) -> Self {
         Self {
             base_data: TaskData::new(dht),
             lookup_data: LookupTaskData::new(target),

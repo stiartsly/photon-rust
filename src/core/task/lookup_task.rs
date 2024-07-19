@@ -21,13 +21,13 @@ use super::{
 };
 
 pub(crate) struct LookupTaskData {
-    target: Id,
+    target: Rc<Id>,
     closest_set: ClosestSet,
     closest_candidates: ClosestCandidates,
 }
 
 impl LookupTaskData {
-    pub(crate) fn new(target: &Id) -> Self {
+    pub(crate) fn new(target: &Rc<Id>) -> Self {
         Self {
             target: target.clone(),
             closest_set: ClosestSet::new(target, constants::MAX_ENTRIES_PER_BUCKET),
@@ -43,8 +43,8 @@ pub(crate) trait LookupTask {
     fn data_mut(&mut self) -> &mut LookupTaskData;
     fn dht(&self) -> Rc<RefCell<DHT>>;
 
-    fn target(&self) -> &Id {
-        &self.data().target
+    fn target(&self) -> Rc<Id> {
+        self.data().target.clone()
     }
 
     fn candidate(&self, id: &Id) -> Option<Rc<RefCell<CandidateNode>>>  {

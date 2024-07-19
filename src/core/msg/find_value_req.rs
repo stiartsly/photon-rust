@@ -94,7 +94,7 @@ impl Msg for Message {
                                     Ok(id) => id,
                                     Err(_) => return false,
                                 };
-                                self.with_target(id)
+                                self.with_target(Rc::new(id))
                             },
                             "seq" => {
                                 let val = match val.as_integer() {
