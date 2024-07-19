@@ -15,7 +15,8 @@ pub(crate) trait Reachable {
 }
 
 pub(crate) trait Convertible {
-    fn node(&self) -> &NodeInfo;
+    fn as_node(&self) -> &NodeInfo;
+    fn to_node(&self) -> NodeInfo;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -140,9 +141,14 @@ impl Reachable for NodeInfo {
 }
 
 impl Convertible for NodeInfo {
-    fn node(&self) -> &NodeInfo {
-        self
+    fn as_node(&self) -> &NodeInfo {
+        &self
     }
+
+    fn to_node(&self) -> NodeInfo {
+        self.clone()
+    }
+
 }
 
 impl fmt::Display for NodeInfo {

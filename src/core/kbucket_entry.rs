@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 
@@ -16,7 +17,7 @@ use crate::{
  */
 #[derive(Clone, Debug)]
 pub(crate) struct KBucketEntry {
-    ni: NodeInfo,
+    ni: Rc<NodeInfo>,
 
     created: SystemTime,
     last_seen: SystemTime,
@@ -27,9 +28,15 @@ pub(crate) struct KBucketEntry {
 }
 
 impl KBucketEntry {
-    pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
+    pub(crate) fn new(id: &Id, addr: &SocketAddr, ver: i32) -> Self {
+        let mut ni = NodeInfo::new(id, addr);
+        ni.set_version(ver);
+        Self::from(ni)
+    }
+
+    pub(crate) fn from(ni: NodeInfo) -> Self {
         Self {
-            ni: NodeInfo::new(id, addr),
+            ni: Rc::new(ni),
             created: SystemTime::UNIX_EPOCH,
             last_seen: SystemTime::UNIX_EPOCH,
             last_sent: SystemTime::UNIX_EPOCH,
@@ -46,12 +53,8 @@ impl KBucketEntry {
         self.ni.socket_addr()
     }
 
-    pub(crate) fn inner_node(&self) -> NodeInfo {
+    pub(crate) fn ni(&self) -> Rc<NodeInfo> {
         self.ni.clone()
-    }
-
-    pub(crate) fn set_version(&mut self, ver: i32) {
-        self.ni.set_version(ver)
     }
 
     pub(crate) const fn failed_requests(&self) -> i32 {
@@ -169,8 +172,11 @@ impl Reachable for KBucketEntry {
 }
 
 impl Convertible for KBucketEntry {
-    fn node(&self) -> &NodeInfo {
-        &self.ni
+    fn as_node(&self) -> &NodeInfo {
+        self.ni.as_ref()
+    }
+    fn to_node(&self) -> NodeInfo {
+        self.ni.as_ref().clone()
     }
 }
 

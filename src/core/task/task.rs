@@ -213,7 +213,7 @@ pub(crate) trait Task {
             return Ok(())
         }
 
-        let ni = Rc::new(cn.borrow().node().clone());
+        let ni = Rc::new(cn.borrow().to_node());
         let call = Rc::new(RefCell::new(RpcCall::new(&ni, msg)));
         let task = unwrap!(self.data().cloned).clone();
         let server = self.data().dht.borrow().server();

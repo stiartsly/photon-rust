@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub(crate) struct RoutingTable {
-    node: NodeInfo,
+    ni: Rc<NodeInfo>,
     buckets: BTreeMap<Id, Box<KBucket>>,
 }
 
@@ -25,11 +25,14 @@ impl RoutingTable {
             Box::new(KBucket::new(prefix, true))
         );
 
-        Self {node, buckets}
+        Self {
+            ni: Rc::new(node),
+            buckets
+        }
     }
 
-    pub(crate) fn node(&self) -> &NodeInfo {
-        &self.node
+    pub(crate) fn ni(&self) -> Rc<NodeInfo> {
+        self.ni.clone()
     }
 
     pub(crate) fn buckets(&self) -> &BTreeMap<Id, Box<KBucket>> {
@@ -85,7 +88,7 @@ impl RoutingTable {
     }
 
     fn is_home_bucket(&self, prefix: &Prefix) -> bool {
-        prefix.is_prefix_of(self.node().id())
+        prefix.is_prefix_of(self.ni.id())
     }
 
     pub(crate) fn put(&mut self, entry: Box<KBucketEntry>) {
@@ -122,7 +125,7 @@ impl RoutingTable {
         let ph = prefix.split_branch(true);
 
         let home_bucket = |prefix: &Prefix| -> bool {
-            prefix.is_prefix_of(self.node().id())
+            prefix.is_prefix_of(self.ni().id())
         };
 
         let mut low  = Box::new(KBucket::new(pl.clone(), home_bucket(&pl)));

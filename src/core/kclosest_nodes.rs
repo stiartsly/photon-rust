@@ -61,9 +61,9 @@ impl KClosestNodes {
         let mut idx = 0;
         let mut bucket = None;
         let rt = self.rt.clone();
-        let rt_binding = rt.borrow();
+        let binding_rt = rt.borrow();
 
-        for (k,v) in rt_binding.buckets().iter() {
+        for (k,v) in binding_rt.buckets().iter() {
             if self.target.as_ref() > k {
                 bucket = Some(v);
                 break;
@@ -74,7 +74,7 @@ impl KClosestNodes {
 
         let mut low  = idx;
         let mut high = idx;
-        let mut iter = rt_binding.buckets().iter();
+        let mut iter = binding_rt.buckets().iter();
         while self.entries.len() < self.capacity {
             let mut low_bucket  = None;
             let mut high_bucket = None;
@@ -125,8 +125,9 @@ impl KClosestNodes {
 
         if self.entries.len() < self.capacity && include_itself {
             let bucket_entry = Box::new(KBucketEntry::new(
-                rt_binding.node().id(),
-                rt_binding.node().socket_addr(),
+                binding_rt.ni().id(),
+                binding_rt.ni().socket_addr(),
+                binding_rt.ni().version(),
             ));
             self.entries.push(bucket_entry);
         }
@@ -167,6 +168,6 @@ impl KClosestNodes {
     }
 
     pub(crate) fn as_nodes(&self) -> Vec<Rc<NodeInfo>> {
-        self.entries.iter().map(|x| Rc::new(x.inner_node())).collect()
+        self.entries.iter().map(|v| v.ni()).collect()
     }
 }

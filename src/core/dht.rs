@@ -17,6 +17,7 @@ use crate::{
     NodeInfo,
     Peer,
     Value,
+    node_info::Convertible,
     rpccall::{self, RpcCall},
     lookup_option::LookupOption,
     routing_table::RoutingTable,
@@ -377,14 +378,13 @@ impl DHT {
             entry_found = true;
         }
 
-        let mut new_entry = Box::new(KBucketEntry::new(msg.id(), from_addr));
+        let mut new_entry = Box::new(KBucketEntry::new(msg.id(), from_addr, msg.ver()));
         if let Some(call) = call {
-            new_entry.set_version(msg.ver());
             new_entry.signal_response();
             new_entry.merge_request_time(call.borrow().sent_time().clone());
         } else if !entry_found {
             let req = Rc::new(RefCell::new(ping_req::Message::new()));
-            let ni = Rc::new(new_entry.inner_node());
+            let ni = new_entry.ni();
             let call = Rc::new(RefCell::new(RpcCall::new(&ni, req)));
             self.server().borrow_mut().send_call(call);
         }
@@ -633,7 +633,7 @@ impl DHT {
         let result = Rc::new(RefCell::new(
             self.rtable.borrow()
                 .bucket_entry(id)
-                .map(|item| Box::new(item.inner_node())),
+                .map(|v| Box::new(v.to_node()))
         ));
         let cloned = result.clone();
 

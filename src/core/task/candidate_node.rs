@@ -48,6 +48,10 @@ impl CandidateNode {
         self.last_sent = SystemTime::UNIX_EPOCH;
     }
 
+    // pub(crate) fn ni(&self) -> Rc<NodeInfo> {
+    //    self.ni.clone()
+    // }
+
     pub(crate) fn pinged(&self) -> i32 {
         self.pinged
     }
@@ -88,7 +92,11 @@ impl Reachable for CandidateNode {
 }
 
 impl Convertible for CandidateNode {
-    fn node(&self) -> &NodeInfo {
-        &self.ni
+    fn as_node(&self) -> &NodeInfo {
+        self.ni.as_ref()
+    }
+
+    fn to_node(&self) -> NodeInfo {
+        self.ni.as_ref().clone()
     }
 }

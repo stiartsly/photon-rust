@@ -30,7 +30,9 @@ impl LookupTaskData {
     pub(crate) fn new(target: &Rc<Id>) -> Self {
         Self {
             target: target.clone(),
-            closest_set: ClosestSet::new(target, constants::MAX_ENTRIES_PER_BUCKET),
+            closest_set: ClosestSet::new(
+                target, constants::MAX_ENTRIES_PER_BUCKET
+            ),
             closest_candidates: ClosestCandidates::new(
                 target, 3 * constants::MAX_ENTRIES_PER_BUCKET,
             )
