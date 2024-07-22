@@ -69,9 +69,9 @@ impl Task for ValueAnnounceTask {
 
             let req = Rc::new(RefCell::new(store_value_req::Message::new()));
 
-            let todo = Rc::clone(&self.todo);
+            let cloned_todo = self.todo.clone();
             if let Err(err) = self.send_call(cn, req, Box::new(move|_| {
-                todo.borrow_mut().pop_front();
+                cloned_todo.borrow_mut().pop_front();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
             }
