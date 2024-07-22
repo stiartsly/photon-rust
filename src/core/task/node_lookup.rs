@@ -6,8 +6,8 @@ use log::error;
 
 use crate::{
     constants,
-    id::Id,
-    node_info::NodeInfo,
+    Id,
+    NodeInfo,
     rpccall::RpcCall,
     dht::DHT,
     kclosest_nodes::KClosestNodes,
@@ -114,7 +114,7 @@ impl Task for NodeLookupTask {
     fn update(&mut self) {
         while self.can_request() {
             let next = match LookupTask::next_candidate(self) {
-                Some(next) => Rc::clone(&next),
+                Some(next) => next.clone(),
                 None => { break },
             };
 
@@ -123,8 +123,8 @@ impl Task for NodeLookupTask {
             req.with_want4(true);
             req.with_want6(false);
 
-            let cloned_req = Rc::new(RefCell::new(req));
-            let cloned_next = Rc::clone(&next);
+            let cloned_req  = Rc::new(RefCell::new(req));
+            let cloned_next = next.clone();
             if let Err(err) = self.send_call(next, cloned_req, Box::new(move|_| {
                 cloned_next.borrow_mut().set_sent();
             })) {

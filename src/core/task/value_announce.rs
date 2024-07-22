@@ -1,8 +1,14 @@
+use std::fmt;
 use std::any::Any;
 use std::collections::LinkedList;
 use std::rc::Rc;
 use std::cell::RefCell;
 use log::error;
+
+use crate::{
+    Value,
+    dht::DHT,
+};
 
 use super::{
     closest_set::ClosestSet,
@@ -12,11 +18,6 @@ use super::{
 
 use crate::msg::{
     store_value_req
-};
-
-use crate::{
-    value::Value,
-    dht::DHT,
 };
 
 #[allow(dead_code)]
@@ -60,11 +61,10 @@ impl Task for ValueAnnounceTask {
         while self.can_request() {
             let cn = {
                 let todo = self.todo.borrow();
-                let cn = match todo.front() {
-                    Some(cn) => cn,
+                match todo.front() {
+                    Some(cn) => cn.clone(),
                     None => break,
-                };
-                Rc::clone(&cn)
+                }
             };
 
             let req = Rc::new(RefCell::new(store_value_req::Message::new()));
@@ -76,5 +76,11 @@ impl Task for ValueAnnounceTask {
                error!("Error on sending 'findNode' message: {:?}", err);
             }
         }
+    }
+}
+
+impl fmt::Display for ValueAnnounceTask {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
     }
 }

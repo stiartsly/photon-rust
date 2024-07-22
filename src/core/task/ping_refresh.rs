@@ -1,3 +1,4 @@
+use std::fmt;
 use std::any::Any;
 use std::collections::LinkedList;
 use std::rc::Rc;
@@ -63,20 +64,18 @@ impl Task for PingRefreshTask {
             let cn = {
                 let todo = self.todo.borrow();
                 let cn = match todo.front() {
-                    Some(cn) => cn,
+                    Some(cn) => cn.clone(),
                     None => break,
                 };
 
                 if !self.check_all && !cn.borrow().needs_ping() {
                     self.todo.borrow_mut().pop_front();
                 }
-
-                Rc::clone(&cn)
+                cn
             };
 
             let req = Rc::new(RefCell::new(ping_req::Message::new()));
-
-            let cloned_todo = Rc::clone(&self.todo);
+            let cloned_todo = self.todo.clone();
             if let Err(err) = self.send_call(cn, req, Box::new(move|_| {
                 cloned_todo.borrow_mut().pop_front();
             })) {
@@ -96,5 +95,11 @@ impl Task for PingRefreshTask {
         let node_id = call.target_nodeid();
         debug!("Removing invalid entry from routingtable");
         Task::data(self).rt().borrow_mut().remove(node_id);
+    }
+}
+
+impl fmt::Display for PingRefreshTask {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
     }
 }

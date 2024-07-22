@@ -6,8 +6,8 @@ use log::{warn, error};
 
 use crate::{
     constants,
-    id::Id,
-    value::Value,
+    Id,
+    Value,
     dht::DHT,
     rpccall::RpcCall,
     kclosest_nodes::KClosestNodes,
@@ -98,7 +98,7 @@ impl Task for ValueLookupTask {
     fn update(&mut self) {
         while self.can_request() {
             let next = match LookupTask::next_candidate(self) {
-                Some(next) => Rc::clone(&next),
+                Some(next) => next.clone(),
                 None => { break },
             };
 
@@ -111,8 +111,8 @@ impl Task for ValueLookupTask {
                 req.with_seq(self.expected_seq);
             }
 
-            let cloned_next = Rc::clone(&next);
             let cloned_req = Rc::new(RefCell::new(req));
+            let cloned_next = next.clone();
             if let Err(err) = self.send_call(next, cloned_req, Box::new(move|_| {
                 cloned_next.borrow_mut().set_sent();
             })) {

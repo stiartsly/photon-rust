@@ -17,7 +17,7 @@ pub(crate) struct TaskManager {
 impl TaskManager {
     pub(crate) fn new() -> Self {
         Self {
-            queued: LinkedList::new(),
+            queued : LinkedList::new(),
             running: LinkedList::new(),
             canceling: false,
         }

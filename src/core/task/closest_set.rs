@@ -1,13 +1,16 @@
-use std::collections::HashMap;
-use std::collections::LinkedList;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::collections::LinkedList;
 
-use crate::id::{distance, Id};
-use super::candidate_node::CandidateNode;
+use crate::{
+    Id,
+    id::distance,
+    task::candidate_node::CandidateNode
+};
 
 pub(crate) struct ClosestSet {
-    target: Id,
+    target: Rc<Id>,
     capacity: usize,
 
     closest: HashMap<Id, Rc<RefCell<CandidateNode>>>,
@@ -18,7 +21,7 @@ pub(crate) struct ClosestSet {
 
 #[allow(dead_code)]
 impl ClosestSet {
-    pub(crate) fn new(target: &Id, capacity: usize) -> Self {
+    pub(crate) fn new(target: &Rc<Id>, capacity: usize) -> Self {
         Self {
             target: target.clone(),
             capacity,
@@ -37,7 +40,7 @@ impl ClosestSet {
     }
 
     pub(crate) fn candidate_node(&self, id: &Id) -> Option<Rc<RefCell<CandidateNode>>> {
-        self.closest.get(id).map(|item | Rc::clone(&item))
+        self.closest.get(id).map(|item | item.clone())
     }
 
     pub(crate) fn contains(&self, id: &Id) -> bool {
@@ -46,7 +49,7 @@ impl ClosestSet {
 
     pub(crate) fn add(&mut self, candidate: Rc<RefCell<CandidateNode>>) {
         let nodeid = candidate.borrow().nodeid().clone();
-        self.closest.insert(
+        _ = self.closest.insert(
             nodeid.clone(),
             candidate
         );

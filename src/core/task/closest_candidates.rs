@@ -5,13 +5,16 @@ use std::cmp::Ordering;
 use std::vec::Vec;
 use std::collections::HashSet;
 
-use crate::id::{distance, Id};
-use crate::node_info::NodeInfo;
-use super::candidate_node::CandidateNode;
+use crate::{
+    Id,
+    NodeInfo,
+    id::distance,
+    task::candidate_node::CandidateNode
+};
 
 #[derive(Clone)]
 pub(crate) struct ClosestCandidates {
-    target: Id,
+    target: Rc<Id>,
     capacity: usize,
     dedup_ids: HashSet<Id>,
     dedup_addrs: HashSet<SocketAddr>,
@@ -20,7 +23,7 @@ pub(crate) struct ClosestCandidates {
 
 #[allow(dead_code)]
 impl ClosestCandidates {
-    pub(crate) fn new(target: &Id, capacity: usize) -> Self {
+    pub(crate) fn new(target: &Rc<Id>, capacity: usize) -> Self {
         Self {
             target: target.clone(),
             capacity,
@@ -42,7 +45,7 @@ impl ClosestCandidates {
         let mut cn = None;
         for item in self.closest.iter() {
             if item.borrow().nodeid() == id {
-                cn = Some(Rc::clone(&item));
+                cn = Some(item.clone());
                 break;
             }
         }
@@ -71,7 +74,7 @@ impl ClosestCandidates {
         let mut cns = Vec::with_capacity(self.closest.len());
         self.closest.iter().for_each(|item| {
             if item.borrow().is_eligible() {
-                cns.push(Rc::clone(&item));
+                cns.push(item.clone());
             }
         });
 

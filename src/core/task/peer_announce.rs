@@ -1,3 +1,4 @@
+use std::fmt;
 use std::any::Any;
 use std::collections::LinkedList;
 use std::rc::Rc;
@@ -5,7 +6,7 @@ use std::cell::RefCell;
 use log::error;
 
 use crate::{
-    peer::Peer,
+    Peer,
     dht::DHT,
 };
 
@@ -24,12 +25,12 @@ pub(crate) struct PeerAnnounceTask {
     base_data: TaskData,
 
     todo: Rc<RefCell<LinkedList<Rc<RefCell<CandidateNode>>>>>,
-    peer: Option<Box<Peer>>,
+    peer: Option<Rc<Peer>>,
 }
 
 #[allow(dead_code)]
 impl PeerAnnounceTask {
-    pub(crate) fn new(dht: Rc<RefCell<DHT>>, closest: &ClosestSet, peer: &Peer) -> Self {
+    pub(crate) fn new(dht: Rc<RefCell<DHT>>, closest: &ClosestSet, peer: &Rc<Peer>) -> Self {
         let mut todo = LinkedList::new();
         for item in closest.entries() {
             todo.push_back(item);
@@ -38,7 +39,7 @@ impl PeerAnnounceTask {
         Self {
             base_data: TaskData::new(dht),
             todo: Rc::new(RefCell::new(todo)),
-            peer: Some(Box::new(peer.clone())),
+            peer: Some(peer.clone()),
         }
     }
 }
@@ -60,21 +61,26 @@ impl Task for PeerAnnounceTask {
         while self.can_request() {
             let cn = {
                 let todo = self.todo.borrow();
-                let cn = match todo.front() {
-                    Some(cn) => cn,
+                match todo.front() {
+                    Some(cn) => cn.clone(),
                     None => break,
-                };
-                Rc::clone(&cn)
+                }
             };
 
             let req = Rc::new(RefCell::new(announce_peer_req::Message::new()));
 
-            let cloned_todo = Rc::clone(&self.todo);
+            let cloned_todo = self.todo.clone();
             if let Err(err) = self.send_call(cn, req, Box::new(move|_| {
                 cloned_todo.borrow_mut().pop_front();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
             }
         }
+    }
+}
+
+impl fmt::Display for PeerAnnounceTask {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
     }
 }

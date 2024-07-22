@@ -4,8 +4,9 @@ use std::cell::RefCell;
 use crate::{
     is_bogon_addr,
     constants,
-    id::Id,
-    node_info::{NodeInfo, Reachable},
+    Id,
+    NodeInfo,
+    node_info::Reachable,
     rpccall::RpcCall,
     dht::DHT,
 };

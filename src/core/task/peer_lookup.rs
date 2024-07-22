@@ -6,8 +6,8 @@ use log::error;
 
 use crate::{
     constants,
-    id::Id,
-    peer::Peer,
+    Id,
+    Peer,
     dht::DHT,
     rpccall::RpcCall,
     kclosest_nodes::KClosestNodes,
@@ -43,7 +43,7 @@ impl PeerLookupTask {
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
     where
-        F: FnMut(&mut Box<dyn Task>, &mut Vec<Box<Peer>>) + 'static,
+        F: FnMut(&mut Box<dyn Task>, &mut Vec<Box<Peer>>) + 'static
     {
         self.result_fn = Box::new(f);
     }
@@ -91,17 +91,18 @@ impl Task for PeerLookupTask {
     fn update(&mut self) {
         while self.can_request() {
             let next = match LookupTask::next_candidate(self) {
-                Some(next) => Rc::clone(&next),
+                Some(next) => next.clone(),
                 None => { break },
             };
 
             let mut req = find_peer_req::Message::new();
-            req.with_target(self.target().clone());
+            req.with_target(self.target());
             req.with_want4(true);
             req.with_want6(false);
 
-            let cloned_text = Rc::clone(&next);
             let cloned_req = Rc::new(RefCell::new(req));
+            let cloned_text = next.clone();
+
             if let Err(err) = self.send_call(next, cloned_req, Box::new(move|_| {
                 cloned_text.borrow_mut().set_sent();
             })) {

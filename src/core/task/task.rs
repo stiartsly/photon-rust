@@ -254,8 +254,12 @@ pub(crate) trait Task {
             self.data().dht.borrow().socket_addr()
         );
         server.borrow_mut().send_call(call);
-
-        println!("send call>>>>>>");
         Ok(())
+    }
+}
+
+impl fmt::Display for dyn Task {
+    fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unimplemented!()
     }
 }
