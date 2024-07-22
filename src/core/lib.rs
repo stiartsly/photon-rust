@@ -32,6 +32,7 @@ pub mod peer;
 pub mod prefix;
 
 pub use self::id::Id;
+pub use self::prefix::Prefix;
 pub use self::error::Error;
 pub use self::peer::Peer;
 pub use self::node_info::NodeInfo;

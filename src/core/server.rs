@@ -18,10 +18,8 @@ use crate::{
     error::Error,
     rpccall::RpcCall,
     scheduler::{self, Scheduler},
-    msg::msg,
+    msg::msg::{self, Msg}
 };
-
-use crate::msg::msg::{Msg};
 
 #[allow(dead_code)]
 pub(crate) struct Server<> {
@@ -63,7 +61,7 @@ impl Server {
     }
 
     pub(crate) fn scheduler(&self) -> Rc<RefCell<Scheduler>> {
-        Rc::clone(&self.scheduler)
+        self.scheduler.clone()
     }
 
     pub(crate) fn nodeid(&self) -> &Id {
@@ -75,7 +73,7 @@ impl Server {
     }
 
     pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
-        self.dht4 = Some(Rc::clone(&dht4));
+        self.dht4 = Some(dht4.clone());
 
         if let Some(dht4) = self.dht4.as_ref() {
             info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
@@ -116,9 +114,9 @@ impl Server {
         if let Some(call) = msg.borrow().associated_call() {
             call.borrow_mut().send();
 
-            let call = Rc::clone(&call);
+            let cloned_call = call.clone();
             self.scheduler.borrow_mut().add(move || {
-               call.borrow_mut().check_timeout()
+                cloned_call.borrow_mut().check_timeout()
             }, 2000, 10);
         }
 
@@ -135,7 +133,7 @@ impl Server {
         });
         drop(binding);
 
-        self.calls.insert(hash, Rc::clone(&call));
+        self.calls.insert(hash, call.clone());
 
         let req = match call.borrow().req() {
             Some(msg) => msg,
@@ -144,7 +142,7 @@ impl Server {
 
         let mut binding = req.borrow_mut();
         binding.set_txid(hash);
-        binding.with_associated_call(Rc::clone(&call));
+        binding.with_associated_call(call.clone());
         drop(binding);
 
         self.send_msg(req);
@@ -157,7 +155,7 @@ impl Server {
             None => return,
         };
 
-        msg.borrow_mut().with_associated_call(Rc::clone(&call));
+        msg.borrow_mut().with_associated_call(call.clone());
         call.borrow_mut().responsed(msg);
     }
 }
@@ -177,7 +175,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
 
     rt.block_on(async move {
         let sock4 = UdpSocket::bind(dht4.borrow().socket_addr()).await?;
-        let queue4 = Rc::clone(&server.borrow_mut().queue4);
+        let queue4 = server.borrow_mut().queue4.clone();
 
         let mut interval = interval_at(
             server.borrow().scheduler.borrow().next_time(),
@@ -185,16 +183,16 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         );
         while running {
             tokio::select! {
-                data = read_socket(&sock4, Rc::clone(&buffer), move |_, buf| {
+                data = read_socket(&sock4, buffer.clone(), move |_, buf| {
                    Ok(buf.to_vec())
                 }) => {
                     if let Ok(Some(msg)) = data {
-                        server.borrow_mut().responsed(Rc::clone(&msg));
+                        server.borrow_mut().responsed(msg.clone());
                         dht4.borrow_mut().on_message(msg)
                     }
                 }
 
-                _ = write_socket(&sock4, Rc::clone(&dht4), Rc::clone(&queue4),  move |_, _| {
+                _ = write_socket(&sock4, dht4.clone(), queue4.clone(), move |_, _| {
                     Some(Vec::new() as Vec<u8>)
                 }) => {
                     //println!("Write data to ipv4 socket");
@@ -287,7 +285,7 @@ where
         // }, 2000, 10);
     }
 
-    let serialized = msg::serialize(Rc::clone(&msg));
+    let serialized = msg::serialize(msg.clone());
     let mut buf = Vec::new() as Vec<u8>;
 
     buf.extend_from_slice(msg.borrow().id().as_bytes());

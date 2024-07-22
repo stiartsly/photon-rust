@@ -1,11 +1,16 @@
 use std::fmt;
-use std::net::{SocketAddr, IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{
+    SocketAddr,
+    IpAddr,
+    Ipv4Addr,
+    Ipv6Addr
+};
 use ciborium::Value;
 
 use crate::{
     version,
-    error::Error,
-    id::Id
+    Id,
+    error::Error
 };
 
 pub(crate) trait Reachable {

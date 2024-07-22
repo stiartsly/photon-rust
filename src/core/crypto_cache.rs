@@ -3,9 +3,9 @@ use std::time::SystemTime;
 
 use crate::{
     as_millis,
+    Id,
     cryptobox::{CryptoBox, KeyPair, Nonce, PublicKey},
     error::Error,
-    id::Id,
 };
 
 pub(crate) const EXPIRED_CHECK_INTERVAL: u64 = 60 * 1000;

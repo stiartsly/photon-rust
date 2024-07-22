@@ -1,13 +1,24 @@
-use libsodium_sys::{
-    crypto_sign_BYTES, crypto_sign_PUBLICKEYBYTES, crypto_sign_SECRETKEYBYTES,
-    crypto_sign_SEEDBYTES, crypto_sign_detached, crypto_sign_ed25519_sk_to_pk,
-    crypto_sign_final_create, crypto_sign_final_verify, crypto_sign_init, crypto_sign_keypair,
-    crypto_sign_seed_keypair, crypto_sign_state, crypto_sign_update, crypto_sign_verify_detached,
-    randombytes_buf,
-};
 use static_assertions::const_assert;
 use std::fmt;
 use std::mem;
+
+use libsodium_sys::{
+    crypto_sign_BYTES,
+    crypto_sign_PUBLICKEYBYTES,
+    crypto_sign_SECRETKEYBYTES,
+    crypto_sign_SEEDBYTES,
+    crypto_sign_detached,
+    crypto_sign_ed25519_sk_to_pk,
+    crypto_sign_final_create,
+    crypto_sign_final_verify,
+    crypto_sign_init,
+    crypto_sign_keypair,
+    crypto_sign_seed_keypair,
+    crypto_sign_state,
+    crypto_sign_update,
+    crypto_sign_verify_detached,
+    randombytes_buf,
+};
 
 use crate::{as_uchar_ptr, as_uchar_ptr_mut};
 

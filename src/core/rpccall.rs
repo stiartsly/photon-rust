@@ -5,8 +5,8 @@ use std::time::SystemTime;
 use crate::{
     unwrap, as_millis,
     constants,
-    id::Id,
-    node_info::NodeInfo,
+    Id,
+    NodeInfo,
     msg::msg::{self, Msg}
 };
 

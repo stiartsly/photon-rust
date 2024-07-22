@@ -1,9 +1,12 @@
-use sha2::{Digest, Sha256};
 use std::net::{IpAddr, SocketAddr};
 use std::time::SystemTime;
+use sha2::{Digest, Sha256};
 
-use crate::id::Id;
-use crate::{as_millis, as_usize};
+use crate::{
+    Id,
+    as_millis,
+    as_usize
+};
 
 const TOKEN_TIMEOUT: u128 = 5 * 60 * 1000; //5 minutes
 

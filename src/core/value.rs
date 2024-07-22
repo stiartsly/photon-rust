@@ -1,6 +1,6 @@
-use sha2::{Digest, Sha256};
 use std::fmt;
 use ciborium::value::Value as CVal;
+use sha2::{Digest, Sha256};
 
 use crate::{
     unwrap,

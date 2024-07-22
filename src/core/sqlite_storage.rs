@@ -1,10 +1,12 @@
 use std::time::SystemTime;
 
-use crate::data_storage::DataStorage;
-use crate::id::Id;
-use crate::peer::Peer;
-use crate::value::Value;
-use crate::error::Error;
+use crate::{
+    Id,
+    Peer,
+    Value,
+    error::Error,
+    data_storage::DataStorage
+};
 
 pub(crate) struct SqliteStorage {}
 

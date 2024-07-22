@@ -2,8 +2,8 @@ use std::rc::Rc;
 use std::collections::BTreeMap;
 
 use crate::{
-    id::Id,
-    prefix::Prefix,
+    Id,
+    Prefix,
     node_info::{NodeInfo, Reachable},
     kbucket::KBucket,
     kbucket_entry::KBucketEntry

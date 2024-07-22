@@ -2,17 +2,32 @@
 use std::fmt;
 use static_assertions::const_assert;
 use libsodium_sys::{
-    crypto_box_BEFORENMBYTES, crypto_box_MACBYTES, crypto_box_NONCEBYTES,
-    crypto_box_PUBLICKEYBYTES, crypto_box_SECRETKEYBYTES, crypto_box_SEEDBYTES,
-    crypto_box_beforenm, crypto_box_easy, crypto_box_easy_afternm, crypto_box_keypair,
-    crypto_box_open_easy, crypto_box_open_easy_afternm, crypto_box_seed_keypair,
-    crypto_scalarmult_base, crypto_sign_ed25519_pk_to_curve25519,
-    crypto_sign_ed25519_sk_to_curve25519, randombytes_buf, sodium_increment,
+    crypto_box_BEFORENMBYTES,
+    crypto_box_MACBYTES,
+    crypto_box_NONCEBYTES,
+    crypto_box_PUBLICKEYBYTES,
+    crypto_box_SECRETKEYBYTES,
+    crypto_box_SEEDBYTES,
+    crypto_box_beforenm,
+    crypto_box_easy,
+    crypto_box_easy_afternm,
+    crypto_box_keypair,
+    crypto_box_open_easy,
+    crypto_box_open_easy_afternm,
+    crypto_box_seed_keypair,
+    crypto_scalarmult_base,
+    crypto_sign_ed25519_pk_to_curve25519,
+    crypto_sign_ed25519_sk_to_curve25519,
+    randombytes_buf,
+    sodium_increment,
 };
 
-use crate::error::Error;
-use crate::signature;
-use crate::{as_uchar_ptr, as_uchar_ptr_mut};
+use crate::{
+    as_uchar_ptr,
+    as_uchar_ptr_mut,
+    signature,
+    error::Error
+};
 
 const_assert!(PrivateKey::BYTES == crypto_box_SECRETKEYBYTES as usize);
 const_assert!(PublicKey::BYTES == crypto_box_PUBLICKEYBYTES as usize);

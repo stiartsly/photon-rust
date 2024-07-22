@@ -80,9 +80,7 @@ impl Scheduler {
 
     pub(crate) fn next_time(&self) -> Instant {
         match self.timers.iter().next() {
-            Some(timer) => {
-                timer.0.clone()
-            },
+            Some(timer) => timer.0.clone(),
             None => {
                 self.now + Duration::from_secs(60*60)
             }
@@ -91,14 +89,12 @@ impl Scheduler {
 }
 
 pub(crate) fn run_jobs(sched: Rc<RefCell<Scheduler>>) {
-    let mut binding = sched.borrow_mut();
-    binding.sync_time();
+    sched.borrow_mut().sync_time();
 
-    let mut jobs = match binding.pop_jobs() {
+    let mut jobs = match sched.borrow_mut().pop_jobs() {
         Some(item) => item,
         None => return
     };
-    drop(binding);
 
     while let Some(mut item) = jobs.pop() {
         item.cb();

@@ -8,9 +8,9 @@ use std::net::{
 };
 
 use crate::{
+    NodeInfo,
     config::Config,
-    error::Error,
-    node_info::NodeInfo
+    error::Error
 };
 
 pub struct Builder<'a> {
@@ -95,19 +95,18 @@ impl<'a> Builder<'a> {
 
         if let Some(addr) = self.ipv4.as_ref() {
             match addr.parse::<Ipv4Addr>() {
-                Ok(_) => {}
                 Err(e) => {
                     return Err(Error::Argument(format!("error: {}", e)));
-                }
+                },
+                Ok(_) => {}
             };
         }
-
         if let Some(addr) = self.ipv6.as_ref() {
             match addr.parse::<Ipv4Addr>() {
-                Ok(_) => {}
                 Err(e) => {
                     return Err(Error::Argument(format!("error: {}", e)));
                 }
+                Ok(_) => {}
             };
         }
 
@@ -127,13 +126,14 @@ impl<'a> Builder<'a> {
         }
 
         if let Some(addr) = self.ipv4.as_ref() {
-            let addr = addr.parse::<Ipv4Addr>().unwrap();
-            self.addr4 = Some(SocketAddr::new(IpAddr::V4(addr), self.port));
+            self.addr4 = Some(SocketAddr::new(IpAddr::V4(
+                addr.parse::<Ipv4Addr>().unwrap()
+            ), self.port));
         }
-
         if let Some(addr) = self.ipv6.as_ref() {
-            let addr = addr.parse::<Ipv6Addr>().unwrap();
-            self.addr6 = Some(SocketAddr::new(IpAddr::V6(addr), self.port));
+            self.addr6 = Some(SocketAddr::new(IpAddr::V6(
+                addr.parse::<Ipv6Addr>().unwrap()
+            ), self.port));
         }
 
         Ok(Box::new(DefaultConfiguration::new(self)))
