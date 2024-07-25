@@ -30,6 +30,8 @@ pub mod node_info;
 pub mod node_status;
 pub mod peer;
 pub mod prefix;
+pub mod result;
+pub mod network;
 
 pub use self::id::Id;
 pub use self::prefix::Prefix;
@@ -40,6 +42,8 @@ pub use self::value::Value;
 pub use self::node_status::NodeStatus;
 pub use self::config::Config;
 pub use self::lookup_option::LookupOption;
+pub use self::result::Result;
+pub use self::network::Network;
 
 pub use self::signature::KeyPair;
 
