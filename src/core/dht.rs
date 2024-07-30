@@ -142,6 +142,10 @@ impl DHT {
         unwrap!(self.cloned).clone()
     }
 
+    pub(crate) fn node(&self, _: &Id) -> Option<NodeInfo> {
+        unimplemented!()
+    }
+
     pub(crate) fn add_bootstrap_node(&mut self, node: &Rc<NodeInfo>) {
         self.bootstrap_nodes.push(node.clone())
     }
@@ -627,29 +631,29 @@ impl DHT {
         self.rtable.borrow_mut().on_send(id)
     }
 
-    pub(crate) fn find_node<F>(&self, id: &Rc<Id>, option: LookupOption, complete_fn: F)
-    where F: Fn(Option<Box<NodeInfo>>) + 'static
+    pub(crate) fn find_node<F>(&self, id: Rc<Id>, option: LookupOption, complete_fn: Rc<RefCell<Box<F>>>)
+    where F: FnMut(Option<NodeInfo>) + 'static
     {
-        let result = Rc::new(RefCell::new(
-            self.rtable.borrow()
-                .bucket_entry(id)
-                .map(|v| Box::new(v.to_node()))
+        let found = Rc::new(RefCell::new(
+            self.rtable.borrow().bucket_entry(&id).map(|v| v.to_node())
         ));
-        let cloned = result.clone();
+        let cloned_found = found.clone();
 
-        let mut task = NodeLookupTask::new(id, self.cloned());
+        let mut task = NodeLookupTask::new(&id, self.cloned());
         task.set_name("node-lookup");
-        task.set_result_fn(move |_task, _node| {
-            if _node.is_some() {
-                *(result.borrow_mut()) = Some(_node.unwrap().clone());
+        task.set_result_fn(move |_task, _ni| {
+            if let Some(ni) = _ni {
+                *(cloned_found.borrow_mut()) = Some(ni.deref().clone());
             }
             if option == LookupOption::Conservative {
                 _task.cancel()
             }
         });
 
-        task.add_listener(Box::new(move |_| {
-            complete_fn(cloned.borrow_mut().take());
+        let cloned_result = found.clone();
+        let cloned_complete_fn = complete_fn.clone();
+        task.add_listener(Box::new(move |_: &dyn Task| {
+            cloned_complete_fn.borrow_mut()(cloned_result.borrow().deref().clone());
         }));
 
         self.taskman.borrow_mut().add(

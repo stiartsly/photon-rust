@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::io::Read;
+use std::collections::LinkedList;
 use std::thread::{self, JoinHandle};
 use std::{fs, fs::File, io::Write};
 use std::sync::{Arc, Mutex};
@@ -13,16 +14,26 @@ use crate::{
     cryptobox,
     Id,
     Config,
-    Error,
+    error::Error,
     NodeInfo,
     NodeStatus,
     Value,
     Peer,
     KeyPair,
     LookupOption,
+    Compound,
     crypto_cache::CryptoCache,
     bootstrap_cache::BootstrapCache,
     node_runner::NodeRunner,
+    future::{
+        CmdFuture,
+        FindNodeCmd,
+        FindValueCmd,
+        FindPeerCmd,
+        StoreValueCmd,
+        AnnouncePeerCmd,
+        Command,
+    }
 };
 
 pub struct Node {
@@ -30,6 +41,7 @@ pub struct Node {
     cfg: Arc<Mutex<Box<dyn Config>>>, //config for this node.
 
     bootstrap_cache: Arc<Mutex<BootstrapCache>>,
+    command_cache: Arc<Mutex<LinkedList<Command>>>,
 
     signature_keypair: signature::KeyPair,
     encryption_keypair: cryptobox::KeyPair,
@@ -101,6 +113,7 @@ impl Node {
             id,
             cfg: Arc::new(Mutex::new(cfg)),
             bootstrap_cache: Arc::new(Mutex::new(BootstrapCache::new())),
+            command_cache: Arc::new(Mutex::new(LinkedList::new())),
             signature_keypair: keypair.clone(),
             encryption_keypair: cryptobox::KeyPair::from_signature_keypair(&keypair),
             encryption_ctxts: None,
@@ -124,7 +137,9 @@ impl Node {
         let storage_path = self.storage_path.clone();
         let keypair = self.encryption_keypair.clone();
         let cfg = self.cfg.clone();
-        let cache = self.bootstrap_cache.clone();
+        let bcache = self.bootstrap_cache.clone();
+        let ccache = self.command_cache.clone();
+
         let quit = self.quit.clone();
 
         self.thread = Some(thread::spawn(move || {
@@ -135,7 +150,8 @@ impl Node {
             let mut binding = runner.borrow_mut();
 
             binding.set_cloned(&runner);
-            binding.set_bootstrap(&cache);
+            binding.set_command_cache(&ccache);
+            binding.set_bootstrap_cache(&bcache);
             binding.start(cfg, keypair, quit);
         }));
 
@@ -189,40 +205,77 @@ impl Node {
         self.bootstrap_cache.lock().unwrap().push_many(nodes);
     }
 
-    pub async fn find_node(&self, _: &Id, _: &LookupOption) -> Result<Option<NodeInfo>, Error> {
-        unimplemented!()
+    pub async fn find_node(&mut self, id: &Id, option: &LookupOption)
+        -> Result<Compound<NodeInfo>, Error>
+    {
+        let find_node_cmd = Arc::new(Mutex::new(FindNodeCmd::new(id, option)));
+        let command = Command::FindNode(find_node_cmd.clone());
+        if let Ok(mut cache) = self.command_cache.lock() {
+            cache.push_back(command.clone())
+        };
+
+        match CmdFuture::new(command.clone()).await {
+            Ok(_) => find_node_cmd.lock().unwrap().result(),
+            Err(e) => Err(e)
+        }
     }
 
-    pub async fn find_node_simple(&self, node_id: &Id) -> Result<Option<NodeInfo>, Error> {
-        self.find_node(node_id, &self.option).await
+    pub async fn find_node_simple(&mut self, id: &Id) -> Result<Compound<NodeInfo>, Error> {
+        self.find_node(id, &self.option.clone()).await
     }
 
-    pub async fn find_value(&self, _: &Id, _: &LookupOption) -> Result<Option<Value>, Error> {
-        unimplemented!()
+    pub async fn find_value(&self, id: &Id, option: &LookupOption)
+        -> Result<Option<Value>, Error>
+    {
+        let cmd = Arc::new(Mutex::new(FindValueCmd::new(id, option)));
+        let fut = CmdFuture::new(Command::FindValue(cmd.clone()));
+        self.command_cache.lock().unwrap().push_back(Command::FindValue(cmd.clone()));
+        match fut.await {
+            Ok(_) => cmd.lock().unwrap().result(),
+            Err(e) => Err(e)
+        }
     }
 
     pub async fn find_value_simple(&self, value_id: &Id) -> Result<Option<Value>, Error> {
         self.find_value(value_id, &self.option).await
     }
 
-    pub async fn find_peer(&self, _: &Id, _: i32, _: &LookupOption) -> Result<Vec<Peer>, Error> {
-        unimplemented!()
+    pub async fn find_peer(&self, id: &Id, expected_seq: i32, option: &LookupOption) -> Result<Vec<Peer>, Error> {
+        let cmd = Arc::new(Mutex::new(FindPeerCmd::new(id, expected_seq, option)));
+        let fut = CmdFuture::new(Command::FindPeer(cmd.clone()));
+        self.command_cache.lock().unwrap().push_back(Command::FindPeer(cmd.clone()));
+        match fut.await {
+            Ok(_) => cmd.lock().unwrap().result(),
+            Err(e) => Err(e)
+        }
     }
 
     pub async fn find_peer_simple(&self, peer_id: &Id, expected_num: i32) -> Result<Vec<Peer>, Error> {
         self.find_peer(peer_id, expected_num, &self.option).await
     }
 
-    pub async fn store_value(&mut self, _: &Value, _: bool) -> Result<(), Error> {
-        unimplemented!()
+    pub async fn store_value(&mut self, value: &Value, _: bool) -> Result<(), Error> {
+        let cmd = Arc::new(Mutex::new(StoreValueCmd::new(value)));
+        let fut = CmdFuture::new(Command::StoreValue(cmd.clone()));
+        self.command_cache.lock().unwrap().push_back(Command::StoreValue(cmd.clone()));
+        match fut.await {
+            Ok(_) => cmd.lock().unwrap().result(),
+            Err(e) => Err(e)
+        }
     }
 
     pub async fn store_value_simple(&mut self, value: &Value, _: bool) -> Result<(), Error> {
         self.store_value(value, false).await
     }
 
-    pub async fn announce_peer(&mut self, _: &Peer, _: bool) -> Result<(), Error> {
-        unimplemented!()
+    pub async fn announce_peer(&mut self, peer: &Peer, _: bool) -> Result<(), Error> {
+        let cmd = Arc::new(Mutex::new(AnnouncePeerCmd::new(peer)));
+        let fut = CmdFuture::new(Command::AnnouncePeer(cmd.clone()));
+        self.command_cache.lock().unwrap().push_back(Command::AnnouncePeer(cmd.clone()));
+        match fut.await {
+            Ok(_) => cmd.lock().unwrap().result(),
+            Err(e) => Err(e)
+        }
     }
 
     pub async fn announce_peer_simple(&mut self, peer: &Peer) -> Result<(), Error> {

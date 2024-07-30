@@ -1,12 +1,13 @@
 
 use crate::Network;
 
-pub struct Result<T> {
+#[derive(Clone, Debug)]
+pub struct Compound<T> {
     v4: Option<T>,
     v6: Option<T>,
 }
 
-impl<T> Result<T> {
+impl<T> Compound<T> {
     pub fn new() -> Self {
         Self {
             v4: None,

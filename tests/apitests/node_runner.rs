@@ -95,9 +95,9 @@ fn teardown() {
 fn test_find_node() {
     setup();
     unsafe {
-        let runner1 = RUNNER1.as_ref().unwrap();
-        let runner2 = RUNNER2.as_ref().unwrap();
-        let runner3 = RUNNER3.as_ref().unwrap();
+        let runner1 = RUNNER1.as_mut().unwrap();
+        let runner2 = RUNNER2.as_mut().unwrap();
+        let runner3 = RUNNER3.as_mut().unwrap();
 
         assert_eq!(runner1.is_running(), true);
         assert_eq!(runner2.is_running(), true);

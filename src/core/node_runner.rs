@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
+use std::collections::LinkedList;
 
 use log::{info, error};
 
@@ -9,6 +10,10 @@ use crate::{
     constants,
     cryptobox,
     Id,
+    NodeInfo,
+    Compound,
+    LookupOption,
+    Network,
     dht::DHT,
     config::Config,
     data_storage::DataStorage,
@@ -17,17 +22,26 @@ use crate::{
     server::{self, Server},
     crypto_cache::CryptoCache,
     bootstrap_cache::BootstrapCache,
+    future::{
+        FindNodeCmd,
+        FindValueCmd,
+        FindPeerCmd,
+        StoreValueCmd,
+        AnnouncePeerCmd,
+        Command,
+    }
 };
 
 pub(crate) struct NodeRunner {
     nodeid: Rc<Id>,
     storage_path: String,
 
+    command_cache: Option<Arc<Mutex<LinkedList<Command>>>>,
     bootstrap_cache: Option<Arc<Mutex<BootstrapCache>>>,
 
     dht4: Option<Rc<RefCell<DHT>>>,
     dht6: Option<Rc<RefCell<DHT>>>,
-    // dht_num: i32,
+    dht_num: i32,
 
     tokenman: Rc<RefCell<TokenManager>>,
     storage:  Rc<RefCell<dyn DataStorage>>,
@@ -44,11 +58,12 @@ impl NodeRunner {
             nodeid: id.clone(),
             storage_path: input_storage_path,
 
+            command_cache: None,
             bootstrap_cache: None,
 
             dht4: None,
             dht6: None,
-            // dht_num: 0,
+            dht_num: 0,
 
             storage:    Rc::new(RefCell::new(SqliteStorage::new())),
             tokenman:   Rc::new(RefCell::new(TokenManager::new())),
@@ -61,7 +76,11 @@ impl NodeRunner {
         self.cloned = Some(runner.clone());
     }
 
-    pub(crate) fn set_bootstrap(&mut self, cache: &Arc<Mutex<BootstrapCache>>) {
+    pub(crate) fn set_command_cache(&mut self, cache: &Arc<Mutex<LinkedList<Command>>>) {
+        self.command_cache = Some(cache.clone());
+    }
+
+    pub(crate) fn set_bootstrap_cache(&mut self, cache: &Arc<Mutex<BootstrapCache>>) {
         self.bootstrap_cache = Some(cache.clone());
     }
 
@@ -131,7 +150,22 @@ impl NodeRunner {
                     dht.borrow_mut().add_bootstrap_node(&node);
                 }
             });
-        }, 1, 60*10);
+        }, 1, 60);
+
+        let ccache = unwrap!(self.command_cache).clone();
+        let runner = unwrap!(self.cloned).clone();
+        scheduler.borrow_mut().add(move || {
+            let mut ccache = ccache.lock().unwrap();
+            while let Some(cmd) = ccache.pop_front() {
+                match cmd {
+                    Command::FindNode(c) => runner.borrow().find_node(c),
+                    Command::FindValue(c) => runner.borrow().find_value(c),
+                    Command::FindPeer(c) => runner.borrow().find_peer(c),
+                    Command::StoreValue(c) => runner.borrow().store_value(c),
+                    Command::AnnouncePeer(c) => runner.borrow().announce_peer(c),
+                }
+            }
+        }, 1, 60);
 
         let result = self.server.borrow_mut().start(unwrap!(self.dht4).clone());
         match result {
@@ -170,5 +204,70 @@ impl NodeRunner {
             info!("Started RPC server on ipv6 address: {}", dht6.borrow().socket_addr());
             self.dht6 = None;
         }
+    }
+
+    fn find_node(&self, cmd: Arc<Mutex<FindNodeCmd>>) {
+        let found = Rc::new(RefCell::new(Compound::new()));
+
+        if let Some(dht) = self.dht4.as_ref() {
+            dht.borrow().node(cmd.lock().unwrap().id()).map(|v| {
+                found.borrow_mut().set_value(Network::Ipv6, v);
+            });
+        }
+        if let Some(dht) = self.dht6.as_ref() {
+            dht.borrow().node(cmd.lock().unwrap().id()).map(|v| {
+                found.borrow_mut().set_value(Network::Ipv6, v);
+            });
+        }
+
+        if cmd.lock().unwrap().option() == LookupOption::Arbitrary &&
+            found.borrow_mut().has_value() {
+            cmd.lock().unwrap().complete(Ok(found.borrow().clone()));
+            return;
+        }
+
+        let completion = Rc::new(RefCell::new(0));
+        let cloned_completion = completion.clone();
+        let cloned_found = found.clone();
+        let num_dhts = self.dht_num;
+        let option = cmd.lock().unwrap().option();
+        let id = Rc::new(cmd.lock().unwrap().id().clone());
+
+        let complete_fn = Rc::new(RefCell::new(Box::new(move |ni: Option<NodeInfo> | {
+            *cloned_completion.borrow_mut() += 1;
+            ni.map(|v| {
+                cloned_found.borrow_mut().set_value(Network::of(v.socket_addr()), v);
+            });
+
+            if option == LookupOption::Optimistic &&
+                cloned_found.borrow().has_value() &&
+                *cloned_completion.borrow() >= num_dhts {
+                cmd.lock().unwrap().complete(Ok(cloned_found.borrow().clone()));
+            }
+        })));
+
+        if let Some(dht) = self.dht4.as_ref() {
+            dht.borrow().find_node(id.clone(), option, complete_fn.clone());
+        }
+
+        if let Some(dht) = self.dht6.as_ref() {
+           dht.borrow().find_node(id.clone(), option, complete_fn.clone());
+        }
+    }
+
+    fn find_value(&self, _: Arc<Mutex<FindValueCmd>>) {
+        unimplemented!()
+    }
+
+    fn find_peer(&self, _: Arc<Mutex<FindPeerCmd>>) {
+        unimplemented!()
+    }
+
+    fn store_value(&self, _: Arc<Mutex<StoreValueCmd>>) {
+        unimplemented!()
+    }
+
+    fn announce_peer(&self, _: Arc<Mutex<AnnouncePeerCmd>>) {
+        unimplemented!()
     }
 }
