@@ -21,7 +21,7 @@ use crate::{
     token_man::TokenManager,
     server::{self, Server},
     crypto_cache::CryptoCache,
-    bootstrap_cache::BootstrapCache,
+    bootstrap_channel::BootstrapChannel,
     future::{
         FindNodeCmd,
         FindValueCmd,
@@ -36,8 +36,8 @@ pub(crate) struct NodeRunner {
     nodeid: Rc<Id>,
     storage_path: String,
 
-    command_cache: Option<Arc<Mutex<LinkedList<Command>>>>,
-    bootstrap_cache: Option<Arc<Mutex<BootstrapCache>>>,
+    command_channel:    Option<Arc<Mutex<LinkedList<Command>>>>,
+    bootstrap_channel:  Option<Arc<Mutex<BootstrapChannel>>>,
 
     dht4: Option<Rc<RefCell<DHT>>>,
     dht6: Option<Rc<RefCell<DHT>>>,
@@ -58,8 +58,8 @@ impl NodeRunner {
             nodeid: id.clone(),
             storage_path: input_storage_path,
 
-            command_cache: None,
-            bootstrap_cache: None,
+            command_channel: None,
+            bootstrap_channel: None,
 
             dht4: None,
             dht6: None,
@@ -76,12 +76,12 @@ impl NodeRunner {
         self.cloned = Some(runner.clone());
     }
 
-    pub(crate) fn set_command_cache(&mut self, cache: &Arc<Mutex<LinkedList<Command>>>) {
-        self.command_cache = Some(cache.clone());
+    pub(crate) fn set_command_channel(&mut self, channel: &Arc<Mutex<LinkedList<Command>>>) {
+        self.command_channel = Some(channel.clone());
     }
 
-    pub(crate) fn set_bootstrap_cache(&mut self, cache: &Arc<Mutex<BootstrapCache>>) {
-        self.bootstrap_cache = Some(cache.clone());
+    pub(crate) fn set_bootstrap_channel(&mut self, channel: &Arc<Mutex<BootstrapChannel>>) {
+        self.bootstrap_channel = Some(channel.clone());
     }
 
     pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
@@ -136,12 +136,12 @@ impl NodeRunner {
             ctxts.borrow_mut().handle_expiration();
         }, 2000, constants::EXPIRED_CHECK_INTERVAL);
 
-        let bcache = unwrap!(self.bootstrap_cache).clone();
+        let channel = unwrap!(self.bootstrap_channel).clone();
         let dht4 = self.dht4.as_ref().map(|v| v.clone());
         let dht6 = self.dht6.as_ref().map(|v| v.clone());
         scheduler.borrow_mut().add(move || {
-            let mut bcache = bcache.lock().unwrap();
-            bcache.pop_all(|item| {
+            let mut channel = channel.lock().unwrap();
+            channel.pop_all(|item| {
                 let node = Rc::new(item.clone());
                 if let Some(dht) = dht4.as_ref() {
                     dht.borrow_mut().add_bootstrap_node(&node);
@@ -152,11 +152,11 @@ impl NodeRunner {
             });
         }, 1, 60);
 
-        let ccache = unwrap!(self.command_cache).clone();
-        let runner = unwrap!(self.cloned).clone();
+        let channel = unwrap!(self.command_channel).clone();
+        let runner  = unwrap!(self.cloned).clone();
         scheduler.borrow_mut().add(move || {
-            let mut ccache = ccache.lock().unwrap();
-            while let Some(cmd) = ccache.pop_front() {
+            let mut channel = channel.lock().unwrap();
+            while let Some(cmd) = channel.pop_front() {
                 match cmd {
                     Command::FindNode(c) => runner.borrow().find_node(c),
                     Command::FindValue(c) => runner.borrow().find_value(c),

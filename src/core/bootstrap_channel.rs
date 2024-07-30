@@ -1,13 +1,13 @@
 
 use crate::node_info::NodeInfo;
 
-pub(crate) struct BootstrapCache {
+pub(crate) struct BootstrapChannel {
     nodes: Vec<NodeInfo>,
     updated: bool,
 }
 
 #[allow(dead_code)]
-impl BootstrapCache {
+impl BootstrapChannel {
     pub(crate) fn new() -> Self {
         Self {
             nodes: Vec::new(),

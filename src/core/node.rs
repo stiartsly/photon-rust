@@ -23,7 +23,7 @@ use crate::{
     LookupOption,
     Compound,
     crypto_cache::CryptoCache,
-    bootstrap_cache::BootstrapCache,
+    bootstrap_channel::BootstrapChannel,
     node_runner::NodeRunner,
     future::{
         CmdFuture,
@@ -40,8 +40,8 @@ pub struct Node {
     id: Id,
     cfg: Arc<Mutex<Box<dyn Config>>>, //config for this node.
 
-    bootstrap_cache: Arc<Mutex<BootstrapCache>>,
-    command_cache: Arc<Mutex<LinkedList<Command>>>,
+    bootstrap_channel: Arc<Mutex<BootstrapChannel>>,
+    command_channel: Arc<Mutex<LinkedList<Command>>>,
 
     signature_keypair: signature::KeyPair,
     encryption_keypair: cryptobox::KeyPair,
@@ -112,8 +112,8 @@ impl Node {
         Ok(Node {
             id,
             cfg: Arc::new(Mutex::new(cfg)),
-            bootstrap_cache: Arc::new(Mutex::new(BootstrapCache::new())),
-            command_cache: Arc::new(Mutex::new(LinkedList::new())),
+            bootstrap_channel: Arc::new(Mutex::new(BootstrapChannel::new())),
+            command_channel: Arc::new(Mutex::new(LinkedList::new())),
             signature_keypair: keypair.clone(),
             encryption_keypair: cryptobox::KeyPair::from_signature_keypair(&keypair),
             encryption_ctxts: None,
@@ -137,8 +137,8 @@ impl Node {
         let storage_path = self.storage_path.clone();
         let keypair = self.encryption_keypair.clone();
         let cfg = self.cfg.clone();
-        let bcache = self.bootstrap_cache.clone();
-        let ccache = self.command_cache.clone();
+        let bootstrap_channel = self.bootstrap_channel.clone();
+        let command_channel = self.command_channel.clone();
 
         let quit = self.quit.clone();
 
@@ -150,8 +150,8 @@ impl Node {
             let mut binding = runner.borrow_mut();
 
             binding.set_cloned(&runner);
-            binding.set_command_cache(&ccache);
-            binding.set_bootstrap_cache(&bcache);
+            binding.set_bootstrap_channel(&bootstrap_channel);
+            binding.set_command_channel(&command_channel);
             binding.start(cfg, keypair, quit);
         }));
 
@@ -201,21 +201,17 @@ impl Node {
         self.option.clone()
     }
 
-    pub fn bootstrap(&mut self, nodes: &[NodeInfo]) {
-        self.bootstrap_cache.lock().unwrap().push_many(nodes);
-    }
-
     pub async fn find_node(&mut self, id: &Id, option: &LookupOption)
         -> Result<Compound<NodeInfo>, Error>
     {
-        let find_node_cmd = Arc::new(Mutex::new(FindNodeCmd::new(id, option)));
-        let command = Command::FindNode(find_node_cmd.clone());
-        if let Ok(mut cache) = self.command_cache.lock() {
-            cache.push_back(command.clone())
+        let find_node = Arc::new(Mutex::new(FindNodeCmd::new(id, option)));
+        let cmd = Command::FindNode(find_node.clone());
+        if let Ok(mut ch) = self.command_channel.lock() {
+            ch.push_back(cmd.clone())
         };
 
-        match CmdFuture::new(command.clone()).await {
-            Ok(_) => find_node_cmd.lock().unwrap().result(),
+        match CmdFuture::new(cmd.clone()).await {
+            Ok(_) => find_node.lock().unwrap().result(),
             Err(e) => Err(e)
         }
     }
@@ -227,11 +223,14 @@ impl Node {
     pub async fn find_value(&self, id: &Id, option: &LookupOption)
         -> Result<Option<Value>, Error>
     {
-        let cmd = Arc::new(Mutex::new(FindValueCmd::new(id, option)));
-        let fut = CmdFuture::new(Command::FindValue(cmd.clone()));
-        self.command_cache.lock().unwrap().push_back(Command::FindValue(cmd.clone()));
-        match fut.await {
-            Ok(_) => cmd.lock().unwrap().result(),
+        let find_val = Arc::new(Mutex::new(FindValueCmd::new(id, option)));
+        let cmd = Command::FindValue(find_val.clone());
+        if let Ok(mut ch) = self.command_channel.lock() {
+            ch.push_back(cmd.clone());
+        }
+
+        match CmdFuture::new(cmd.clone()).await {
+            Ok(_) => find_val.lock().unwrap().result(),
             Err(e) => Err(e)
         }
     }
@@ -240,12 +239,17 @@ impl Node {
         self.find_value(value_id, &self.option).await
     }
 
-    pub async fn find_peer(&self, id: &Id, expected_seq: i32, option: &LookupOption) -> Result<Vec<Peer>, Error> {
-        let cmd = Arc::new(Mutex::new(FindPeerCmd::new(id, expected_seq, option)));
-        let fut = CmdFuture::new(Command::FindPeer(cmd.clone()));
-        self.command_cache.lock().unwrap().push_back(Command::FindPeer(cmd.clone()));
-        match fut.await {
-            Ok(_) => cmd.lock().unwrap().result(),
+    pub async fn find_peer(&self, id: &Id, expected_seq: i32, option: &LookupOption)
+        -> Result<Vec<Peer>, Error>
+    {
+        let find_peer = Arc::new(Mutex::new(FindPeerCmd::new(id, expected_seq, option)));
+        let cmd = Command::FindPeer(find_peer.clone());
+        if let Ok(mut ch) = self.command_channel.lock() {
+            ch.push_back(cmd.clone());
+        }
+
+        match CmdFuture::new(cmd.clone()).await {
+            Ok(_) => find_peer.lock().unwrap().result(),
             Err(e) => Err(e)
         }
     }
@@ -254,12 +258,17 @@ impl Node {
         self.find_peer(peer_id, expected_num, &self.option).await
     }
 
-    pub async fn store_value(&mut self, value: &Value, _: bool) -> Result<(), Error> {
-        let cmd = Arc::new(Mutex::new(StoreValueCmd::new(value)));
-        let fut = CmdFuture::new(Command::StoreValue(cmd.clone()));
-        self.command_cache.lock().unwrap().push_back(Command::StoreValue(cmd.clone()));
-        match fut.await {
-            Ok(_) => cmd.lock().unwrap().result(),
+    pub async fn store_value(&mut self, value: &Value, _: bool)
+        -> Result<(), Error>
+    {
+        let store_val = Arc::new(Mutex::new(StoreValueCmd::new(value)));
+        let cmd = Command::StoreValue(store_val.clone());
+        if let Ok(mut ch) = self.command_channel.lock() {
+            ch.push_back(cmd.clone());
+        }
+
+        match CmdFuture::new(cmd.clone()).await {
+            Ok(_) => store_val.lock().unwrap().result(),
             Err(e) => Err(e)
         }
     }
@@ -268,12 +277,17 @@ impl Node {
         self.store_value(value, false).await
     }
 
-    pub async fn announce_peer(&mut self, peer: &Peer, _: bool) -> Result<(), Error> {
-        let cmd = Arc::new(Mutex::new(AnnouncePeerCmd::new(peer)));
-        let fut = CmdFuture::new(Command::AnnouncePeer(cmd.clone()));
-        self.command_cache.lock().unwrap().push_back(Command::AnnouncePeer(cmd.clone()));
-        match fut.await {
-            Ok(_) => cmd.lock().unwrap().result(),
+    pub async fn announce_peer(&mut self, peer: &Peer, _: bool)
+        -> Result<(), Error>
+    {
+        let announce_peer = Arc::new(Mutex::new(AnnouncePeerCmd::new(peer)));
+        let cmd = Command::AnnouncePeer(announce_peer.clone());
+        if let Ok(mut ch) = self.command_channel.lock() {
+            ch.push_back(cmd.clone());
+        }
+
+        match CmdFuture::new(cmd.clone()).await {
+            Ok(_) => announce_peer.lock().unwrap().result(),
             Err(e) => Err(e)
         }
     }
