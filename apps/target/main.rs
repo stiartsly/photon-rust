@@ -27,8 +27,8 @@ fn main() {
 
     let mut b = default_configuration::Builder::new();
     b.with_listening_port(39001);
-    // b.with_ipv4("192.168.1.107");
-    b.with_ipv4("172.20.10.2");
+    b.with_ipv4("192.168.1.107");
+    // b.with_ipv4("172.20.10.2");
     b.with_storage_path(path.as_str());
 
     let cfg = b.build().unwrap();

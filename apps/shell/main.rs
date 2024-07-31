@@ -1,7 +1,9 @@
 use std::env;
 use std::fs;
 use std::thread;
-use std::time::Duration;
+// use std::time::Duration;
+use tokio::time::{sleep, Duration};
+
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use boson::{
@@ -25,18 +27,19 @@ fn get_storage_path(input: &str) -> String {
     path.display().to_string()
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let path = get_storage_path(".shell_data");
 
     let mut b = default_configuration::Builder::new();
     b.with_listening_port(32222);
-    // b.with_ipv4("192.168.1.107");
-    b.with_ipv4("172.20.10.2");
+    b.with_ipv4("192.168.1.107");
+    // b.with_ipv4("172.20.10.2");
     b.with_storage_path(path.as_str());
 
     let id = Id::try_from_base58("HwrxvgqmY2UCweXH7bV64wNZB8thpgweUTX47N17NJA").unwrap();
-    // let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 107)), 39001);
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 20, 10, 2)), 39001);
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 107)), 39001);
+    // let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 20, 10, 2)), 39001);
     let node = NodeInfo::new(&id, &addr);
     b.add_bootstrap(&node);
 
@@ -44,6 +47,9 @@ fn main() {
 
     let mut runner = Node::new(cfg).unwrap();
     let _ = runner.start();
+
+    thread::sleep(Duration::from_secs(1));
+    let _ = runner.find_node_simple(&id).await;
 
     thread::sleep(Duration::from_secs(10));
     runner.stop();
