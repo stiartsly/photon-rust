@@ -28,7 +28,7 @@ pub(crate) struct Message {
     base_data: MsgData,
     lookup_data: LookupResponseData,
 
-    value: Option<Box<Value>>,
+    value: Option<Rc<Value>>,
 }
 
 impl Msg for Message {
@@ -194,7 +194,7 @@ impl Msg for Message {
                         b.with_sig(sig);
                     }
                     b.with_seq(seq);
-                    self.value = Some(Box::new(b.build()));
+                    self.value = Some(Rc::new(b.build()));
                 },
                 _ => return false,
             }
@@ -295,7 +295,7 @@ impl Message {
         }
     }
 
-    pub(crate) fn value(&self) -> &Option<Box<crate::value::Value>> {
+    pub(crate) fn value(&self) -> &Option<Rc<crate::value::Value>> {
         &self.value
     }
 
@@ -303,7 +303,7 @@ impl Message {
         self.value.is_some()
     }
 
-    pub(crate) fn populate_value(&mut self, value: Box<crate::value::Value>) {
+    pub(crate) fn populate_value(&mut self, value: Rc<crate::value::Value>) {
         self.value = Some(value)
     }
 }

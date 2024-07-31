@@ -491,7 +491,7 @@ impl DHT {
                 || req.seq() <= value.as_ref().unwrap().sequence_number()
             {
                 has_value = true;
-                rsp.populate_value(value.unwrap());
+                rsp.populate_value(value.map(|v| Rc::from(v)).unwrap());
             }
         }
 
@@ -556,7 +556,7 @@ impl DHT {
         let peers = unwrap!(self.storage).borrow().peers(req.target().as_ref(), 8);
         if !peers.is_empty() {
             has_peers = true;
-            rsp.populate_peers(peers);
+            rsp.populate_peers(peers.into_iter().map(Rc::from).collect());
         }
 
         if req.want4() && has_peers {
@@ -632,7 +632,7 @@ impl DHT {
         self.rtable.borrow_mut().on_send(id)
     }
 
-    pub(crate) fn find_node<F>(&self, id: Rc<Id>, option: LookupOption, complete_fn: Rc<RefCell<Box<F>>>)
+    pub(crate) fn find_node<F>(&self, id: Rc<Id>, option: LookupOption, complete_fn: Rc<RefCell<F>>)
     where F: FnMut(Option<NodeInfo>) + 'static
     {
         let found = Rc::new(RefCell::new(
@@ -643,11 +643,12 @@ impl DHT {
         let mut task = NodeLookupTask::new(&id, self.cloned());
         task.set_name("node-lookup");
         task.set_result_fn(move |_task, _ni| {
+            println!(">>>>> DHT::find_node >>>1111");
             if let Some(ni) = _ni {
                 *(cloned_found.borrow_mut()) = Some(ni.deref().clone());
             }
             if option == LookupOption::Conservative {
-                _task.cancel()
+                _task.borrow_mut().cancel()
             }
         });
 
@@ -657,21 +658,22 @@ impl DHT {
             cloned_complete_fn.borrow_mut()(cloned_result.borrow().deref().clone());
         }));
 
+        println!(">>>>> DHT::find_node >>>0000");
         self.taskman.borrow_mut().add(
             Rc::new(RefCell::new(task))
         );
     }
 
     pub(crate) fn find_value<F>(&self, id: &Rc<Id>, option: LookupOption, complete_fn: F)
-    where F: Fn(Option<Box<Value>>) + 'static,
+    where F: Fn(Option<Rc<Value>>) + 'static,
     {
-        let result = Rc::new(RefCell::new(Option::default() as Option<Box<Value>>));
+        let result = Rc::new(RefCell::new(None as Option<Rc<Value>>));
         let result_shadow = result.clone();
 
         let mut task = ValueLookupTask::new(self.cloned(), id);
         task.set_name("value-lookup");
         task.set_result_fn(move |_task, _value| {
-            if let Some(_v) = _value.as_ref() {
+            if let Some(_v) = _value.as_ref().map(|v| v.clone()) {
                 match result.borrow().as_ref() {
                     Some(v) => {
                         if _v.is_mutable() && v.sequence_number() < _v.sequence_number() {
@@ -684,7 +686,7 @@ impl DHT {
             if option != LookupOption::Conservative {
                 if let Some(_v) = _value {
                     if !_v.is_mutable() {
-                        _task.cancel()
+                        _task.borrow_mut().cancel()
                     }
                 }
             }
@@ -726,7 +728,7 @@ impl DHT {
     }
 
     pub(crate) fn find_peer<F>(&self, id: &Rc<Id>, expected: usize, option: LookupOption, complete_fn: F)
-    where F: Fn(Vec<Box<Peer>>) + 'static
+    where F: Fn(Vec<Rc<Peer>>) + 'static
     {
         let result = Rc::new(RefCell::new(Vec::new()));
         let cloned = result.clone();
@@ -734,9 +736,11 @@ impl DHT {
         let mut task = PeerLookupTask::new(id, self.cloned());
         task.set_name("peer-lookup");
         task.set_result_fn(move |_task, _peers| {
-            result.borrow_mut().append(_peers);
+            _peers.iter().for_each(|v| {
+                result.borrow_mut().push(v.clone());
+            });
             if option != LookupOption::Conservative && result.borrow().len() >= expected {
-                _task.cancel()
+                _task.borrow_mut().cancel()
             }
         });
 

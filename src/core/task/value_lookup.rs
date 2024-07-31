@@ -31,7 +31,7 @@ pub(crate) struct ValueLookupTask {
     lookup_data: LookupTaskData,
 
     expected_seq: i32,
-    result_fn: Box<dyn FnMut(&mut Box<dyn Task>, &mut Option<Box<Value>>)>,
+    result_fn: Box<dyn FnMut(Rc<RefCell<dyn Task>>, Option<Rc<Value>>)>,
 }
 
 impl ValueLookupTask {
@@ -45,7 +45,7 @@ impl ValueLookupTask {
     }
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(&mut Box<dyn Task>, &mut Option<Box<Value>>) + 'static,
+    where F: FnMut(Rc<RefCell<dyn Task>>, Option<Rc<Value>>) + 'static,
     {
         self.result_fn = Box::new(f);
     }
@@ -102,18 +102,18 @@ impl Task for ValueLookupTask {
                 None => { break },
             };
 
-            let mut req = find_value_req::Message::new();
-            req.with_target(self.target().clone());
-            req.with_want4(true);
-            req.with_want6(false);
+            let mut msg = find_value_req::Message::new();
+            msg.with_target(self.target().clone());
+            msg.with_want4(true);
+            msg.with_want6(false);
 
             if self.expected_seq >= 0 {
-                req.with_seq(self.expected_seq);
+                msg.with_seq(self.expected_seq);
             }
 
-            let cloned_req = Rc::new(RefCell::new(req));
+            let msg = Rc::new(RefCell::new(msg));
             let cloned_next = next.clone();
-            if let Err(err) = self.send_call(next, cloned_req, Box::new(move|_| {
+            if let Err(err) = self.send_call(next, msg, Box::new(move|_| {
                 cloned_next.borrow_mut().set_sent();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
@@ -150,7 +150,7 @@ impl Task for ValueLookupTask {
                     return;
                 }
 
-                //(self.result_fn)(self.clone(), value)
+                (self.result_fn)(self.base_data.task(), Some(value.clone()));
             } else {
                 if let Some(nodes) = LookupResponse::nodes4(downcasted) {
                     if !nodes.is_empty() {

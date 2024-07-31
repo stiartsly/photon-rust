@@ -1,7 +1,7 @@
+use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::any::Any;
-use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
@@ -29,7 +29,7 @@ pub(crate) struct Message {
     base_data: MsgData,
     lookup_data: LookuResponseData,
 
-    peers: Vec<Box<Peer>>,
+    peers: Vec<Rc<Peer>>,
 }
 
 impl Msg for Message {
@@ -174,7 +174,7 @@ impl Msg for Message {
                                             b.with_alternative_url(alt);
                                         }
                                         b.with_sigature(sig);
-                                        self.peers.push(Box::new(b.build()));
+                                        self.peers.push(Rc::new(b.build()));
                                     } else {
                                         return false;
                                     }
@@ -258,7 +258,6 @@ impl LookupResponse for Message {
     }
 }
 
-#[allow(dead_code)]
 impl Message {
     pub(crate) fn new() -> Self {
         Self::with_txid(0)
@@ -282,15 +281,11 @@ impl Message {
         }
     }
 
-    pub(crate) fn has_peers(&self) -> bool {
-        !self.peers.is_empty()
+    pub(crate) fn peers(&self) -> &[Rc<Peer>] {
+        self.peers.as_ref()
     }
 
-    pub(crate) fn peers(&self) -> &[Box<Peer>] {
-        &self.peers
-    }
-
-    pub(crate) fn populate_peers(&mut self, peers: Vec<Box<Peer>>) {
+    pub(crate) fn populate_peers(&mut self, peers: Vec<Rc<Peer>>) {
         self.peers = peers
     }
 }

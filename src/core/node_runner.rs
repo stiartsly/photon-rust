@@ -207,7 +207,7 @@ impl NodeRunner {
         let option = cmd.lock().unwrap().option();
         let id = Rc::new(cmd.lock().unwrap().id().clone());
 
-        let complete_fn = Rc::new(RefCell::new(Box::new(move |ni: Option<NodeInfo> | {
+        let complete_fn = Rc::new(RefCell::new(move |ni: Option<NodeInfo> | {
             *cloned_completion.borrow_mut() += 1;
             ni.map(|v| {
                 cloned_found.borrow_mut().set_value(Network::of(v.socket_addr()), v);
@@ -218,7 +218,7 @@ impl NodeRunner {
                 *cloned_completion.borrow() >= num_dhts {
                 cmd.lock().unwrap().complete(Ok(cloned_found.borrow().clone()));
             }
-        })));
+        }));
 
         if let Some(dht) = self.dht4.as_ref() {
             dht.borrow().find_node(id.clone(), option, complete_fn.clone());
@@ -246,7 +246,7 @@ impl NodeRunner {
     }
 }
 
-pub(crate) fn do_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>) {
+pub(crate) fn run_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>) {
     let server = runner.borrow().server.clone();
     let dht4 = unwrap!(runner.borrow().dht4).clone();
 

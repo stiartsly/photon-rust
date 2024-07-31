@@ -32,7 +32,7 @@ pub(crate) struct NodeLookupTask {
 
     bootstrap: bool,
     want_token: bool,
-    result_fn: Box<dyn FnMut(&mut dyn Task, Option<Box<NodeInfo>>)>
+    result_fn: Box<dyn FnMut(Rc<RefCell<dyn Task>>, Option<Rc<NodeInfo>>)>
 }
 
 impl NodeLookupTask {
@@ -59,7 +59,7 @@ impl NodeLookupTask {
     }
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where F: FnMut(&mut dyn Task, Option<Box<NodeInfo>>) + 'static {
+    where F: FnMut(Rc<RefCell<dyn Task>>, Option<Rc<NodeInfo>>) + 'static {
         self.result_fn = Box::new(f)
     }
 }
@@ -151,7 +151,7 @@ impl Task for NodeLookupTask {
 
                 for item in nodes.iter() {
                     if item.id() == self.target().as_ref() {
-                        //(self.result_fn)(self.clone(), None)
+                        (self.result_fn)(self.base_data.task(), Some(item.clone()));
                     }
                 }
             }

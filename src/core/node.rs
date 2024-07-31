@@ -155,7 +155,7 @@ impl Node {
             binding.start(cfg, keypair);
             drop(binding);
 
-            node_runner::do_loop(runner.clone(), quit);
+            node_runner::run_loop(runner.clone(), quit);
         }));
 
         self.status = NodeStatus::Running;

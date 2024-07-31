@@ -29,7 +29,7 @@ pub(crate) struct PeerLookupTask {
     base_data: TaskData,
     lookup_data: LookupTaskData,
 
-    result_fn: Box<dyn FnMut(&mut Box<dyn Task>, &mut Vec<Box<Peer>>)>,
+    result_fn: Box<dyn FnMut(Rc<RefCell<dyn Task>>, &[Rc<Peer>])>,
 }
 
 impl PeerLookupTask {
@@ -42,8 +42,7 @@ impl PeerLookupTask {
     }
 
     pub(crate) fn set_result_fn<F>(&mut self, f: F)
-    where
-        F: FnMut(&mut Box<dyn Task>, &mut Vec<Box<Peer>>) + 'static
+    where F: FnMut(Rc<RefCell<dyn Task>>, &[Rc<Peer>]) + 'static
     {
         self.result_fn = Box::new(f);
     }
@@ -53,6 +52,7 @@ impl LookupTask for PeerLookupTask {
     fn data(&self) -> &LookupTaskData {
         &self.lookup_data
     }
+
     fn data_mut(&mut self) -> &mut LookupTaskData {
         &mut self.lookup_data
     }
@@ -91,20 +91,20 @@ impl Task for PeerLookupTask {
     fn update(&mut self) {
         while self.can_request() {
             let next = match LookupTask::next_candidate(self) {
-                Some(next) => next.clone(),
-                None => { break },
+                Some(next) => next,
+                None => break,
             };
 
-            let mut req = find_peer_req::Message::new();
-            req.with_target(self.target());
-            req.with_want4(true);
-            req.with_want6(false);
+            let mut msg = find_peer_req::Message::new();
+            msg.with_target(self.target());
+            msg.with_want4(true);
+            msg.with_want6(false);
 
-            let cloned_req = Rc::new(RefCell::new(req));
-            let cloned_text = next.clone();
+            let msg = Rc::new(RefCell::new(msg));
+            let cloned_next = next.clone();
 
-            if let Err(err) = self.send_call(next, cloned_req, Box::new(move|_| {
-                cloned_text.borrow_mut().set_sent();
+            if let Err(err) = self.send_call(next, msg, Box::new(move|_| {
+                cloned_next.borrow_mut().set_sent();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
             }
@@ -122,15 +122,13 @@ impl Task for PeerLookupTask {
                 return;
             }
 
-            if downcasted.has_peers() {
-                for peer in downcasted.peers() {
-                    if !peer.is_valid() {
-                        error!("Response include invalid peer, signature mismatched.");
-                        return; // ignored.
-                    }
+            for peer in downcasted.peers() {
+                if !peer.is_valid() {
+                    error!("Response include invalid peer, signature mismatched.");
+                    return; // ignored.
                 }
             }
-            //(self.result_fn)(self.clone(), downcased.peers())
+            (self.result_fn)(self.base_data.task(), downcasted.peers())
         }
     }
 
