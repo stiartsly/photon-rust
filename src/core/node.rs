@@ -24,7 +24,7 @@ use crate::{
     Compound,
     crypto_cache::CryptoCache,
     bootstrap_channel::BootstrapChannel,
-    node_runner::NodeRunner,
+    node_runner::{self, NodeRunner},
     future::{
         CmdFuture,
         FindNodeCmd,
@@ -152,7 +152,10 @@ impl Node {
             binding.set_cloned(&runner);
             binding.set_bootstrap_channel(&bootstrap_channel);
             binding.set_command_channel(&command_channel);
-            binding.start(cfg, keypair, quit);
+            binding.start(cfg, keypair);
+            drop(binding);
+
+            node_runner::do_loop(runner.clone(), quit);
         }));
 
         self.status = NodeStatus::Running;

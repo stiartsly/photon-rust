@@ -143,7 +143,8 @@ impl DHT {
     }
 
     pub(crate) fn node(&self, _: &Id) -> Option<NodeInfo> {
-        unimplemented!()
+        // TODO:
+        None
     }
 
     pub(crate) fn add_bootstrap_node(&mut self, node: &Rc<NodeInfo>) {

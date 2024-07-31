@@ -84,7 +84,7 @@ impl NodeRunner {
         self.bootstrap_channel = Some(channel.clone());
     }
 
-    pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair, quit: Arc<Mutex<bool>>) {
+    pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair) {
         let cfg = cfg.lock().unwrap();
 
         if let Some(addr4) = cfg.addr4() {
@@ -166,32 +166,6 @@ impl NodeRunner {
                 }
             }
         }, 1, 60);
-
-        let result = self.server.borrow_mut().start(unwrap!(self.dht4).clone());
-        match result {
-            Ok(_) => {
-                _ = server::run_loop(
-                    self.server.clone(),
-                    unwrap!(self.dht4).clone(),
-                    quit.clone()
-                ).map_err(|err| {
-                    error!("Unexpected error happened in the loop: {}.", err);
-                });
-                self.server.borrow_mut().stop();
-                self.stop();
-            },
-            Err(err) => {
-                error!("Starting node server error {}, aborted.", err);
-            }
-        }
-
-        // Need to notify the main thread about any abnormal termination not initiated
-        // by the main thread itself.
-        let mut _quit = quit.lock().unwrap();
-        if !*_quit {
-            *_quit = true;
-        }
-        drop(_quit);
     }
 
     pub(crate) fn stop(&mut self) {
@@ -251,7 +225,7 @@ impl NodeRunner {
         }
 
         if let Some(dht) = self.dht6.as_ref() {
-           dht.borrow().find_node(id.clone(), option, complete_fn.clone());
+            dht.borrow().find_node(id.clone(), option, complete_fn.clone());
         }
     }
 
@@ -270,4 +244,35 @@ impl NodeRunner {
     fn announce_peer(&self, _: Arc<Mutex<AnnouncePeerCmd>>) {
         unimplemented!()
     }
+}
+
+pub(crate) fn do_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>) {
+    let server = runner.borrow().server.clone();
+    let dht4 = unwrap!(runner.borrow().dht4).clone();
+
+    let result = server.borrow_mut().start(dht4.clone());
+    match result {
+        Ok(_) => {
+            _ = server::run_loop(
+                server.clone(),
+                dht4.clone(),
+                quit.clone()
+            ).map_err(|err| {
+                error!("Unexpected error happened in the loop: {}.", err);
+            });
+            server.borrow_mut().stop();
+            runner.borrow_mut().stop();
+        },
+        Err(err) => {
+            error!("Starting node server error {}, aborted.", err);
+        }
+    }
+
+    // Need to notify the main thread about any abnormal termination not initiated
+    // by the main thread itself.
+    let mut _quit = quit.lock().unwrap();
+    if !*_quit {
+        *_quit = true;
+    }
+    drop(_quit);
 }
