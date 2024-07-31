@@ -6,17 +6,16 @@ use ciborium::Value as CVal;
 
 use crate::{
     version,
-    id::Id,
+    Id,
+    Peer,
+    NodeInfo,
     error::Error,
-    peer::{Peer, PackBuilder},
-    node_info::NodeInfo,
+    peer::PackBuilder,
 };
 
 use super::{
-        msg::{
-        Kind,
-        Method,
-        Msg,
+    msg::{
+        Kind, Method, Msg,
         Data as MsgData
     },
     lookup_rsp::{
@@ -47,50 +46,50 @@ impl Msg for Message {
             None => return false,
         };
 
-        for (key, val) in root {
-            let key = match key.as_text() {
-                Some(key) => key,
+        for (k,v) in root {
+            let k = match k.as_text() {
+                Some(k) => k,
                 None => return false,
             };
 
-            match key {
+            match k {
                 "y" => {},
                 "t" => {
-                    let val = match val.as_integer() {
-                        Some(val) => val,
+                    let v = match v.as_integer() {
+                        Some(v) => v,
                         None => return false,
                     };
-                    let txid = val.try_into().unwrap();
+                    let txid = v.try_into().unwrap();
                     self.set_txid(txid);
                 },
                 "v" => {
-                    let val = match val.as_integer() {
-                        Some(val) => val,
+                    let v = match v.as_integer() {
+                        Some(v) => v,
                         None => return false,
                     };
-                    let ver = val.try_into().unwrap();
+                    let ver = v.try_into().unwrap();
                     self.set_ver(ver);
                 },
                 "r" => {
-                    let map = match val.as_map() {
-                        Some(map) => map,
+                    let map = match v.as_map() {
+                        Some(v) => v,
                         None => return false,
                     };
 
-                    for (key, val) in map {
-                        let key = match key.as_text() {
-                            Some(key) => key,
+                    for (k,v) in map {
+                        let k = match k.as_text() {
+                            Some(k) => k,
                             None => return false,
                         };
-                        match key {
+                        match k {
                             "n4" => {
-                                let array = match val.as_array() {
-                                    Some(array) => array,
+                                let v = match v.as_array() {
+                                    Some(v) => v,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in array.iter() {
+                                for item in v.iter() {
                                     match NodeInfo::try_from_cbor(item) {
                                         Ok(ni) => nodes.push(Rc::new(ni)),
                                         Err(_) => return false
@@ -99,13 +98,13 @@ impl Msg for Message {
                                 self.populate_closest_nodes4(nodes);
                             },
                             "n6" => {
-                                let array = match val.as_array() {
-                                    Some(array) => array,
+                                let v = match v.as_array() {
+                                    Some(v) => v,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in array.iter() {
+                                for item in v.iter() {
                                     match NodeInfo::try_from_cbor(item) {
                                         Ok(ni) => nodes.push(Rc::new(ni)),
                                         Err(_) => return false
@@ -114,52 +113,52 @@ impl Msg for Message {
                                 self.populate_closest_nodes6(nodes);
                             },
                             "tok" => {
-                                let val = match val.as_integer() {
-                                    Some(val) => val,
+                                let v = match v.as_integer() {
+                                    Some(v) => v,
                                     None => return false,
                                 };
-                                let token = val.try_into().unwrap();
+                                let token = v.try_into().unwrap();
                                 self.populate_token(token);
                             },
                             "p" => {
-                                let array = match val.as_array() {
-                                    Some(val) => val,
+                                let v = match v.as_array() {
+                                    Some(v) => v,
                                     None => return false,
                                 };
 
-                                let peer_id = match Id::try_from_cbor(&array[0]) {
-                                    Ok(val) => val,
+                                let peer_id = match Id::try_from_cbor(&v[0]) {
+                                    Ok(v) => v,
                                     Err(_) => return false ,
                                 };
-                                for item in array.iter() {
+                                for item in v.iter() {
                                     if item.is_null() {
-                                        // Do nothing.
+                                        // Skip
                                     } else if item.is_bytes() {
-                                        // DO nothing;
+                                        // Skip
                                     } else if item.is_array() {
-                                        let arr = match item.as_array() {
-                                            Some(val) => val,
+                                        let v = match item.as_array() {
+                                            Some(v) => v,
                                             None => return false,
                                         };
 
-                                        let node_id = match Id::try_from_cbor(&arr[0]) {
+                                        let node_id = match Id::try_from_cbor(&v[0]) {
                                             Ok(id) => id,
                                             Err(_) => return false,
                                         };
-                                        let _ = match Id::try_from_cbor(&arr[1]) {
+                                        let _ = match Id::try_from_cbor(&v[1]) {
                                             Ok(id) => Some(id),
                                             Err(_) => None,
                                         };
-                                        let port = match arr[2].as_integer() {
-                                            Some(val) => val.try_into().unwrap(),
+                                        let port = match v[2].as_integer() {
+                                            Some(v) => v.try_into().unwrap(),
                                             None => return false,
                                         };
-                                        let alt = match arr[3].as_text() {
-                                            Some(val) => Some(val),
+                                        let alt = match v[3].as_text() {
+                                            Some(v) => Some(v),
                                             None => None,
                                         };
-                                        let sig = match arr[4].as_bytes() {
-                                            Some(val) => val,
+                                        let sig = match v[4].as_bytes() {
+                                            Some(v) => v,
                                             None => return false,
                                         };
 

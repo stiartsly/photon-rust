@@ -1,14 +1,14 @@
+use std::fmt;
 use std::any::Any;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::net::SocketAddr;
-use std::fmt;
 use std::fmt::Display;
 use ciborium;
 use ciborium::Value as CVal;
 
 use crate::{
-    id::Id,
+    Id,
     error::Error,
     rpccall::RpcCall
 };

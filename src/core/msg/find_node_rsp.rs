@@ -1,20 +1,18 @@
+use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::any::Any;
-use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
     version,
-    error::Error,
-    node_info::NodeInfo,
+    NodeInfo,
+    error::Error
 };
 
 use super::{
     msg::{
-        Kind,
-        Method,
-        Msg,
+        Kind, Method, Msg,
         Data as MsgData
     },
     lookup_rsp::{
@@ -43,50 +41,50 @@ impl Msg for Message {
             None => return false,
         };
 
-        for (key, val) in root {
-            let key = match key.as_text() {
-                Some(key) => key,
+        for (k, v) in root {
+            let k = match k.as_text() {
+                Some(k) => k,
                 None => return false,
             };
 
-            match key {
+            match k {
                 "y" => {},
                 "t" => {
-                    let val = match val.as_integer() {
-                        Some(val) => val,
+                    let v = match v.as_integer() {
+                        Some(v) => v,
                         None => return false,
                     };
-                    let txid = val.try_into().unwrap();
+                    let txid = v.try_into().unwrap();
                     self.set_txid(txid);
                 },
                 "v" => {
-                    let val = match val.as_integer() {
-                        Some(val) => val,
+                    let v = match v.as_integer() {
+                        Some(v) => v,
                         None => return false,
                     };
-                    let ver = val.try_into().unwrap();
+                    let ver = v.try_into().unwrap();
                     self.set_ver(ver);
                 },
                 "r" => {
-                    let map = match val.as_map() {
-                        Some(map) => map,
+                    let map = match v.as_map() {
+                        Some(v) => v,
                         None => return false,
                     };
 
-                    for (key, val) in map {
-                        let key = match key.as_text() {
-                            Some(key) => key,
+                    for (k, v) in map {
+                        let k = match k.as_text() {
+                            Some(k) => k,
                             None => return false,
                         };
-                        match key {
+                        match k {
                             "n4" => {
-                                let val = match val.as_array() {
-                                    Some(val) => val,
+                                let v = match v.as_array() {
+                                    Some(v) => v,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in val.iter() {
+                                for item in v.iter() {
                                     match NodeInfo::try_from_cbor(item) {
                                         Ok(ni) => nodes.push(Rc::new(ni)),
                                         Err(_) => return false
@@ -95,13 +93,13 @@ impl Msg for Message {
                                 self.populate_closest_nodes4(nodes);
                             },
                             "n6" => {
-                                let val = match val.as_array() {
-                                    Some(val) => val,
+                                let v = match v.as_array() {
+                                    Some(v) => v,
                                     None => return false,
                                 };
 
                                 let mut nodes = Vec::new();
-                                for item in val.iter() {
+                                for item in v.iter() {
                                     match NodeInfo::try_from_cbor(item) {
                                         Ok(ni) => nodes.push(Rc::new(ni)),
                                         Err(_) => return false
@@ -110,11 +108,11 @@ impl Msg for Message {
                                 self.populate_closest_nodes6(nodes);
                             },
                             "tok" => {
-                                let val = match val.as_integer() {
-                                    Some(val) => val,
+                                let v = match v.as_integer() {
+                                    Some(v) => v,
                                     None => return false,
                                 };
-                                let token = val.try_into().unwrap();
+                                let token = v.try_into().unwrap();
                                 self.populate_token(token);
                             }
                             _ => return false
@@ -131,9 +129,10 @@ impl Msg for Message {
     fn ser(&self) -> CVal {
         let mut root = Msg::to_cbor(self);
         if let Some(map) = root.as_map_mut() {
-            let key = CVal::Text(String::from("r"));
-            let val = LookupResponse::to_cbor(self);
-            map.push((key, val));
+            map.push(
+                (CVal::Text(String::from("r")),
+                LookupResponse::to_cbor(self)
+            ));
         }
         root
     }

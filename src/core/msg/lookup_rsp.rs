@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use ciborium::Value as CVal;
-use crate::node_info::NodeInfo;
+
+use crate::NodeInfo;
 
 pub(crate) struct Data {
     nodes4: Option<Vec<Rc<NodeInfo>>>,

@@ -1,22 +1,21 @@
+use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::any::Any;
-use std::fmt;
 use ciborium::Value as CVal;
 
 use crate::{
     unwrap,
     version,
+    Id,
+    Peer,
     error::Error,
-    peer::{Peer, PackBuilder},
-    id::Id,
+    peer::PackBuilder,
 };
 
 use super::{
     msg::{
-        Kind,
-        Method,
-        Msg,
+        Kind, Method, Msg,
         Data as MsgData
     },
 };
@@ -49,77 +48,77 @@ impl Msg for Message {
             None => return false,
         };
 
-        for (key, val) in root {
-            let key = match key.as_text() {
-                Some(key) => key,
+        for (k,v) in root {
+            let k = match k.as_text() {
+                Some(k) => k,
                 None => return false,
             };
-            match key {
+            match k {
                 "y" => {},
                 "t" => {
-                    let val = match val.as_integer() {
-                        Some(val) => val,
+                    let v = match v.as_integer() {
+                        Some(v) => v,
                         None => return false,
                     };
-                    let txid = val.try_into().unwrap();
+                    let txid = v.try_into().unwrap();
                     self.set_txid(txid);
                 },
                 "v" => {
-                    let val = match val.as_integer() {
-                        Some(val) => val,
+                    let v = match v.as_integer() {
+                        Some(v) => v,
                         None => return false,
                     };
-                    let ver = val.try_into().unwrap();
+                    let ver = v.try_into().unwrap();
                     self.set_ver(ver);
                 },
                 "q" => {
-                    let map = match val.as_map() {
-                        Some(map) => map,
+                    let map = match v.as_map() {
+                        Some(v) => v,
                         None => return false,
                     };
-                    for (key, val) in map {
-                        let key = match key.as_text() {
-                            Some(key) => key,
+                    for (k,v) in map {
+                        let k = match k.as_text() {
+                            Some(k) => k,
                             None => return false,
                         };
-                        match key {
+                        match k {
                             "t" => {
-                                let id = match Id::try_from_cbor(val) {
-                                    Ok(id) => id,
+                                let id = match Id::try_from_cbor(v) {
+                                    Ok(v) => v,
                                     Err(_) => return false,
                                 };
                                 peer_id = Some(id);
                             },
                             "x" => {
-                                let id = match Id::try_from_cbor(val) {
-                                    Ok(id) => id,
+                                let id = match Id::try_from_cbor(v) {
+                                    Ok(v) => v,
                                     Err(_) => return false,
                                 };
                                 proxy_id = Some(id);
                             },
                             "p" => {
-                                let v = match val.as_integer() {
+                                let v = match v.as_integer() {
                                     Some(v) => v.try_into().unwrap(),
                                     None => return false,
                                 };
                                 port = v;
                             },
                             "alt" => {
-                                let v = match val.as_text() {
+                                let v = match v.as_text() {
                                     Some(v) => v,
                                     None => return false,
                                 };
                                 alt = Some(v);
                             },
                             "sig" => {
-                                let v = match val.as_bytes() {
+                                let v = match v.as_bytes() {
                                     Some(v) => v,
                                     None => return false,
                                 };
                                 sig = Some(v);
                             },
                             "tok" => {
-                                let v = match val.as_integer() {
+                                let v = match v.as_integer() {
                                     Some(v) => v,
                                     None => return false,
                                 };
@@ -191,9 +190,10 @@ impl Msg for Message {
         }
         let mut root = Msg::to_cbor(self);
         if let Some(map) = root.as_map_mut() {
-            let key = CVal::Text(Kind::Request.to_key().to_string());
-            let val = CVal::Map(req_map);
-            map.push((key, val));
+            map.push((
+                CVal::Text(Kind::Request.to_key().to_string()),
+                CVal::Map(req_map)
+            ));
         }
         root
     }
