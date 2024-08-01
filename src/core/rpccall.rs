@@ -7,6 +7,7 @@ use crate::{
     constants,
     Id,
     NodeInfo,
+    dht::DHT,
     msg::msg::{self, Msg}
 };
 
@@ -22,7 +23,7 @@ pub(crate) enum State {
 }
 
 pub(crate) struct RpcCall {
-    hashid: i32,
+    txid: i32,
     target: Rc<NodeInfo>,
 
     req: Option<Rc<RefCell<dyn Msg>>>,
@@ -36,30 +37,40 @@ pub(crate) struct RpcCall {
     state_changed_fn: Box<dyn Fn(&RpcCall, &State, &State)>,
     responsed_fn: Box<dyn Fn(&RpcCall, Rc<RefCell<dyn Msg>>)>,
     stalled_fn: Box<dyn Fn(&RpcCall)>,
-    timeout_fn: Box<dyn Fn(&RpcCall)>
+    timeout_fn: Box<dyn Fn(&RpcCall)>,
+
+    dht: Rc<RefCell<DHT>>,
 }
 
-static mut NEXT_HASHID: i32= 0;
+static mut NEXT_TXID: i32= 0;
 
-fn next_hashid() -> i32 {
+fn next_txid() -> i32 {
     unsafe {
-        NEXT_HASHID += 1;
-        if NEXT_HASHID == 0 {
-            NEXT_HASHID += 1;
+        NEXT_TXID += 1;
+        if NEXT_TXID == 0 {
+            NEXT_TXID += 1;
         }
-        NEXT_HASHID
+        NEXT_TXID
     }
 }
 
 #[allow(dead_code)]
 impl RpcCall {
-    pub(crate) fn new(target: &Rc<NodeInfo>, req: Rc<RefCell<dyn Msg>>) -> Self {
-        req.borrow_mut().set_remote(target.id(), target.socket_addr());
+    pub(crate) fn new(
+        dht: Rc<RefCell<DHT>>,
+        target: &Rc<NodeInfo>,
+        msg: Rc<RefCell<dyn Msg>>) -> Self
+    {
+
+        msg.borrow_mut().set_remote(
+            target.id(),
+            target.socket_addr()
+        );
 
         RpcCall {
-            hashid: next_hashid(),
+            txid: next_txid(),
             target: target.clone(),
-            req: Some(req),
+            req: Some(msg),
             rsp: None,
 
             sent: SystemTime::UNIX_EPOCH,
@@ -70,14 +81,20 @@ impl RpcCall {
             responsed_fn: Box::new(|_, _| {}),
             stalled_fn: Box::new(|_| {}),
             timeout_fn: Box::new(|_| {}),
+
+            dht,
         }
     }
 
-    pub(crate) fn hash(&self) -> i32 {
-        self.hashid
+    pub(crate) fn txid(&self) -> i32 {
+        self.txid
     }
 
-    pub(crate) fn target_nodeid(&self) -> &Id {
+    pub(crate) fn dht(&self) -> Rc<RefCell<DHT>> {
+        self.dht.clone()
+    }
+
+    pub(crate) fn target_id(&self) -> &Id {
         self.target.id()
     }
 
@@ -87,7 +104,7 @@ impl RpcCall {
 
     pub(crate) fn matches_id(&self) -> bool {
         self.rsp.as_ref().and_then(|rsp| {
-            Some(rsp.borrow().id() == self.target_nodeid())
+            Some(rsp.borrow().id() == self.target_id())
         }).unwrap_or(false)
     }
 

@@ -223,14 +223,14 @@ pub(crate) trait Task {
         }
 
         let ni = Rc::new(cn.borrow().to_node());
-        let call = Rc::new(RefCell::new(RpcCall::new(&ni, msg)));
+        let call = Rc::new(RefCell::new(RpcCall::new(self.data().dht(), &ni, msg)));
         let task = self.data().task();
 
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
             match prev_state {
                 CallState::Sent => task.borrow_mut().call_sent(call),
                 CallState::Responsed => {
-                    task.borrow_mut().data_mut().inflights.remove(&call.hash());
+                    task.borrow_mut().data_mut().inflights.remove(&call.txid());
                     if task.borrow().is_done() {
                         if let Some(msg) = call.rsp() {
                             task.borrow_mut().call_responsed(call, msg);
@@ -238,7 +238,7 @@ pub(crate) trait Task {
                     }
                 },
                 CallState::Err => {
-                    task.borrow_mut().data_mut().inflights.remove(&call.hash());
+                    task.borrow_mut().data_mut().inflights.remove(&call.txid());
                     if task.borrow().is_done() {
                         task.borrow_mut().call_timeout(call);
                     }
@@ -254,7 +254,7 @@ pub(crate) trait Task {
         });
 
         (f)(call.clone());
-        self.data_mut().inflights.insert(call.borrow().hash(), call.clone());
+        self.data_mut().inflights.insert(call.borrow().txid(), call.clone());
 
         debug!("Task#{} sending call to {}{}",
             self.taskid(),

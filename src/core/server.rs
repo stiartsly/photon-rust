@@ -31,7 +31,7 @@ pub(crate) struct Server<> {
     msg_at_least_reachable_check: i32,
     last_reachable_check: SystemTime,
 
-    calls: HashMap<i32, Rc<RefCell<RpcCall>>>,
+    calls: Rc<RefCell<HashMap<i32, Rc<RefCell<RpcCall>>>>>,
 
     dht4: Option<Rc<RefCell<DHT>>>,
     queue4: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>,
@@ -40,7 +40,6 @@ pub(crate) struct Server<> {
 
 }
 
-// #[allow(dead_code)]
 impl Server {
     pub fn new(input_nodeid: Rc<Id>) -> Self {
         Self {
@@ -52,7 +51,7 @@ impl Server {
             msg_at_least_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
-            calls: HashMap::new(),
+            calls: Rc::new(RefCell::new(HashMap::new())),
 
             dht4: None,
             queue4: Rc::new(RefCell::new(LinkedList::new())),
@@ -69,7 +68,7 @@ impl Server {
     }
 
     pub(crate) fn number_of_acitve_calls(&self) -> usize {
-        self.calls.len()
+        self.calls.borrow().len()
     }
 
     pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
@@ -112,51 +111,49 @@ impl Server {
     pub(crate) fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         msg.borrow_mut().set_id(self.nodeid());
         if let Some(call) = msg.borrow().associated_call() {
-            call.borrow_mut().send();
+            self.scheduler.borrow_mut().add_one_time(move || {
+                let dht = call.borrow().dht();
+                dht.borrow_mut().on_send(call.borrow().target_id());
+                call.borrow_mut().send();
+            }, 0, 0);
 
+            /*
             let cloned_call = call.clone();
             self.scheduler.borrow_mut().add(move || {
                 cloned_call.borrow_mut().check_timeout()
-            }, 2000, 10);
+            }, 2000, 10);*/
         }
 
         self.queue4.borrow_mut().push_back(msg);
     }
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
-        let mut binding = call.borrow_mut();
-        let hash = binding.hash();
+        let txid = call.borrow().txid();
 
-        binding.set_responsed_fn(|_,_| {});
-        binding.set_timeout_fn(|_call| {
-            // self.on_timeout(_call);
+        let calls = self.calls.clone();
+        calls.borrow_mut().insert(txid, call.clone());
+
+        call.borrow_mut().set_responsed_fn(|_,_| {});
+        call.borrow_mut().set_timeout_fn(move |_| {
+            if let Some(c) = calls.borrow_mut().remove(&txid) {
+                let dht = c.borrow().dht();
+                dht.borrow_mut().on_timeout(c);
+            };
         });
-        drop(binding);
 
-        self.calls.insert(hash, call.clone());
-
-        let req = match call.borrow().req() {
-            Some(msg) => msg,
-            None => return,
+        if let Some(msg) = call.borrow().req() {
+            msg.borrow_mut().set_txid(txid);
+            msg.borrow_mut().with_associated_call(call.clone());
+            self.send_msg(msg);
         };
-
-        let mut binding = req.borrow_mut();
-        binding.set_txid(hash);
-        binding.with_associated_call(call.clone());
-        drop(binding);
-
-        self.send_msg(req);
     }
 
     fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         let txid = msg.borrow().txid();
-        let call = match self.calls.remove(&txid) {
-            Some(call) => call,
-            None => return,
+        if let Some(call) = self.calls.borrow_mut().remove(&txid) {
+            msg.borrow_mut().with_associated_call(call.clone());
+            call.borrow_mut().responsed(msg);
         };
-
-        msg.borrow_mut().with_associated_call(call.clone());
-        call.borrow_mut().responsed(msg);
     }
 }
 
@@ -178,7 +175,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         let queue4 = server.borrow_mut().queue4.clone();
 
         let mut interval = interval_at(
-            server.borrow().scheduler.borrow().next_time(),
+            server.borrow().scheduler.borrow().next_timeout(),
             Duration::from_secs(60*60)
         );
         while running {
@@ -208,7 +205,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                 running = false;
             }
             if server.borrow().scheduler.borrow().is_updated() {
-                interval.reset_at(server.borrow().scheduler.borrow().next_time());
+                interval.reset_at(server.borrow().scheduler.borrow().next_timeout());
             }
         }
         Ok(())
@@ -278,7 +275,7 @@ where
     };
 
     if let Some(call) = msg.borrow().associated_call() {
-        dht.borrow_mut().on_send(call.borrow().target_nodeid());
+        dht.borrow_mut().on_send(call.borrow().target_id());
         call.borrow_mut().send();
         // self.scheduler.borrow_mut().add(move || {
         //    call.borrow_mut().check_timeout()

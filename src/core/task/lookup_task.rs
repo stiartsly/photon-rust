@@ -99,7 +99,7 @@ pub(crate) trait LookupTask {
     }
 
     fn call_error(&mut self, call: &RpcCall) {
-        _ = self.remove_candidate(call.target_nodeid())
+        _ = self.remove_candidate(call.target_id())
     }
 
     fn call_timeout(&mut self, call: &RpcCall) {
@@ -113,7 +113,7 @@ pub(crate) trait LookupTask {
     }
 
     fn call_responsed(&mut self, call: &RpcCall, msg: &dyn LookupResponse) {
-        if let Some(cn) = self.remove_candidate(call.target_nodeid()) {
+        if let Some(cn) = self.remove_candidate(call.target_id()) {
             cn.borrow_mut().set_replied();
             cn.borrow_mut().set_token(msg.token());
             self.add_closest(cn);

@@ -169,7 +169,7 @@ impl DHT {
             msg.with_want4(true);
 
             let msg  = Rc::new(RefCell::new(msg));
-            let call = Rc::new(RefCell::new(RpcCall::new(&item, msg)));
+            let call = Rc::new(RefCell::new(RpcCall::new(self.cloned(), &item, msg)));
             let len = bootstrap_nodes.len();
 
             let cloned_nodes = nodes.clone();
@@ -252,7 +252,7 @@ impl DHT {
 
         if let Some(entry) = self.rtable.borrow().random_node() {
             let msg  = Rc::new(RefCell::new(ping_req::Message::new()));
-            let call = Rc::new(RefCell::new(RpcCall::new(&entry, msg)));
+            let call = Rc::new(RefCell::new(RpcCall::new(self.cloned(), &entry, msg)));
             self.server().borrow_mut().send_call(call);
         }
     }
@@ -390,7 +390,7 @@ impl DHT {
         } else if !entry_found {
             let req = Rc::new(RefCell::new(ping_req::Message::new()));
             let ni = new_entry.ni();
-            let call = Rc::new(RefCell::new(RpcCall::new(&ni, req)));
+            let call = Rc::new(RefCell::new(RpcCall::new(self.cloned(), &ni, req)));
             self.server().borrow_mut().send_call(call);
         }
         self.rtable.borrow_mut().put(new_entry);
@@ -617,12 +617,12 @@ impl DHT {
         );
     }
 
-    pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
+    pub(crate) fn on_timeout(&mut self, call: Rc<RefCell<RpcCall>>) {
         // Ignore the timeout if the DHT is stopped or the RPC server is offline
         if !self.running || !self.server().borrow().is_reachable() {
             return;
         }
-        self.rtable.borrow_mut().on_timeout(call.target_nodeid());
+        self.rtable.borrow_mut().on_timeout(call.borrow().target_id());
     }
 
     pub(crate) fn on_send(&mut self, id: &Id) {
