@@ -61,7 +61,7 @@ pub(crate) struct TaskData {
     finished_time: SystemTime,
 
     inflights: HashMap<TaskId, Rc<RefCell<RpcCall>>>,
-    listeners: Vec<Box<dyn FnOnce(&dyn Task)>>,
+    listeners: Vec<Box<dyn FnOnce(Rc<RefCell<dyn Task>>)>>,
 
     nested: Option<Box<dyn Task>>,
 
@@ -87,9 +87,9 @@ impl TaskData {
         }
     }
 
-    fn notify_completion(&mut self, task: &dyn Task) {
+    fn notify_completion(&mut self, task: Rc<RefCell<dyn Task>>) {
         while let Some(f) = self.listeners.pop() {
-            f(task)
+            f(task.clone())
         }
     }
 
@@ -157,7 +157,7 @@ pub(crate) trait Task {
         unimplemented!()
     }
 
-    fn add_listener(&mut self, _: Box<dyn FnOnce(&dyn Task)>) {
+    fn add_listener(&mut self, _: Box<dyn FnOnce(Rc<RefCell<dyn Task>>)>) {
         //TODO: unimplemented!()
     }
 
@@ -170,8 +170,10 @@ pub(crate) trait Task {
 
         if self.is_done() &&
             self.set_state(&[State::Running], State::Finished) {
+            let cloned_task = self.data().task();
+
             self.data_mut().finished_time = SystemTime::now();
-            //self.data_mut().notify_completion();
+            self.data_mut().notify_completion(cloned_task);
         }
     }
 
@@ -181,9 +183,12 @@ pub(crate) trait Task {
             State::Queued,
             State::Running
         ];
+
         if self.set_state(&expected, State::Canceled) {
+            let cloned_task = self.data().task();
+
             self.data_mut().finished_time = SystemTime::now();
-            // self.data_mut().notify_completion(Box::new(self));
+            self.data_mut().notify_completion(cloned_task);
         }
 
         if let Some(nested) = self.data_mut().nested.as_mut() {
@@ -201,7 +206,7 @@ pub(crate) trait Task {
 
     fn is_finished(&self) -> bool {
         self.data().state == State::Finished ||
-             self.data().state == State::Canceled
+            self.data().state == State::Canceled
     }
 
     fn can_request(&self) -> bool {
@@ -220,7 +225,6 @@ pub(crate) trait Task {
         let ni = Rc::new(cn.borrow().to_node());
         let call = Rc::new(RefCell::new(RpcCall::new(&ni, msg)));
         let task = self.data().task();
-        let server = self.data().dht.borrow().server();
 
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
             match prev_state {
@@ -257,6 +261,8 @@ pub(crate) trait Task {
             self.data().dht.borrow().node_id(),
             self.data().dht.borrow().socket_addr()
         );
+
+        let server = self.data().dht.borrow().server();
         server.borrow_mut().send_call(call);
         Ok(())
     }

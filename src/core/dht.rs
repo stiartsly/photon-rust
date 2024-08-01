@@ -654,7 +654,7 @@ impl DHT {
 
         let cloned_result = found.clone();
         let cloned_complete_fn = complete_fn.clone();
-        task.add_listener(Box::new(move |_: &dyn Task| {
+        task.add_listener(Box::new(move |_:Rc<RefCell<dyn Task>>| {
             cloned_complete_fn.borrow_mut()(cloned_result.borrow().deref().clone());
         }));
 
@@ -707,11 +707,11 @@ impl DHT {
         task.set_name("store-value");
         task.set_want_token(true);
         task.add_listener(Box::new(move |_task| {
-            if _task.state() != State::Finished {
+            if _task.borrow().state() != State::Finished {
                 return;
             }
 
-            if let Some(downcasted) = _task.as_any().downcast_ref::<NodeLookupTask>() {
+            if let Some(downcasted) = _task.borrow().as_any().downcast_ref::<NodeLookupTask>() {
                 let closest_set = downcasted.closest_set();
                 if closest_set.size() == 0 {
                     // This hould never happen
