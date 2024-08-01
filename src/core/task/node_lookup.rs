@@ -16,7 +16,7 @@ use crate::{
 use crate::msg::{
     find_node_req,
     find_node_rsp,
-    msg::{self, Msg},
+    msg::{Method, Kind, Msg},
     lookup_req::{Msg as LookupRequest},
     lookup_rsp::{Msg as LookupResponse},
 };
@@ -68,6 +68,7 @@ impl LookupTask for NodeLookupTask {
     fn data(&self) -> &LookupTaskData {
         &self.lookup_data
     }
+
     fn data_mut(&mut self) -> &mut LookupTaskData {
         &mut self.lookup_data
     }
@@ -118,14 +119,14 @@ impl Task for NodeLookupTask {
                 None => { break },
             };
 
-            let mut req = find_node_req::Message::new();
-            req.with_target(self.target().clone());
-            req.with_want4(true);
-            req.with_want6(false);
+            let mut msg = find_node_req::Message::new();
+            msg.with_target(self.target());
+            msg.with_want4(true);
+            msg.with_want6(false);
 
-            let cloned_req  = Rc::new(RefCell::new(req));
+            let msg  = Rc::new(RefCell::new(msg));
             let cloned_next = next.clone();
-            if let Err(err) = self.send_call(next, cloned_req, Box::new(move|_| {
+            if let Err(err) = self.send_call(next, msg, Box::new(move|_| {
                 cloned_next.borrow_mut().set_sent();
             })) {
                error!("Error on sending 'findNode' message: {:?}", err);
@@ -133,18 +134,17 @@ impl Task for NodeLookupTask {
         }
     }
 
-    fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
-        let binding = rsp.borrow();
-        if let Some(downcasted) = binding.as_any().downcast_ref::<find_node_rsp::Message>() {
-            LookupTask::call_responsed(self, call, downcasted);
+    fn call_responsed(&mut self, call: &RpcCall, msg: Rc<RefCell<dyn Msg>>) {
+        if let Some(msg) = msg.borrow().as_any().downcast_ref::<find_node_rsp::Message>() {
+            LookupTask::call_responsed(self, call, msg);
 
             if !call.matches_id()||
-                binding.kind() != msg::Kind::Response ||
-                binding.method() != msg::Method::FindNode {
+                msg.kind() != Kind::Response ||
+                msg.method() != Method::FindNode {
                 return;
             }
 
-            if let Some(nodes) = downcasted.nodes4() { // TODO:
+            if let Some(nodes) = msg.nodes4() { // TODO:
                 if !nodes.is_empty() {
                     self.add_candidates(nodes);
                 }

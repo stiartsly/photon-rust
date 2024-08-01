@@ -16,7 +16,7 @@ use crate::{
 use crate::msg::{
     find_peer_req,
     find_peer_rsp,
-    msg::{self, Msg},
+    msg::{Method, Kind, Msg},
     lookup_req::{Msg as LookupRequest},
 };
 
@@ -102,7 +102,6 @@ impl Task for PeerLookupTask {
 
             let msg = Rc::new(RefCell::new(msg));
             let cloned_next = next.clone();
-
             if let Err(err) = self.send_call(next, msg, Box::new(move|_| {
                 cloned_next.borrow_mut().set_sent();
             })) {
@@ -111,24 +110,23 @@ impl Task for PeerLookupTask {
         }
     }
 
-    fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
-        let binding = rsp.borrow();
-        if let Some(downcasted) = binding.as_any().downcast_ref::<find_peer_rsp::Message>() {
-            LookupTask::call_responsed(self, call, downcasted);
+    fn call_responsed(&mut self, call: &RpcCall, msg: Rc<RefCell<dyn Msg>>) {
+        if let Some(msg) = msg.borrow().as_any().downcast_ref::<find_peer_rsp::Message>() {
+            LookupTask::call_responsed(self, call, msg);
 
             if !call.matches_id()||
-                binding.kind() != msg::Kind::Response ||
-                binding.method() != msg::Method::FindPeer {
+                msg.kind() != Kind::Response ||
+                msg.method() != Method::FindPeer {
                 return;
             }
 
-            for peer in downcasted.peers() {
+            for peer in msg.peers() {
                 if !peer.is_valid() {
                     error!("Response include invalid peer, signature mismatched.");
                     return; // ignored.
                 }
             }
-            (self.result_fn)(self.base_data.task(), downcasted.peers())
+            (self.result_fn)(self.base_data.task(), msg.peers())
         }
     }
 

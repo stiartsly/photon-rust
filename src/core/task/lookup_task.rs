@@ -32,7 +32,8 @@ impl LookupTaskData {
         Self {
             target: target.clone(),
             closest_set: ClosestSet::new(
-                target, constants::MAX_ENTRIES_PER_BUCKET
+                target,
+                constants::MAX_ENTRIES_PER_BUCKET
             ),
             closest_candidates: ClosestCandidates::new(
                 target, 3 * constants::MAX_ENTRIES_PER_BUCKET,
@@ -60,14 +61,12 @@ pub(crate) trait LookupTask {
 
     fn add_candidates(&mut self, nodes: &[Rc<NodeInfo>]) {
         let mut candidates = Vec::new();
-
         let dht = self.dht();
-        let binding_dht = dht.borrow();
 
         for item in nodes.iter() {
             if is_bogon_addr!(item.socket_addr()) ||
-                binding_dht.node_id() == item.id() ||
-                binding_dht.socket_addr() == item.socket_addr() ||
+                dht.borrow().node_id() == item.id() ||
+                dht.borrow().socket_addr() == item.socket_addr() ||
                 self.data().closest_set.contains(item.id()) {
                 continue;
             }
@@ -113,10 +112,10 @@ pub(crate) trait LookupTask {
         candidate.clear_sent()
     }
 
-    fn call_responsed(&mut self, call: &RpcCall, rsp: &dyn LookupResponse) {
+    fn call_responsed(&mut self, call: &RpcCall, msg: &dyn LookupResponse) {
         if let Some(cn) = self.remove_candidate(call.target_nodeid()) {
             cn.borrow_mut().set_replied();
-            cn.borrow_mut().set_token(rsp.token());
+            cn.borrow_mut().set_token(msg.token());
             self.add_closest(cn);
         }
     }

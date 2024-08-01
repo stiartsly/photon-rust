@@ -16,7 +16,7 @@ use crate::{
 use crate::msg::{
     find_value_req,
     find_value_rsp,
-    msg::{self, Msg},
+    msg::{Method, Kind, Msg},
     lookup_req::{Msg as LookupRequest},
     lookup_rsp::{Msg as LookupResponse},
 };
@@ -121,18 +121,17 @@ impl Task for ValueLookupTask {
         }
     }
 
-    fn call_responsed(&mut self, call: &RpcCall, rsp: Rc<RefCell<dyn Msg>>) {
-        let binding = rsp.borrow();
-        if let Some(downcasted) = binding.as_any().downcast_ref::<find_value_rsp::Message>() {
-            LookupTask::call_responsed(self, call, downcasted);
+    fn call_responsed(&mut self, call: &RpcCall, msg: Rc<RefCell<dyn Msg>>) {
+        if let Some(msg) = msg.borrow().as_any().downcast_ref::<find_value_rsp::Message>() {
+            LookupTask::call_responsed(self, call, msg);
 
             if !call.matches_id()||
-                binding.kind() != msg::Kind::Response ||
-                binding.method() != msg::Method::FindValue {
+                msg.kind() != Kind::Response ||
+                msg.method() != Method::FindValue {
                 return;
             }
 
-            if let Some(value) = downcasted.value() {
+            if let Some(value) = msg.value() {
                 let id = value.id();
                 if &id == LookupTask::target(self).as_ref() {
                     warn!("Responsed value id {} mismatched with expected {}", id, LookupTask::target(self));
@@ -152,7 +151,7 @@ impl Task for ValueLookupTask {
 
                 (self.result_fn)(self.base_data.task(), Some(value.clone()));
             } else {
-                if let Some(nodes) = LookupResponse::nodes4(downcasted) {
+                if let Some(nodes) = LookupResponse::nodes4(msg) {
                     if !nodes.is_empty() {
                         self.add_candidates(nodes);
                     }

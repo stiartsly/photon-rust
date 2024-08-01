@@ -74,9 +74,9 @@ impl Task for PingRefreshTask {
                 cn
             };
 
-            let req = Rc::new(RefCell::new(ping_req::Message::new()));
+            let msg = Rc::new(RefCell::new(ping_req::Message::new()));
             let cloned_todo = self.todo.clone();
-            if let Err(err) = self.send_call(cn, req, Box::new(move|_| {
+            if let Err(err) = self.send_call(cn, msg, Box::new(move|_| {
                 cloned_todo.borrow_mut().pop_front();
             })) {
                error!("Error on sending 'pingRequest' message: {:?}", err);
