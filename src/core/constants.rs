@@ -30,6 +30,6 @@ pub(crate) const ROUTING_TABLE_PERSIST_INTERVAL: u128 = 10 * 60 * 1000;   // 10 
 // pub(crate) const BOOTSTRAP_MIN_INTERVAL: u128 = 4 * 60 * 1000;
 
 
-pub(crate) const RPC_CALL_TIMEOUT_MAX: u128 = 10 * 1000;
+pub(crate) const RPC_CALL_TIMEOUT_MAX: u64 = 10 * 1000;
 
 pub(crate) const EXPIRED_CHECK_INTERVAL: u64 = 60 * 1000;

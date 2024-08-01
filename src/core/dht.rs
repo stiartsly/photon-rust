@@ -169,7 +169,7 @@ impl DHT {
             msg.with_want4(true);
 
             let msg  = Rc::new(RefCell::new(msg));
-            let call = Rc::new(RefCell::new(RpcCall::new(self.cloned(), &item, msg)));
+            let call = Rc::new(RefCell::new(RpcCall::new(item.clone(), self.cloned(), msg)));
             let len = bootstrap_nodes.len();
 
             let cloned_nodes = nodes.clone();
@@ -177,6 +177,7 @@ impl DHT {
             let cloned_dht = self.cloned();
             let cloned_bootstrap_time = self.bootstrap_time.clone();
 
+            call.borrow_mut().set_cloned(call.clone());
             call.borrow_mut().set_state_changed_fn(move |_call, _, _cur| {
                 match _cur {
                     rpccall::State::Responsed => {},
@@ -252,7 +253,8 @@ impl DHT {
 
         if let Some(entry) = self.rtable.borrow().random_node() {
             let msg  = Rc::new(RefCell::new(ping_req::Message::new()));
-            let call = Rc::new(RefCell::new(RpcCall::new(self.cloned(), &entry, msg)));
+            let call = Rc::new(RefCell::new(RpcCall::new(entry, self.cloned(), msg)));
+            call.borrow_mut().set_cloned(call.clone());
             self.server().borrow_mut().send_call(call);
         }
     }
@@ -388,9 +390,12 @@ impl DHT {
             new_entry.signal_response();
             new_entry.merge_request_time(call.borrow().sent_time().clone());
         } else if !entry_found {
-            let req = Rc::new(RefCell::new(ping_req::Message::new()));
-            let ni = new_entry.ni();
-            let call = Rc::new(RefCell::new(RpcCall::new(self.cloned(), &ni, req)));
+            let call = Rc::new(RefCell::new(RpcCall::new(
+                new_entry.ni(),
+                self.cloned(),
+                Rc::new(RefCell::new(ping_req::Message::new()))
+            )));
+            call.borrow_mut().set_cloned(call.clone());
             self.server().borrow_mut().send_call(call);
         }
         self.rtable.borrow_mut().put(new_entry);

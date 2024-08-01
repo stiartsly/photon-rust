@@ -223,9 +223,10 @@ pub(crate) trait Task {
         }
 
         let ni = Rc::new(cn.borrow().to_node());
-        let call = Rc::new(RefCell::new(RpcCall::new(self.data().dht(), &ni, msg)));
+        let call = Rc::new(RefCell::new(RpcCall::new(ni, self.data().dht(), msg)));
         let task = self.data().task();
 
+        call.borrow_mut().set_cloned(call.clone());
         call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
             match prev_state {
                 CallState::Sent => task.borrow_mut().call_sent(call),

@@ -110,20 +110,6 @@ impl Server {
 
     pub(crate) fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         msg.borrow_mut().set_id(self.nodeid());
-        if let Some(call) = msg.borrow().associated_call() {
-            self.scheduler.borrow_mut().add_one_time(move || {
-                let dht = call.borrow().dht();
-                dht.borrow_mut().on_send(call.borrow().target_id());
-                call.borrow_mut().send();
-            }, 0, 0);
-
-            /*
-            let cloned_call = call.clone();
-            self.scheduler.borrow_mut().add(move || {
-                cloned_call.borrow_mut().check_timeout()
-            }, 2000, 10);*/
-        }
-
         self.queue4.borrow_mut().push_back(msg);
     }
 
@@ -276,10 +262,7 @@ where
 
     if let Some(call) = msg.borrow().associated_call() {
         dht.borrow_mut().on_send(call.borrow().target_id());
-        call.borrow_mut().send();
-        // self.scheduler.borrow_mut().add(move || {
-        //    call.borrow_mut().check_timeout()
-        // }, 2000, 10);
+        call.borrow_mut().send(dht.borrow().server().borrow().scheduler());
     }
 
     let serialized = msg::serialize(msg.clone());

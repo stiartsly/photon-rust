@@ -6,23 +6,22 @@ use tokio::time::{Duration, Instant};
 
 struct Job {
     cb: Box<dyn FnMut()>,
-    duration: Duration,
-    periodic: bool,
+    period_time: Option<Duration>,
 }
 
 impl Job {
-    fn new<F>(cb: F, delay: u64 /* ms */, periodic: bool) -> Self
+    fn new<F>(cb: F, period: u64 /* ms */) -> Self
     where F: FnMut() + 'static {
+        let mut period_time = None;
+        if period > 0 {
+            period_time = Some(Duration::from_millis(period));
+        }
+
         Self {
             cb: Box::new(cb),
-            duration: Duration::from_millis(delay),
-            periodic,
+            period_time,
         }
     }
-
-    /*fn cancel(&mut self) {
-        self.cb = Box::new(||{});
-    }*/
 
     pub(crate) fn cb(&mut self) {
         (self.cb)()
@@ -45,19 +44,19 @@ impl Scheduler {
         }
     }
 
-    pub(crate) fn add_one_time<F>(&mut self, cb: F, start: u64, delay: u64)
+    pub(crate) fn add_once_shoot<F>(&mut self, cb: F, start: u64)
     where F: FnMut() + 'static {
         self.add_job(
             Duration::from_millis(start),
-            Box::new(Job::new(cb, delay, false ))
+            Box::new(Job::new(cb, 0))
         );
     }
 
-    pub(crate) fn add<F>(&mut self, cb: F, start: u64, delay: u64)
+    pub(crate) fn add<F>(&mut self, cb: F, start: u64, period: u64)
     where F: FnMut() + 'static {
         self.add_job(
             Duration::from_millis(start),
-            Box::new(Job::new(cb, delay, true ))
+            Box::new(Job::new(cb, period)),
         );
     }
 
@@ -90,9 +89,7 @@ impl Scheduler {
     pub(crate) fn next_timeout(&self) -> Instant {
         match self.timers.iter().next() {
             Some(timer) => timer.0.clone(),
-            None => {
-                self.now + Duration::from_secs(60*60)
-            }
+            None => self.now + Duration::from_secs(60*60)
         }
     }
 }
@@ -107,8 +104,10 @@ pub(crate) fn run_jobs(sched: Rc<RefCell<Scheduler>>) {
 
     while let Some(mut job) = timer.pop_front() {
         job.cb();
-        if job.periodic {
-            sched.borrow_mut().add_job(job.duration, job);
-        }
+        let time = match job.period_time {
+            Some(v) => v,
+            None => continue,
+        };
+        sched.borrow_mut().add_job(time, job);
     }
 }

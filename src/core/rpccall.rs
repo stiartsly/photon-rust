@@ -1,13 +1,15 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::time::SystemTime;
+use std::time::Duration;
 
 use crate::{
-    unwrap, as_millis,
+    unwrap,
     constants,
     Id,
     NodeInfo,
     dht::DHT,
+    scheduler::Scheduler,
     msg::msg::{self, Msg}
 };
 
@@ -17,7 +19,7 @@ pub(crate) enum State {
     Sent,
     Stalled,
     Timeout,
-    Canceled,
+    // Canceled,
     Err,
     Responsed,
 }
@@ -40,6 +42,8 @@ pub(crate) struct RpcCall {
     timeout_fn: Box<dyn Fn(&RpcCall)>,
 
     dht: Rc<RefCell<DHT>>,
+    scheduler: Option<Rc<RefCell<Scheduler>>>,
+    cloned: Option<Rc<RefCell<RpcCall>>>,
 }
 
 static mut NEXT_TXID: i32= 0;
@@ -56,9 +60,8 @@ fn next_txid() -> i32 {
 
 #[allow(dead_code)]
 impl RpcCall {
-    pub(crate) fn new(
+    pub(crate) fn new(target: Rc<NodeInfo>,
         dht: Rc<RefCell<DHT>>,
-        target: &Rc<NodeInfo>,
         msg: Rc<RefCell<dyn Msg>>) -> Self
     {
 
@@ -69,7 +72,7 @@ impl RpcCall {
 
         RpcCall {
             txid: next_txid(),
-            target: target.clone(),
+            target,
             req: Some(msg),
             rsp: None,
 
@@ -83,6 +86,8 @@ impl RpcCall {
             timeout_fn: Box::new(|_| {}),
 
             dht,
+            scheduler: None,
+            cloned: None,
         }
     }
 
@@ -100,6 +105,10 @@ impl RpcCall {
 
     pub(crate) fn target(&self) -> Rc<NodeInfo> {
         self.target.clone()
+    }
+
+    pub(crate) fn set_cloned(&mut self, cloned: Rc<RefCell<RpcCall>>) {
+        self.cloned = Some(cloned);
     }
 
     pub(crate) fn matches_id(&self) -> bool {
@@ -177,16 +186,22 @@ impl RpcCall {
         }
     }
 
-    pub(crate) fn send(&mut self) {
+    pub(crate) fn send(&mut self, scheduler: Rc<RefCell<Scheduler>>) {
         self.sent = SystemTime::now();
         self.update_state(State::Sent);
+
+        self.scheduler = Some(scheduler);
+        let cloned = unwrap!(self.cloned).clone();
+        unwrap!(self.scheduler).borrow_mut().add_once_shoot(move || {
+            cloned.borrow_mut().check_timeout();
+        }, 2*1000);
     }
 
-    pub(crate) fn responsed(&mut self, rsp: Rc<RefCell<dyn Msg>>) {
-        self.rsp = Some(rsp);
+    pub(crate) fn responsed(&mut self, msg: Rc<RefCell<dyn Msg>>) {
+        self.rsp = Some(msg.clone());
         self.responsed = SystemTime::now();
 
-        match unwrap!(self.rsp()).borrow().kind() {
+        match msg.borrow().kind() {
             msg::Kind::Request => {},
             msg::Kind::Response => self.update_state(State::Responsed),
             msg::Kind::Error => self.update_state(State::Err)
@@ -195,11 +210,6 @@ impl RpcCall {
 
     fn failed(&mut self) {
         self.update_state(State::Timeout)
-    }
-
-    fn cancel(&mut self) {
-        // TOOD: cancel checking timeout.
-        self.update_state(State::Canceled);
     }
 
     pub(crate) fn stall(&mut self) {
@@ -213,9 +223,18 @@ impl RpcCall {
             return;
         }
 
-        if constants::RPC_CALL_TIMEOUT_MAX > as_millis!(&self.sent) {
+        let timeout = Duration::from_millis(constants::RPC_CALL_TIMEOUT_MAX);
+        let elapsed = self.sent.elapsed().unwrap();
+
+        if timeout > elapsed {
+            let remaining = (timeout - elapsed).as_millis() as u64;
+
             self.update_state(State::Stalled);
-            // TODO:
+            let cloned = unwrap!(self.cloned).clone();
+            unwrap!(self.scheduler).borrow_mut().add_once_shoot(move || {
+                cloned.borrow_mut().check_timeout()
+            }, remaining);
+
         } else {
             self.update_state(State::Timeout);
         }
