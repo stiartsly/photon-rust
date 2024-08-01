@@ -31,6 +31,7 @@ impl TaskManager {
         if self.canceling {
             return;
         }
+
         if task.borrow().state() == State::Running {
             self.running.push_back(task);
             return;
@@ -41,6 +42,7 @@ impl TaskManager {
             return;
         }
 
+        task.borrow_mut().set_cloned(task.clone());
         match prior {
             true => self.queued.push_front(task),
             false => self.queued.push_back(task),
