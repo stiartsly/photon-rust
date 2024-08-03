@@ -99,7 +99,7 @@ impl Task for ValueLookupTask {
         while self.can_request() {
             let next = match LookupTask::next_candidate(self) {
                 Some(next) => next.clone(),
-                None => { break },
+                None => break ,
             };
 
             let mut msg = find_value_req::Message::new();
@@ -113,11 +113,13 @@ impl Task for ValueLookupTask {
 
             let msg = Rc::new(RefCell::new(msg));
             let cloned_next = next.clone();
-            if let Err(err) = self.send_call(next, msg, Box::new(move|_| {
+            let ni = next.borrow().ni();
+
+            let _ = self.send_call(ni, msg, Box::new(move|_| {
                 cloned_next.borrow_mut().set_sent();
-            })) {
-               error!("Error on sending 'findNode' message: {:?}", err);
-            }
+            })).map_err(|e| {
+               error!("Error on sending 'findNode' message: {:?}", e);
+            });
         }
     }
 

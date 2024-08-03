@@ -18,7 +18,6 @@ use crate::{
     Peer,
     Value,
     error::Error,
-    node_info::Convertible,
     rpccall::{self, RpcCall},
     lookup_option::LookupOption,
     routing_table::RoutingTable,
@@ -647,7 +646,7 @@ impl DHT {
     where F: FnMut(Option<NodeInfo>) + 'static
     {
         let found = Rc::new(RefCell::new(
-            self.rtable.borrow().bucket_entry(&id).map(|v| v.deref().deref().deref().clone())
+            self.rtable.borrow().bucket_entry(&id).map(|v| v.ni().deref().clone())
         ));
         let cloned_found = found.clone();
 

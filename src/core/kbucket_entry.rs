@@ -2,14 +2,13 @@ use std::fmt;
 use std::rc::Rc;
 use std::net::SocketAddr;
 use std::time::SystemTime;
-use std::ops::Deref;
 
 use crate::{
     as_millis,
     constants,
     version,
     id::Id,
-    node_info::{NodeInfo, Reachable, Convertible},
+    node_info::{NodeInfo, Reachable},
 };
 
 /**
@@ -169,16 +168,6 @@ impl Reachable for KBucketEntry {
 
     fn set_reachable(&mut self, reachable: bool) {
         self.reachable = reachable
-    }
-}
-
-impl Convertible for KBucketEntry {
-    fn deref(&self) -> Rc<NodeInfo> {
-        self.ni.clone()
-    }
-
-    fn into(&self) -> NodeInfo {
-        self.ni.deref().clone()
     }
 }
 

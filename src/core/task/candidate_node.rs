@@ -1,12 +1,10 @@
 use std::rc::Rc;
-use std::ops::Deref;
 use std::time::SystemTime;
 
-use crate::id::Id;
-use crate::node_info::{
+use crate::{
+    Id,
     NodeInfo,
-    Convertible,
-    Reachable
+    node_info::Reachable,
 };
 
 #[derive(Clone)]
@@ -49,9 +47,9 @@ impl CandidateNode {
         self.last_sent = SystemTime::UNIX_EPOCH;
     }
 
-    // pub(crate) fn ni(&self) -> Rc<NodeInfo> {
-    //    self.ni.clone()
-    // }
+    pub(crate) fn ni(&self) -> Rc<NodeInfo> {
+        self.ni.clone()
+    }
 
     pub(crate) fn pinged(&self) -> i32 {
         self.pinged
@@ -89,15 +87,5 @@ impl Reachable for CandidateNode {
 
     fn set_reachable(&mut self, reachable: bool) {
         self.reachable = reachable
-    }
-}
-
-impl Convertible for CandidateNode {
-    fn deref(&self) -> Rc<NodeInfo> {
-        self.ni.clone()
-    }
-
-    fn into(&self) -> NodeInfo {
-        self.ni.deref().clone()
     }
 }

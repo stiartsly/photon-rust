@@ -59,7 +59,7 @@ impl Task for PeerAnnounceTask {
 
     fn update(&mut self) {
         while self.can_request() {
-            let cn = {
+            let candidate_node = {
                 match self.todo.borrow().front() {
                     Some(cn) => cn.clone(),
                     None => break,
@@ -67,12 +67,14 @@ impl Task for PeerAnnounceTask {
             };
 
             let msg = Rc::new(RefCell::new(announce_peer_req::Message::new()));
-            let cloned_todo = self.todo.clone();
-            if let Err(err) = self.send_call(cn, msg, Box::new(move|_| {
-                cloned_todo.borrow_mut().pop_front();
-            })) {
-               error!("Error on sending 'findNode' message: {:?}", err);
-            }
+            let ni = candidate_node.borrow().ni();
+            let todo = self.todo.clone();
+
+            let _ = self.send_call(ni, msg, Box::new(move|_| {
+                todo.borrow_mut().pop_front();
+            })).map_err(|e| {
+                error!("Error on sending 'AnnouncePeer' message: {:?}", e);
+            });
         }
     }
 }

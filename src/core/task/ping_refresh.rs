@@ -61,13 +61,11 @@ impl Task for PingRefreshTask {
 
     fn update(&mut self) {
         while self.can_request() {
-            let cn = {
-                let todo = self.todo.borrow();
-                let cn = match todo.front() {
+            let candidate_node = {
+                let cn = match self.todo.borrow().front() {
                     Some(cn) => cn.clone(),
                     None => break,
                 };
-
                 if !self.check_all && !cn.borrow().needs_ping() {
                     self.todo.borrow_mut().pop_front();
                 }
@@ -75,12 +73,14 @@ impl Task for PingRefreshTask {
             };
 
             let msg = Rc::new(RefCell::new(ping_req::Message::new()));
+            let ni  = candidate_node.borrow().ni();
             let cloned_todo = self.todo.clone();
-            if let Err(err) = self.send_call(cn, msg, Box::new(move|_| {
+
+            let _ = self.send_call(ni, msg, Box::new(move|_| {
                 cloned_todo.borrow_mut().pop_front();
-            })) {
-               error!("Error on sending 'pingRequest' message: {:?}", err);
-            }
+            })).map_err(|e| {
+               error!("Error on sending 'pingRequest' message: {:?}", e);
+            });
         }
     }
 

@@ -5,7 +5,6 @@ use std::net::{
     Ipv4Addr,
     Ipv6Addr
 };
-use std::rc::Rc;
 use ciborium::Value;
 
 use crate::{
@@ -18,11 +17,6 @@ pub(crate) trait Reachable {
     fn reachable(&self) -> bool;
     fn unreachable(&self) -> bool;
     fn set_reachable(&mut self, _: bool);
-}
-
-pub(crate) trait Convertible {
-    fn deref(&self) -> Rc<NodeInfo>;
-    fn into(&self) -> NodeInfo;
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

@@ -8,7 +8,7 @@ use log::debug;
 
 use crate::{
     unwrap,
-    node_info::Convertible,
+    NodeInfo,
     rpccall::{RpcCall, State as CallState},
     dht::DHT,
     error::Error,
@@ -57,32 +57,33 @@ pub(crate) struct TaskData {
     name: String,
     state: State,
 
-    started_time: SystemTime,
+    started_time:  SystemTime,
     finished_time: SystemTime,
 
     inflights: HashMap<TaskId, Rc<RefCell<RpcCall>>>,
     listeners: Vec<Box<dyn FnOnce(Rc<RefCell<dyn Task>>)>>,
 
-    nested: Option<Box<dyn Task>>,
+    nested: Option<Rc<RefCell<dyn Task>>>,
+    cloned: Option<Rc<RefCell<dyn Task>>>,
 
-    task: Option<Rc<RefCell<dyn Task>>>,
     dht: Rc<RefCell<DHT>>,
 }
 
-#[allow(dead_code)]
 impl TaskData {
     pub(crate) fn new(dht: Rc<RefCell<DHT>>) -> Self {
         Self {
             taskid: next_taskid(),
             name: "".to_string(),
             state: State::Initial,
-            nested: None,
+
             started_time: SystemTime::UNIX_EPOCH,
             finished_time: SystemTime::UNIX_EPOCH,
+
             inflights: HashMap::new(),
             listeners: Vec::new(),
 
-            task: None,
+            nested: None,
+            cloned: None,
             dht,
         }
     }
@@ -102,7 +103,7 @@ impl TaskData {
     }
 
     pub(crate) fn task(&self) -> Rc<RefCell<dyn Task>> {
-        unwrap!(self.task).clone()
+        unwrap!(self.cloned).clone()
     }
 }
 
@@ -119,7 +120,7 @@ pub(crate) trait Task {
     fn as_any(&self) -> &dyn Any;
 
     fn set_cloned(&mut self, task: Rc<RefCell<dyn Task>>) {
-        self.data_mut().task = Some(task)
+        self.data_mut().cloned = Some(task)
     }
 
     fn taskid(&self) -> i32 {
@@ -140,21 +141,18 @@ pub(crate) trait Task {
 
     fn set_state(&mut self, expected:&[State], new_state: State) -> bool {
         let found = expected.contains(&self.state());
-        match found {
-            true => {
-                self.data_mut().state = new_state;
-                true
-            },
-            false => false,
+        if found {
+            self.data_mut().state = new_state;
         }
+        found
     }
 
-    fn nested(&self) -> Option<&Box<dyn Task>> {
-        unimplemented!()
+    fn nested(&self) -> Option<Rc<RefCell<dyn Task>>> {
+        self.data().nested.as_ref().map(|v| v.clone())
     }
 
-    fn set_nested(&mut self, _: Box<dyn Task>) {
-        unimplemented!()
+    fn set_nested(&mut self, nested: Rc<RefCell<dyn Task>>) {
+        self.data_mut().nested = Some(nested);
     }
 
     fn add_listener(&mut self, _: Box<dyn FnOnce(Rc<RefCell<dyn Task>>)>) {
@@ -192,7 +190,7 @@ pub(crate) trait Task {
         }
 
         if let Some(nested) = self.data_mut().nested.as_mut() {
-            nested.cancel()
+            nested.borrow_mut().cancel()
         }
     }
 
@@ -214,16 +212,15 @@ pub(crate) trait Task {
     }
 
     fn send_call(&mut self,
-        candidate_node: Rc<RefCell<dyn Convertible>>,
+        node: Rc<NodeInfo>,
         msg: Rc<RefCell<dyn Msg>>,
-        mut f: Box<dyn FnMut(Rc<RefCell<RpcCall>>)>)
+        mut cb: Box<dyn FnMut(Rc<RefCell<RpcCall>>)>)
     -> Result<(), Error> {
         if !self.can_request() {
             return Ok(())
         }
 
-        let ni = candidate_node.borrow().deref();
-        let call = Rc::new(RefCell::new(RpcCall::new(ni, self.data().dht(), msg)));
+        let call = Rc::new(RefCell::new(RpcCall::new(node, self.data().dht(), msg)));
         let task = self.data().task();
 
         call.borrow_mut().set_cloned(call.clone());
@@ -254,7 +251,7 @@ pub(crate) trait Task {
             println!("state change invoked: prev: {:?} >>>>>>>>>>", prev_state);
         });
 
-        (f)(call.clone());
+        (cb)(call.clone());
         self.data_mut().inflights.insert(call.borrow().txid(), call.clone());
 
         debug!("Task#{} sending call to {}{}",
