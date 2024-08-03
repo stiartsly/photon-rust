@@ -224,31 +224,42 @@ pub(crate) trait Task {
         let task = self.data().task();
 
         call.borrow_mut().set_cloned(call.clone());
-        call.borrow_mut().set_state_changed_fn (move|call, prev_state, _| {
-            match prev_state {
-                CallState::Sent => task.borrow_mut().call_sent(call),
+        call.borrow_mut().set_state_changed_fn (move|c, _, cur| {
+            let mut task = task.borrow_mut();
+            let mut update_needed = true;
+            match cur {
+                CallState::Sent => task.call_sent(c),
                 CallState::Responsed => {
-                    task.borrow_mut().data_mut().inflights.remove(&call.txid());
-                    if task.borrow().is_done() {
-                        if let Some(msg) = call.rsp() {
-                            task.borrow_mut().call_responsed(call, msg);
-                        }
+                    update_needed = true;
+                    task.data_mut().inflights.remove(&c.txid());
+                    if !task.is_finished() && c.rsp().is_some() {
+                        task.call_responsed(c, unwrap!(c.rsp()).clone());
                     }
                 },
                 CallState::Err => {
-                    task.borrow_mut().data_mut().inflights.remove(&call.txid());
-                    if task.borrow().is_done() {
-                        task.borrow_mut().call_timeout(call);
+                    update_needed = true;
+                    task.data_mut().inflights.remove(&c.txid());
+                    if !task.is_finished() {
+                        task.call_error(c);
                     }
+
                 },
-                CallState::Timeout => {panic!("bbbb");}
-                _ => {println!("task state {:?}", prev_state);}
+                CallState::Timeout => {
+                    update_needed = true;
+                    task.data_mut().inflights.remove(&c.txid());
+                    if !task.is_finished() {
+                        task.call_timeout(c);
+                    }
+                }
+                CallState::Stalled => {
+                    update_needed = true;
+                }
+                _ => {}
             }
 
-            //if need_update {
-            //    self.serialized_update()
-            //}
-            println!("state change invoked: prev: {:?} >>>>>>>>>>", prev_state);
+            if update_needed {
+                // task.update();
+            }
         });
 
         (cb)(call.clone());
