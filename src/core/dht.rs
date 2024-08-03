@@ -17,6 +17,7 @@ use crate::{
     NodeInfo,
     Peer,
     Value,
+    error::Error,
     node_info::Convertible,
     rpccall::{self, RpcCall},
     lookup_option::LookupOption,
@@ -63,7 +64,7 @@ pub(crate) struct DHT {
     last_saved: SystemTime,
     running: bool,
 
-    bootstrap_need: bool,
+    bootstrap_needed: bool,
     bootstrap_nodes: Vec<Rc<NodeInfo>>,
     bootstrap_time: Rc<RefCell<SystemTime>>,
 
@@ -89,7 +90,7 @@ impl DHT {
             last_saved: SystemTime::UNIX_EPOCH,
 
             bootstrap_nodes: Vec::new(),
-            bootstrap_need: false,
+            bootstrap_needed: false,
             bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
 
             rtable:     Rc::new(RefCell::new(RoutingTable::new(node_info))),
@@ -157,16 +158,18 @@ impl DHT {
             false => self.bootstrap_nodes.clone()
         };
 
-        info!("DHT/{} bootstraping ....", as_kind_name!(&self.addr));
+        debug!("DHT/{} bootstraping ....", as_kind_name!(&self.addr));
 
         let nodes = Rc::new(RefCell::new(Vec::new())) as Rc<RefCell<Vec<Rc<NodeInfo>>>>;
         let count = Rc::new(RefCell::new(0));
 
         for item in bootstrap_nodes.iter() {
             let mut msg = find_node_req::Message::new();
+
             msg.set_remote(item.id(), item.socket_addr());
             msg.with_target(Rc::new(Id::random()));
             msg.with_want4(true);
+            println!(">>>>msg: {}", msg);
 
             let msg  = Rc::new(RefCell::new(msg));
             let call = Rc::new(RefCell::new(RpcCall::new(item.clone(), self.cloned(), msg)));
@@ -228,14 +231,16 @@ impl DHT {
         }
 
         trace!("DHT/{} regularly update...", as_kind_name!(&self.addr));
+
         self.server().borrow_mut().update_reachability();
         self.rtable.borrow_mut().maintenance();
 
-        if self.bootstrap_need || self.rtable.borrow().size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
+        if self.bootstrap_needed ||
+            self.rtable.borrow().size() < constants::BOOTSTRAP_IF_LESS_THAN_X_PEERS ||
             as_millis!(self.bootstrap_time.borrow()) > constants::SELF_LOOKUP_INTERVAL {
 
-            self.bootstrap_need = false;
             // Regularly search for our ID to update the routing table
+            self.bootstrap_needed = false;
             self.bootstrap();
         }
 
@@ -275,9 +280,9 @@ impl DHT {
         // TODO:
     }
 
-    pub(crate) fn start(&mut self, bootstrap_nodes: &[NodeInfo]) {
+    pub(crate) fn start(&mut self) -> Result<(), Error> {
         if self.running {
-            return;
+            return Err(Error::State(format!("DHT node is already running")));
         }
 
         // Load neighboring nodes from cache storage if they exist.
@@ -286,14 +291,13 @@ impl DHT {
             self.rtable.borrow_mut().load(path);
         }
 
-        bootstrap_nodes.iter().for_each(|item| {
-            self.bootstrap_nodes.push(Rc::new(item.clone()));
-        });
+       // bootstrap_nodes.iter().for_each(|item| {
+       //     self.bootstrap_nodes.push(Rc::new(item.clone()));
+       // });
 
         info!("Starting DHT/{} on {}", as_kind_name!(&self.addr), self.addr);
         self.running = true;
 
-        // Task management.
         let scheduler = self.server().borrow().scheduler();
         let taskman = self.taskman.clone();
         scheduler.borrow_mut().add(move || {
@@ -304,28 +308,30 @@ impl DHT {
         //lastSave = currentTimeMillis() - Constants::ROUTING_TABLE_PERSIST_INTERVAL + (120 * 1000);
 
         // Regular dht update.
-        let cloned_dht = self.cloned();
+        let dht = self.cloned();
         scheduler.borrow_mut().add(move || {
-            cloned_dht.borrow_mut().update();
+            dht.borrow_mut().update();
         }, 100, constants::DHT_UPDATE_INTERVAL);
 
         // Send a ping request to a random node to verify socket liveness.
-        let cloned_dht = self.cloned();
+        let dht = self.cloned();
         scheduler.borrow_mut().add(move || {
-            cloned_dht.borrow_mut().random_ping();
+            dht.borrow_mut().random_ping();
         }, constants::RANDOM_PING_INTERVAL, constants::RANDOM_PING_INTERVAL);
 
         // Perform a deep lookup to familiarize ourselves with random sections of
         // the keyspace.
-        let cloned_dht = self.cloned();
+        let dht = self.cloned();
         scheduler.borrow_mut().add(move || {
-            cloned_dht.borrow_mut().random_lookup();
+            dht.borrow_mut().random_lookup();
         }, constants::RANDOM_LOOKUP_INTERVAL, constants::RANDOM_LOOKUP_INTERVAL);
 
-        let cloned_dht = self.cloned();
+        let dht = self.cloned();
         scheduler.borrow_mut().add(move || {
-            cloned_dht.borrow().persist_announce();
+            dht.borrow().persist_announce();
         }, 1000, constants::RE_ANNOUNCE_INTERVAL);
+
+        Ok(())
     }
 
     pub(crate) fn stop(&mut self) {
@@ -334,7 +340,7 @@ impl DHT {
         }
 
         info!("{} initiated shutdown ...", as_kind_name!(&self.addr));
-        info!("stopping servers ...");
+        // info!("stopping server ...");
 
         self.cloned = None;
         self.running = false;
@@ -641,14 +647,13 @@ impl DHT {
     where F: FnMut(Option<NodeInfo>) + 'static
     {
         let found = Rc::new(RefCell::new(
-            self.rtable.borrow().bucket_entry(&id).map(|v| v.to_node())
+            self.rtable.borrow().bucket_entry(&id).map(|v| v.deref().deref().deref().clone())
         ));
         let cloned_found = found.clone();
 
         let mut task = NodeLookupTask::new(&id, self.cloned());
         task.set_name("node-lookup");
         task.set_result_fn(move |_task, _ni| {
-            println!(">>>>> DHT::find_node >>>1111");
             if let Some(ni) = _ni {
                 *(cloned_found.borrow_mut()) = Some(ni.deref().clone());
             }
@@ -663,7 +668,6 @@ impl DHT {
             cloned_complete_fn.borrow_mut()(cloned_result.borrow().deref().clone());
         }));
 
-        println!(">>>>> DHT::find_node >>>0000");
         self.taskman.borrow_mut().add(
             Rc::new(RefCell::new(task))
         );

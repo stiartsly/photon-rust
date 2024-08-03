@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::ops::Deref;
 use std::time::SystemTime;
 
 use crate::id::Id;
@@ -92,11 +93,11 @@ impl Reachable for CandidateNode {
 }
 
 impl Convertible for CandidateNode {
-    fn as_node(&self) -> &NodeInfo {
-        self.ni.as_ref()
+    fn deref(&self) -> Rc<NodeInfo> {
+        self.ni.clone()
     }
 
-    fn to_node(&self) -> NodeInfo {
-        self.ni.as_ref().clone()
+    fn into(&self) -> NodeInfo {
+        self.ni.deref().clone()
     }
 }

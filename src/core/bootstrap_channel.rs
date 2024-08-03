@@ -27,6 +27,10 @@ impl BootstrapChannel {
         self.updated = true;
     }
 
+    pub(crate) fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
     pub(crate) fn pop_all<F>(&mut self, mut f: F)
     where F: FnMut(NodeInfo) {
         if !self.updated {

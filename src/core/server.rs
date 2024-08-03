@@ -71,16 +71,6 @@ impl Server {
         self.calls.borrow().len()
     }
 
-    pub(crate) fn start(&mut self, dht4: Rc<RefCell<DHT>>) -> Result<(), Error> {
-        self.dht4 = Some(dht4.clone());
-
-        if let Some(dht4) = self.dht4.as_ref() {
-            info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
-        }
-
-        Ok(())
-    }
-
     pub(crate) fn stop(&mut self) {
         self.dht4 = None;
     }

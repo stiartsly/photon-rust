@@ -214,7 +214,7 @@ pub(crate) trait Task {
     }
 
     fn send_call(&mut self,
-        cn: Rc<RefCell<dyn Convertible>>,
+        candidate_node: Rc<RefCell<dyn Convertible>>,
         msg: Rc<RefCell<dyn Msg>>,
         mut f: Box<dyn FnMut(Rc<RefCell<RpcCall>>)>)
     -> Result<(), Error> {
@@ -222,7 +222,7 @@ pub(crate) trait Task {
             return Ok(())
         }
 
-        let ni = Rc::new(cn.borrow().to_node());
+        let ni = candidate_node.borrow().deref();
         let call = Rc::new(RefCell::new(RpcCall::new(ni, self.data().dht(), msg)));
         let task = self.data().task();
 

@@ -129,33 +129,35 @@ impl Node {
         if self.status != NodeStatus::Stopped {
             return;
         }
-        self.encryption_ctxts = Some(RefCell::new(CryptoCache::new(&self.encryption_keypair)));
+
         self.status = NodeStatus::Initializing;
-        info!("DHT node {} is starting...", self.id);
+        self.encryption_ctxts = Some(RefCell::new(CryptoCache::new(&self.encryption_keypair)));
 
-        let id = self.id.clone();
-        let storage_path = self.storage_path.clone();
+        info!("DHT node <{}> is starting...", self.id);
+
+        let path    = self.storage_path.clone();
         let keypair = self.encryption_keypair.clone();
-        let cfg = self.cfg.clone();
-        let bootstrap_channel = self.bootstrap_channel.clone();
-        let command_channel = self.command_channel.clone();
+        let nodeid  = self.id.clone();
+        let config  = self.cfg.clone();
+        let channel = self.bootstrap_channel.clone();
+        let cmds    = self.command_channel.clone();
+        let quit    = self.quit.clone();
 
-        let quit = self.quit.clone();
-
+        self.bootstrap_many(config.lock().unwrap().bootstrap_nodes());
         self.thread = Some(thread::spawn(move || {
-            let runner = Rc::new(RefCell::new(NodeRunner::new(
-                id, storage_path
-            )));
+            let runner = Rc::new(RefCell::new(NodeRunner::new(nodeid, path)));
+            runner.borrow_mut().set_cloned(&runner);
+            runner.borrow_mut().set_bootstrap_channel(&channel);
+            runner.borrow_mut().set_command_channel(&cmds);
+            runner.borrow_mut().start(config, keypair).err().map(|e| {
+                error!("{}", e);
+                *quit.lock().unwrap() = true;
+            });
 
-            let mut binding = runner.borrow_mut();
-
-            binding.set_cloned(&runner);
-            binding.set_bootstrap_channel(&bootstrap_channel);
-            binding.set_command_channel(&command_channel);
-            binding.start(cfg, keypair);
-            drop(binding);
-
-            node_runner::run_loop(runner.clone(), quit);
+            let quit_flag = *quit.lock().unwrap();
+            if !quit_flag {
+                node_runner::run_loop(runner, quit);
+            }
         }));
 
         self.status = NodeStatus::Running;
@@ -166,7 +168,7 @@ impl Node {
             return;
         }
 
-        info!("DHT node {} stopping...", self.id);
+        info!("DHT node <{}> stopping...", self.id);
 
         // Check for abnormal termination in the spawned thread. If the thread is still
         // running, then notify it to abort.
@@ -186,6 +188,14 @@ impl Node {
 
     pub fn is_running(&self) -> bool {
         self.status == NodeStatus::Running
+    }
+
+    pub fn bootstrap(&mut self, node: &NodeInfo) {
+        self.bootstrap_channel.lock().unwrap().push(node);
+    }
+
+    pub fn bootstrap_many(&mut self, nodes: &[NodeInfo]) {
+        self.bootstrap_channel.lock().unwrap().push_many(nodes);
     }
 
     pub fn id(&self) -> &Id {

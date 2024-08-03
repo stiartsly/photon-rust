@@ -14,6 +14,7 @@ use crate::{
     Compound,
     LookupOption,
     Network,
+    error::Error,
     dht::DHT,
     config::Config,
     data_storage::DataStorage,
@@ -84,50 +85,47 @@ impl NodeRunner {
         self.bootstrap_channel = Some(channel.clone());
     }
 
-    pub(crate) fn start(&mut self, cfg: Arc<Mutex<Box<dyn Config>>>, keypair: cryptobox::KeyPair) {
+    pub(crate) fn start(&mut self,
+        cfg: Arc<Mutex<Box<dyn Config>>>,
+        keypair: cryptobox::KeyPair) -> Result<(), Error>
+    {
         let cfg = cfg.lock().unwrap();
-
-        if let Some(addr4) = cfg.addr4() {
-            let mut dht = DHT::new(&self.nodeid, addr4);
+        if let Some(addr) = cfg.addr4() {
+            let mut dht = DHT::new(&self.nodeid, addr);
             dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
             self.dht4 = Some(Rc::new(RefCell::new(dht)));
         }
 
-        if let Some(addr6) = cfg.addr6() {
-            let mut dht = DHT::new(&self.nodeid, addr6);
+        if let Some(addr) = cfg.addr6() {
+            let mut dht = DHT::new(&self.nodeid, addr);
             dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
             self.dht4 = Some(Rc::new(RefCell::new(dht)));
         }
+        drop(cfg);
 
         let path = self.storage_path.clone() + "/node.db";
-        if let Err(_) = self.storage.borrow_mut().open(path) {
-            // error!("Attempt to open database storage failed {}", err);
-            // return Err(err);
-            panic!("Attempt to open database storage failed");
+        if let Err(e) = self.storage.borrow_mut().open(path.clone()) {
+            return Err(Error::State(format!("Openning data storage {} error: {}", path, e)));
         }
 
-        if let Some(dht4) = self.dht4.as_ref() {
-            let mut dht = dht4.borrow_mut();
+        if let Some(dht) = self.dht4.as_ref() {
+            dht.borrow_mut().set_server(&self.server);
+            dht.borrow_mut().set_storage(&self.storage);
+            dht.borrow_mut().set_tokenman(&self.tokenman);
+            dht.borrow_mut().set_cloned(&dht);
+            dht.borrow_mut().start().map_err(|e| return e)?;
 
-            dht.set_server(&self.server);
-            dht.set_storage(&self.storage);
-            dht.set_tokenman(&self.tokenman);
-            dht.set_cloned(&dht4);
-            dht.start(&cfg.bootstrap_nodes());
-
-            info!("Started DHT node on ipv4 address: {}", dht.socket_addr());
+            info!("Started DHT node on ipv4 address: {}", dht.borrow().socket_addr());
         }
 
-        if let Some(dht6) = self.dht6.as_ref() {
-            let mut dht = dht6.borrow_mut();
+        if let Some(dht) = self.dht6.as_ref() {
+            dht.borrow_mut().set_server(&self.server);
+            dht.borrow_mut().set_storage(&self.storage);
+            dht.borrow_mut().set_tokenman(&self.tokenman);
+            dht.borrow_mut().set_cloned(&dht);
+            dht.borrow_mut().start().map_err(|e| return e)?;
 
-            dht.set_server(&self.server);
-            dht.set_storage(&self.storage);
-            dht.set_tokenman(&self.tokenman);
-            dht.set_cloned(&dht6);
-            dht.start(&cfg.bootstrap_nodes());
-
-            info!("Started DHT node on ipv4 address: {}", dht.socket_addr());
+            info!("Started DHT node on ipv4 address: {}", dht.borrow().socket_addr());
         }
 
         let scheduler = self.server.borrow().scheduler();
@@ -150,7 +148,7 @@ impl NodeRunner {
                     dht.borrow_mut().add_bootstrap_node(&node);
                 }
             });
-        }, 1, 60);
+        }, 100, constants::DHT_UPDATE_INTERVAL);
 
         let channel = unwrap!(self.command_channel).clone();
         let runner  = unwrap!(self.cloned).clone();
@@ -158,26 +156,31 @@ impl NodeRunner {
             let mut channel = channel.lock().unwrap();
             while let Some(cmd) = channel.pop_front() {
                 match cmd {
-                    Command::FindNode(c) => runner.borrow().find_node(c),
-                    Command::FindValue(c) => runner.borrow().find_value(c),
-                    Command::FindPeer(c) => runner.borrow().find_peer(c),
-                    Command::StoreValue(c) => runner.borrow().store_value(c),
-                    Command::AnnouncePeer(c) => runner.borrow().announce_peer(c),
+                    Command::FindNode(c)    => runner.borrow().find_node(c),
+                    Command::FindValue(c)   => runner.borrow().find_value(c),
+                    Command::FindPeer(c)    => runner.borrow().find_peer(c),
+                    Command::StoreValue(c)  => runner.borrow().store_value(c),
+                    Command::AnnouncePeer(c)=> runner.borrow().announce_peer(c),
                 }
             }
         }, 1, 60);
+
+        Ok(())
     }
 
-    pub(crate) fn stop(&mut self) {
-        if let Some(dht4) = self.dht4.as_ref() {
-            info!("Started RPC server on ipv4 address: {}", dht4.borrow().socket_addr());
-            self.dht4 = None;
+    fn stop(&mut self) {
+        if let Some(dht) = self.dht4.as_ref() {
+            dht.borrow_mut().stop();
+            info!("Stopped DHT node on ipv4 address: {}", dht.borrow().socket_addr());
         }
 
-        if let Some(dht6) = self.dht6.as_ref() {
-            info!("Started RPC server on ipv6 address: {}", dht6.borrow().socket_addr());
-            self.dht6 = None;
+        if let Some(dht) = self.dht6.as_ref() {
+            dht.borrow_mut().stop();
+            info!("Stopped DHT node on ipv6 address: {}", dht.borrow().socket_addr());
         }
+
+        self.dht6 = None;
+        self.dht4 = None;
     }
 
     fn find_node(&self, cmd: Arc<Mutex<FindNodeCmd>>) {
@@ -250,23 +253,15 @@ pub(crate) fn run_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>)
     let server = runner.borrow().server.clone();
     let dht4 = unwrap!(runner.borrow().dht4).clone();
 
-    let result = server.borrow_mut().start(dht4.clone());
-    match result {
-        Ok(_) => {
-            _ = server::run_loop(
-                server.clone(),
-                dht4.clone(),
-                quit.clone()
-            ).map_err(|err| {
-                error!("Unexpected error happened in the loop: {}.", err);
-            });
-            server.borrow_mut().stop();
-            runner.borrow_mut().stop();
-        },
-        Err(err) => {
-            error!("Starting node server error {}, aborted.", err);
-        }
-    }
+    _ = server::run_loop(
+        server.clone(),
+        dht4.clone(),
+        quit.clone()
+    ).map_err(|err| {
+        error!("Unexpected error happened in the loop: {}.", err);
+    });
+    server.borrow_mut().stop();
+    runner.borrow_mut().stop();
 
     // Need to notify the main thread about any abnormal termination not initiated
     // by the main thread itself.

@@ -1,8 +1,7 @@
 use std::env;
 use std::fs;
 use std::thread;
-// use std::time::Duration;
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -44,13 +43,14 @@ async fn main() {
     b.add_bootstrap(&node);
 
     let cfg = b.build().unwrap();
+    println!("bootstrap nodes: {}\n", cfg.bootstrap_nodes().len());
 
-    let mut runner = Node::new(cfg).unwrap();
-    let _ = runner.start();
+    let mut node = Node::new(cfg).unwrap();
+    let _ = node.start();
 
     thread::sleep(Duration::from_secs(1));
-    let _ = runner.find_node_simple(&id).await;
+    let _ = node.find_node_simple(&id).await;
 
     thread::sleep(Duration::from_secs(10));
-    runner.stop();
+    node.stop();
 }
