@@ -44,7 +44,7 @@ impl Scheduler {
         }
     }
 
-    pub(crate) fn add_once_shoot<F>(&mut self, cb: F, start: u64)
+    pub(crate) fn add_oneshot<F>(&mut self, cb: F, start: u64)
     where F: FnMut() + 'static {
         self.add_job(
             Duration::from_millis(start),

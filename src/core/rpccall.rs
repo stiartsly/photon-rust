@@ -192,7 +192,7 @@ impl RpcCall {
 
         self.scheduler = Some(scheduler);
         let cloned = unwrap!(self.cloned).clone();
-        unwrap!(self.scheduler).borrow_mut().add_once_shoot(move || {
+        unwrap!(self.scheduler).borrow_mut().add_oneshot(move || {
             cloned.borrow_mut().check_timeout();
         }, 2*1000);
     }
@@ -231,7 +231,7 @@ impl RpcCall {
 
             self.update_state(State::Stalled);
             let cloned = unwrap!(self.cloned).clone();
-            unwrap!(self.scheduler).borrow_mut().add_once_shoot(move || {
+            unwrap!(self.scheduler).borrow_mut().add_oneshot(move || {
                 cloned.borrow_mut().check_timeout()
             }, remaining);
 
