@@ -14,6 +14,7 @@ use crate::{
     unwrap,
     as_millis,
     constants,
+    version,
     id::{self, Id},
     dht::DHT,
     error::Error,
@@ -91,10 +92,6 @@ impl Server {
         }
     }
 
-    //fn decrypt_into(&self, _: &Id, _: &[u8]) -> Result<Vec<u8>, Error> {
-    //    unimplemented!()
-    // }
-
     pub(crate) fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         msg.borrow_mut().set_id(self.nodeid());
         unwrap!(self.queue4).borrow_mut().push_back(msg);
@@ -102,15 +99,13 @@ impl Server {
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
         let txid = call.borrow().txid();
-
         let calls = self.calls.clone();
         calls.borrow_mut().insert(txid, call.clone());
 
         call.borrow_mut().set_responsed_fn(|_,_| {});
-        call.borrow_mut().set_timeout_fn(move |_| {
-            if let Some(c) = calls.borrow_mut().remove(&txid) {
-                let dht = c.borrow().dht();
-                dht.borrow_mut().on_timeout(c);
+        call.borrow_mut().set_timeout_fn(move |c| {
+            if calls.borrow_mut().remove(&txid).is_some() {
+                c.dht().borrow_mut().on_timeout(c);
             };
         });
 
@@ -169,7 +164,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         let mut running = true;
         while running {
             tokio::select! {
-                res = read_socket(sock4.as_ref(), buff4.as_ref(), move |_, encrypted| {
+                res = read_socket(sock4.as_ref(), buff4.as_ref(), server.clone(), move |_, encrypted| {
                     Ok(encrypted.to_vec())
                 }), if sock4.is_some() => {
                     match res {
@@ -183,7 +178,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                     }
                 }
 
-                res = read_socket(sock6.as_ref(), buff6.as_ref(), move |_, encrypted| {
+                res = read_socket(sock6.as_ref(), buff6.as_ref(), server.clone(), move |_, encrypted| {
                     Ok(encrypted.to_vec())
                 }), if sock6.is_some() => {
                     match res {
@@ -197,7 +192,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                     }
                 }
 
-                res = write_socket(sock4.as_ref(), dht4.as_ref(), queu4.as_ref(), move |_, plain| {
+                res = write_socket(sock4.as_ref(), queu4.as_ref(), dht4.as_ref(), move |_, plain| {
                     Ok(plain.to_vec())
                 }), if sock4.is_some() => {
                     match res {
@@ -206,7 +201,7 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                     }
                 }
 
-                res = write_socket(sock6.as_ref(), dht6.as_ref(), queu6.as_ref(), move |_, plain| {
+                res = write_socket(sock6.as_ref(), queu6.as_ref(), dht4.as_ref(), move |_, plain| {
                     Ok(plain.to_vec())
                 }), if sock6.is_some() => {
                     match res {
@@ -232,8 +227,10 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         Ok(())
     })
 }
+
 async fn read_socket<F>(socket: Option<&UdpSocket>,
     buffer: Option<&Rc<RefCell<Vec<u8>>>>,
+    server: Rc<RefCell<Server>>,
     mut decrypt: F
 ) -> Result<Option<Rc<RefCell<dyn Msg>>>, io::Error>
 where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
@@ -278,22 +275,72 @@ where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
         len,
         msg.borrow());
 
+    // txid should not be zero if it's not Error message.
     if msg.borrow().kind() != msg::Kind::Error && msg.borrow().txid() == 0 {
         warn!("Received a message with invalid txid, discarded it");
         return Ok(None);
     }
 
-    // Just respond to incoming requests, no need to match them to pending requests
+    // Just respond to incoming request, no need to match them to pending requests
     if msg.borrow().kind() == msg::Kind::Request {
         return Ok(Some(msg));
     }
 
-    Ok(Some(msg))
+    // Check if it's a response to an outstanding request.
+    let calls = server.borrow().calls.clone();
+    let call = calls.borrow_mut().remove(&msg.borrow().txid());
+    if let Some(call) = call {
+        let req = match call.borrow().req() {
+            Some(v) => v.clone(),
+            None => return Ok(None),
+        };
+
+        if req.borrow().remote_addr() == msg.borrow().origin() {
+            msg.borrow_mut().with_associated_call(call.clone());
+            call.borrow_mut().responsed(msg.clone());
+
+            return Ok(Some(msg.clone()));
+        }
+
+        // 1. the message is not a request
+        // 2. transaction ID matched
+        // 3. request destination did not match response source!!
+        // this happening by chance is exceedingly unlikely
+        // indicates either port-mangling NAT, a multhomed host listening on any-local address
+        // or some kind of attack ignore response
+
+        warn!("Transaction id matched, socket address did not, ignoring message, request: {} -> response: {}, version: {}",
+            req.borrow().remote_addr(),
+            msg.borrow().origin(),
+            version::formatted_version(msg.borrow().ver())
+        );
+
+        // but expect an upcoming timeout if it's really just a misbehaving node
+        call.borrow_mut().responsed_socket_mismatch();
+        call.borrow_mut().stall();
+        return Ok(None);
+    }
+
+    // a) it's not a request
+    // b) didn't find a call
+    // c) up-time is high enough that it's not a stray from a restart
+    // did not expect this response
+    if msg.borrow().kind() == msg::Kind::Response { // && as_millis!(self.started) > 2 * 60 * 1000 {
+        warn!("Can not find rpc call for response {}", msg.borrow());
+        return Ok(None);
+    }
+
+    if msg.borrow().kind() == msg::Kind::Error {
+        return Ok(Some(msg));
+    }
+
+    warn!("Unknown message, gnored it {}.", msg.borrow());
+    Ok(None)
 }
 
 async fn write_socket<F>(socket: Option<&UdpSocket>,
-    dht: Option<&Rc<RefCell<DHT>>>,
     queue: Option<&Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>>,
+    dht: Option<&Rc<RefCell<DHT>>>,
     mut encrypt: F) -> Result<(), io::Error>
 where F: FnMut(&Id, &[u8]) -> Result<Vec<u8>, Error>
 {
@@ -331,7 +378,7 @@ where F: FnMut(&Id, &[u8]) -> Result<Vec<u8>, Error>
     let encrypted = match encrypt(msg.borrow().remote_id(), &plain) {
         Ok(v) => v,
         Err(e) => {
-            error!("Encrypting packet failed {}", e);
+            error!("Encrypting packet error {} for message {}", e, msg.borrow());
             return Ok(())
         },
     };

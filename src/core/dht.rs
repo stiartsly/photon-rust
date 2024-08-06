@@ -627,12 +627,12 @@ impl DHT {
         );
     }
 
-    pub(crate) fn on_timeout(&mut self, call: Rc<RefCell<RpcCall>>) {
+    pub(crate) fn on_timeout(&mut self, call: &RpcCall) {
         // Ignore the timeout if the DHT is stopped or the RPC server is offline
         if !self.running || !self.server().borrow().is_reachable() {
             return;
         }
-        self.rtable.borrow_mut().on_timeout(call.borrow().target_id());
+        self.rtable.borrow_mut().on_timeout(call.target_id());
     }
 
     pub(crate) fn on_send(&mut self, id: &Id) {

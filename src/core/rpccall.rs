@@ -208,6 +208,10 @@ impl RpcCall {
         }
     }
 
+    pub(crate) fn responsed_socket_mismatch(&mut self) {
+        unimplemented!()
+    }
+
     fn failed(&mut self) {
         self.update_state(State::Timeout)
     }
