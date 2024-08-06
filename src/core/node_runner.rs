@@ -253,9 +253,12 @@ pub(crate) fn run_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>)
     let server = runner.borrow().server.clone();
     let dht4 = unwrap!(runner.borrow().dht4).clone();
 
+    server.borrow_mut().start();
+
     _ = server::run_loop(
         server.clone(),
-        dht4.clone(),
+        Some(dht4.clone()),
+        None,
         quit.clone()
     ).map_err(|err| {
         error!("Unexpected error happened in the loop: {}.", err);

@@ -11,6 +11,7 @@ use tokio::net::UdpSocket;
 use tokio::time::{sleep, interval_at, Duration};
 
 use crate::{
+    unwrap,
     as_millis,
     constants,
     id::{self, Id},
@@ -33,9 +34,7 @@ pub(crate) struct Server<> {
 
     calls: Rc<RefCell<HashMap<i32, Rc<RefCell<RpcCall>>>>>,
 
-    dht4: Option<Rc<RefCell<DHT>>>,
-    queue4: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>,
-
+    queue4: Option<Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>>,
     scheduler:  Rc<RefCell<Scheduler>>,
 
 }
@@ -52,9 +51,8 @@ impl Server {
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
             calls: Rc::new(RefCell::new(HashMap::new())),
+            queue4: Some(Rc::new(RefCell::new(LinkedList::new()))),
 
-            dht4: None,
-            queue4: Rc::new(RefCell::new(LinkedList::new())),
             scheduler: Rc::new(RefCell::new(Scheduler::new())),
         }
     }
@@ -71,9 +69,8 @@ impl Server {
         self.calls.borrow().len()
     }
 
-    pub(crate) fn stop(&mut self) {
-        self.dht4 = None;
-    }
+    pub(crate) fn start(&mut self) {}
+    pub(crate) fn stop(&mut self) {}
 
     pub(crate) fn is_reachable(&self) -> bool {
         self.reachable
@@ -100,7 +97,7 @@ impl Server {
 
     pub(crate) fn send_msg(&mut self, msg: Rc<RefCell<dyn Msg>>) {
         msg.borrow_mut().set_id(self.nodeid());
-        self.queue4.borrow_mut().push_back(msg);
+        unwrap!(self.queue4).borrow_mut().push_back(msg);
     }
 
     pub(crate) fn send_call(&mut self, call: Rc<RefCell<RpcCall>>) {
@@ -134,7 +131,8 @@ impl Server {
 }
 
 pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
-    dht4: Rc<RefCell<DHT>>,
+    dht4: Option<Rc<RefCell<DHT>>>,
+    dht6: Option<Rc<RefCell<DHT>>>,
     quit: Arc<Mutex<bool>>
 ) -> io::Result<()>
 {
@@ -143,32 +141,79 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         .build()
         .unwrap();
 
-    let buffer = Rc::new(RefCell::new(vec![0; 64*1024]));
-    let mut running = true;
-
     rt.block_on(async move {
-        let sock4 = UdpSocket::bind(dht4.borrow().socket_addr()).await?;
-        let queue4 = server.borrow_mut().queue4.clone();
+        let mut sock4 = None;
+        let mut buf4 = None;
+        let mut queue4 = None;
+
+        if let Some(dht) = dht4.as_ref() {
+            sock4 = Some(UdpSocket::bind(dht.borrow().socket_addr()).await?);
+            buf4 = Some(Rc::new(RefCell::new(vec![0u8; 1024])));
+            queue4 = server.borrow_mut().queue4.clone();
+        }
+
+        let mut sock6 = None;
+        let mut buf6 = None;
+        let mut queue6 = None;
+
+        if let Some(dht) = dht6.as_ref() {
+            sock6 = Some(UdpSocket::bind(dht.borrow().socket_addr()).await?);
+            buf6 = Some(Rc::new(RefCell::new(vec![0u8; 1024])));
+            queue6 = None;
+        }
 
         let mut interval = interval_at(
             server.borrow().scheduler.borrow().next_timeout(),
             Duration::from_secs(60*60)
         );
+
+        let mut running = true;
         while running {
             tokio::select! {
-                data = read_socket(&sock4, buffer.clone(), move |_, buf| {
-                   Ok(buf.to_vec())
-                }) => {
-                    if let Ok(Some(msg)) = data {
-                        server.borrow_mut().responsed(msg.clone());
-                        dht4.borrow_mut().on_message(msg)
+                res = read_socket(sock4.as_ref(), buf4.as_ref(), move |_, buf| {
+                    Ok(buf.to_vec())
+                }), if sock4.is_some() => {
+                    match res {
+                        Ok(data) => {
+                            if let Some(msg) = data {
+                                server.borrow_mut().responsed(msg.clone());
+                                unwrap!(dht4).borrow_mut().on_message(msg)
+                            }
+                        },
+                        Err(_) => {},
                     }
                 }
 
-                _ = write_socket(&sock4, dht4.clone(), queue4.clone(), move |_, _| {
+                res = read_socket(sock6.as_ref(), buf6.as_ref(), move |_, buf| {
+                    Ok(buf.to_vec())
+                }), if sock6.is_some() => {
+                    match res {
+                        Ok(data) => {
+                            if let Some(msg) = data {
+                                server.borrow_mut().responsed(msg.clone());
+                                unwrap!(dht6).borrow_mut().on_message(msg)
+                            }
+                        },
+                        Err(_) => {},
+                    }
+                }
+
+                res = write_socket(sock4.as_ref(), dht4.as_ref(), queue4.as_ref(), move |_, _| {
                     Some(Vec::new() as Vec<u8>)
-                }) => {
-                    //println!("Write data to ipv4 socket");
+                }), if sock4.is_some() => {
+                    match res {
+                        Ok(_) => {},
+                        Err(_) => {},
+                    }
+                }
+
+                res = write_socket(sock6.as_ref(), dht6.as_ref(), queue6.as_ref(), move |_, _| {
+                    Some(Vec::new() as Vec<u8>)
+                }), if sock6.is_some() => {
+                    match res {
+                        Ok(_) => {},
+                        Err(_) => {},
+                    }
                 }
 
                 _ = interval.tick() => {
@@ -184,31 +229,43 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                 interval.reset_at(server.borrow().scheduler.borrow().next_timeout());
             }
         }
+
         Ok(())
     })
 }
-async fn read_socket<F>(socket: &UdpSocket,
-    buffer: Rc<RefCell<Vec<u8>>>,
+async fn read_socket<F>(socket: Option<&UdpSocket>,
+    buffer: Option<&Rc<RefCell<Vec<u8>>>>,
     mut decrypt: F
 ) -> Result<Option<Rc<RefCell<dyn Msg>>>, io::Error>
-    where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
+where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
 {
-    let mut buf = buffer.borrow_mut();
+    let socket = match socket {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+
+    let buf = match buffer {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+
+    let mut buf = buf.borrow_mut();
     let (len, from) = socket.recv_from(&mut buf).await?;
     let from_id = Id::from_bytes(&buf[0.. id::ID_BYTES]);
 
     let plain = match decrypt(&from_id, &mut buf[id::ID_BYTES .. len]) {
-        Ok(plain) => plain,
+        Ok(v) => v,
         Err(err) => {
-            warn!("Decrypt packet from {} error {}, discarded it", err, from);
+            warn!("Decrypt packet from {} error {}, ignored it", err, from);
             return Ok(None);
         }
     };
 
+
     let msg = match msg::deser(&plain) {
         Ok(msg) => msg,
         Err(err) => {
-            warn!("Got a wrong packet from {} with {}", from, err);
+            warn!("Got a wrong packet from {} with {}, ignored it", from, err);
             return Ok(None);
         }
     };
@@ -216,10 +273,15 @@ async fn read_socket<F>(socket: &UdpSocket,
     msg.borrow_mut().set_id(&from_id);
     msg.borrow_mut().set_origin(&from);
 
-    info!("Received message: {}/{} from {}:[size: {}] - {}", msg.borrow().method(), msg.borrow().kind(), from, len, msg.borrow());
+    info!("Received message: {}/{} from {}:[size: {}] - {}",
+        msg.borrow().method(),
+        msg.borrow().kind(),
+        from,
+        len,
+        msg.borrow());
 
     if msg.borrow().kind() != msg::Kind::Error && msg.borrow().txid() == 0 {
-        warn!("Received a message with invalid transaction id, ignored it");
+        warn!("Received a message with invalid txid, discarded it");
         return Ok(None);
     }
 
@@ -231,36 +293,53 @@ async fn read_socket<F>(socket: &UdpSocket,
     Ok(Some(msg))
 }
 
-async fn write_socket<F>(socket: &UdpSocket,
-    dht: Rc<RefCell<DHT>>,
-    msg_queue: Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>, _: F) -> Result<(), io::Error>
-where
-    F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
+async fn write_socket<F>(socket: Option<&UdpSocket>,
+    dht: Option<&Rc<RefCell<DHT>>>,
+    queue: Option<&Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>>,
+    _ : F
+) -> Result<(), io::Error>
+where F: FnMut(&Id, &mut [u8]) -> Option<Vec<u8>>
 {
-    if msg_queue.borrow().is_empty() {
-        sleep(Duration::MAX).await;
-        return Ok(())
-    }
+    let socket = match socket {
+        Some(v) => v,
+        None => return Ok(()),
+    };
 
-    let msg = match msg_queue.borrow_mut().pop_front() {
-        Some(msg) => msg,
+    let dht = match dht {
+        Some(v) => v.clone(),
+        None => return Ok(()),
+    };
+
+    let queue = match queue {
+        Some(v) => v.clone(),
+        None => return Ok(()),
+    };
+
+    let msg = match queue.borrow_mut().pop_front() {
+        Some(v) => v,
         None => {
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(1000)).await;
             return Ok(())
         }
     };
 
     if let Some(call) = msg.borrow().associated_call() {
-        dht.borrow_mut().on_send(call.borrow().target_id());
-        call.borrow_mut().send(dht.borrow().server().borrow().scheduler());
+        let scheduler = dht.borrow().server().borrow().scheduler();
+
+        dht.borrow_mut().on_send(call.borrow_mut().target_id());
+        call.borrow_mut().send(scheduler);
     }
 
-    let serialized = msg::serialize(msg.clone());
+    let ser = msg::serialize(msg.clone());
     let mut buf = Vec::new() as Vec<u8>;
 
     buf.extend_from_slice(msg.borrow().id().as_bytes());
-    buf.extend_from_slice(&serialized);
-    _ = socket.send_to(&buf, msg.borrow().remote_addr()).await?;
+    buf.extend_from_slice(&ser);
+
+    match socket.send_to(&buf, msg.borrow().remote_addr()).await {
+        Ok(_) => {},
+        Err(e) => warn!("Sending message failed {}", e),
+    };
 
     Ok(())
 }
