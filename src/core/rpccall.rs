@@ -46,7 +46,7 @@ pub(crate) struct RpcCall {
     cloned: Option<Rc<RefCell<RpcCall>>>,
 }
 
-static mut NEXT_TXID: i32= 0;
+static mut NEXT_TXID: i32= 0; // TODO: randomrized number.
 
 fn next_txid() -> i32 {
     unsafe {
