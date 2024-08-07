@@ -23,14 +23,14 @@ use crate::{
     msg::msg::{self, Msg}
 };
 
-#[allow(dead_code)]
 pub(crate) struct Server<> {
     nodeid: Rc<Id>,
-    started: SystemTime,
+    // started: SystemTime,
+
+    recv_msg_num: i32,
+    recv_msg_num_at_last_reachable_check: i32,
 
     reachable: bool,
-    received_msgs: i32,
-    msg_at_least_reachable_check: i32,
     last_reachable_check: SystemTime,
 
     calls: Rc<RefCell<HashMap<i32, Rc<RefCell<RpcCall>>>>>,
@@ -44,11 +44,12 @@ impl Server {
     pub fn new(nodeid: Rc<Id>) -> Self {
         Self {
             nodeid,
-            started: SystemTime::UNIX_EPOCH,
+            // started: SystemTime::UNIX_EPOCH,
+
+            recv_msg_num: 0,
+            recv_msg_num_at_last_reachable_check: 0,
 
             reachable: false,
-            received_msgs: 0,
-            msg_at_least_reachable_check: 0,
             last_reachable_check: SystemTime::UNIX_EPOCH,
 
             calls: Rc::new(RefCell::new(HashMap::new())),
@@ -80,10 +81,10 @@ impl Server {
     pub(crate) fn update_reachability(&mut self) {
         // Avoid pinging too frequently if we're not receiving any response
         // (the connection might be dead)
-        if self.received_msgs != self.msg_at_least_reachable_check {
-            self.reachable = false;
+        if self.recv_msg_num != self.recv_msg_num_at_last_reachable_check {
+            self.reachable = true;
             self.last_reachable_check = SystemTime::now();
-            self.msg_at_least_reachable_check = self.received_msgs;
+            self.recv_msg_num_at_last_reachable_check = self.recv_msg_num;
             return;
         }
 
@@ -264,6 +265,8 @@ where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
             return Ok(None);
         }
     };
+
+    // TODO: update -> recv_msg_num += 1;
 
     msg.borrow_mut().set_id(&from_id);
     msg.borrow_mut().set_origin(&from);
