@@ -16,9 +16,9 @@ pub(crate) struct CryptoCache {
 
 #[allow(dead_code)]
 impl CryptoCache {
-    pub(crate) fn new(keypair: &KeyPair) -> CryptoCache {
+    pub(crate) fn new(keypair: KeyPair) -> CryptoCache {
         CryptoCache {
-            keypair: keypair.clone(),
+            keypair,
             cache: HashMap::new(),
         }
     }
@@ -62,36 +62,27 @@ impl Entry {
 }
 
 pub(crate) struct CryptoContext {
-    box_: CryptoBox,
+    cbox: CryptoBox,
     nonce: Nonce,
 }
 
-#[allow(dead_code)]
 impl CryptoContext {
     fn new(pk: &PublicKey, keypair: &KeyPair) -> CryptoContext {
         let recver = Id::from_bytes(pk.as_bytes());
-        let sender = Id::from_bytes(keypair.public_key().as_bytes());
+        let sender = Id::from_encryption_pubkey(keypair.public_key());
         let distance = Id::distance(&sender, &recver);
 
         CryptoContext {
-            box_: CryptoBox::try_from(pk, keypair.private_key()).unwrap(),
-            nonce: Nonce::from(distance.as_bytes()),
+            cbox: CryptoBox::try_from(pk, keypair.private_key()).unwrap(),
+            nonce: Nonce::from(&distance.as_bytes()[0..Nonce::BYTES]),
         }
     }
-/*
-    pub(crate) fn encrypt(&self, plain: &[u8], cipher: &mut [u8]) -> Result<(), Error> {
-        self.box_.encrypt(plain, cipher, &self.nonce)
-    }
 
-    pub(crate) fn decrypt(&self, cipher: &[u8], plain: &mut [u8]) -> Result<(), Error> {
-        self.box_.decrypt(cipher, plain, &self.nonce)
-    }
-*/
     pub(crate) fn encrypt_into(&self, plain: &[u8]) -> Result<Vec<u8>, Error> {
-        self.box_.encrypt_into(plain, &self.nonce)
+        self.cbox.encrypt_into(plain, &self.nonce)
     }
 
     pub(crate) fn decrypt_into(&self, cipher: &[u8]) -> Result<Vec<u8>, Error> {
-        self.box_.decrypt_into(cipher, &self.nonce)
+        self.cbox.decrypt_into(cipher, &self.nonce)
     }
 }

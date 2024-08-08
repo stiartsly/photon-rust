@@ -26,9 +26,15 @@ impl Id {
         Id(bytes)
     }
 
-    pub fn from_signature_key(publick_key: &signature::PublicKey) -> Self {
+    pub fn from_signature_pubkey(publick_key: &signature::PublicKey) -> Self {
         let mut bytes = [0u8; ID_BYTES];
         bytes.copy_from_slice(publick_key.as_bytes());
+        Id(bytes)
+    }
+
+    pub fn from_encryption_pubkey(public_key: &cryptobox::PublicKey) -> Self {
+        let mut bytes = [0u8; ID_BYTES];
+        bytes.copy_from_slice(public_key.as_bytes());
         Id(bytes)
     }
 

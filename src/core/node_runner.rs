@@ -35,10 +35,9 @@ use crate::{
 };
 
 pub(crate) struct NodeRunner {
-    nodeid: Rc<Id>,
+    node_id: Rc<Id>,
     storage_path: String,
 
-    encryption_keypair: cryptobox::KeyPair,
     encryption_ctx: Rc<RefCell<CryptoCache>>,
 
     command_channel:    Option<Arc<Mutex<LinkedList<Command>>>>,
@@ -62,15 +61,15 @@ impl NodeRunner {
             config: Arc<Mutex<Box<dyn Config>>>
         ) -> Self {
 
-        let nodeid = Rc::new(Id::from_signature_key(keypair.public_key()));
+        let node_id = Rc::new(Id::from_signature_pubkey(keypair.public_key()));
         let keypair = cryptobox::KeyPair::from_signature_keypair(&keypair);
-        let ctx = Rc::new(RefCell::new(CryptoCache::new(&keypair)));
+        let ctx = Rc::new(RefCell::new(CryptoCache::new(keypair)));
 
         let cfg = config.lock().unwrap();
         let mut dht_num = 0;
         let dht4 = match cfg.addr4() {
             Some(addr) => {
-                let mut dht = DHT::new(&nodeid, addr);
+                let mut dht = DHT::new(&node_id, addr);
                 dht.enable_persistence(storage_path.clone() + "/dht4.cache");
                 dht_num += 1;
                 Some(dht)
@@ -80,7 +79,7 @@ impl NodeRunner {
 
         let dht6 = match cfg.addr6() {
             Some(addr) => {
-                let mut dht = DHT::new(&nodeid, addr);
+                let mut dht = DHT::new(&node_id, addr);
                 dht.enable_persistence(storage_path.clone() + "/dht4.cache");
                 dht_num += 1;
                 Some(dht)
@@ -91,10 +90,8 @@ impl NodeRunner {
         drop(cfg);
 
         Self {
-            nodeid: nodeid.clone(),
+            node_id: node_id.clone(),
             storage_path: storage_path,
-
-            encryption_keypair: keypair,
             encryption_ctx: ctx,
 
             command_channel: None,
@@ -106,12 +103,12 @@ impl NodeRunner {
 
             storage:    Rc::new(RefCell::new(SqliteStorage::new())),
             tokenman:   Rc::new(RefCell::new(TokenManager::new())),
-            server:     Rc::new(RefCell::new(Server::new(nodeid))),
+            server:     Rc::new(RefCell::new(Server::new(node_id))),
             cloned: None,
         }
     }
 
-    pub(crate) fn set_cloned(&mut self, runner: Rc<RefCell<NodeRunner>>) {
+    fn set_cloned(&mut self, runner: Rc<RefCell<NodeRunner>>) {
         self.cloned = Some(runner.clone());
     }
 
@@ -270,20 +267,24 @@ impl NodeRunner {
         unimplemented!()
     }
 
-    pub(crate) fn encrypt_into(&self, _: &Id, plain: &[u8]) -> Result<Vec<u8>, Error> {
-        /* self.encryption_ctx
+    pub(crate) fn encrypt_into(&self,
+        recipient: &Id,
+        plain: &[u8]) -> Result<Vec<u8>, Error>
+    {
+        self.encryption_ctx
             .borrow_mut()
             .get(recipient)
-            .encrypt_into(plain) */
-        Ok(plain.to_vec())
+            .encrypt_into(plain)
     }
 
-    pub(crate) fn decrypt_into(&self, _: &Id, cipher: &[u8]) -> Result<Vec<u8>, Error> {
-        /* self.encryption_ctx
+    pub(crate) fn decrypt_into(&self,
+        sender: &Id,
+        cipher: &[u8]) -> Result<Vec<u8>, Error>
+    {
+        self.encryption_ctx
             .borrow_mut()
             .get(sender)
-            .decrypt_into(cipher) */
-        Ok(cipher.to_vec())
+            .decrypt_into(cipher)
     }
 }
 
@@ -295,6 +296,7 @@ pub(crate) fn run_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>)
     let mut to_quit = false;
 
     server.borrow_mut().start();
+    runner.borrow_mut().set_cloned(runner.clone());
     runner.borrow_mut().start().err().map(|e| {
         error!("{}", e);
         to_quit = true;

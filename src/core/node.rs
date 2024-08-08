@@ -72,7 +72,7 @@ impl Node {
             return e;
         }).ok().unwrap();
 
-        let id = Id::from_signature_key(keypair.public_key());
+        let id = Id::from_signature_pubkey(keypair.public_key());
         let id_path = path.clone() + "id";
         store_nodeid(&id_path, &id).map_err(|e| {
             error!("Persisting node Id data error {}", e);
@@ -118,10 +118,9 @@ impl Node {
             node.set_bootstrap_channel(channel);
             node.set_command_channel(cmds);
 
-            let node = Rc::new(RefCell::new(node));
-            node.borrow_mut().set_cloned(node.clone());
-
-            node_runner::run_loop(node, quit);
+            node_runner::run_loop(
+                Rc::new(RefCell::new(node)), quit
+            );
         }));
 
         self.status = NodeStatus::Running;

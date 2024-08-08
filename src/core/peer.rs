@@ -119,7 +119,7 @@ impl Peer {
     fn new(b: &Builder) -> Self {
         let kp = unwrap!(b.keypair);
         let mut peer = Peer {
-            pk: Id::from_signature_key(kp.public_key()),
+            pk: Id::from_signature_pubkey(kp.public_key()),
             sk: Some(kp.private_key().clone()),
             id: b.id.clone(),
             origin: match b.origin {

@@ -207,7 +207,7 @@ impl Value {
 
         let kp = unwrap!(b.keypair);
         let mut value = Value {
-            pk: Some(Id::from_signature_key(kp.public_key())),
+            pk: Some(Id::from_signature_pubkey(kp.public_key())),
             sk: Some(kp.private_key().clone()),
             recipient: None,
             nonce: Some(unwrap!(b.nonce).clone()),
@@ -229,7 +229,7 @@ impl Value {
 
         let kp = unwrap!(b.keypair);
         let mut value = Value {
-            pk: Some(Id::from_signature_key(kp.public_key())),
+            pk: Some(Id::from_signature_pubkey(kp.public_key())),
             sk: Some(kp.private_key().clone()),
             recipient: Some(b.recipient.clone()),
             nonce: Some(unwrap!(b.nonce).clone()),

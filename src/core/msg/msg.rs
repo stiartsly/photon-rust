@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::fmt::Display;
 use ciborium;
 use ciborium::Value as CVal;
+use log::{error};
 
 use crate::{
     Id,
@@ -258,7 +259,10 @@ pub(crate) fn deser(buf: &[u8]) -> Result<Rc<RefCell<dyn Msg>>, Error> {
     let mut msg_type = 0;
     let value: ciborium::value::Value;
     let reader = cbor::Reader::new(buf);
-    value = ciborium::de::from_reader(reader).unwrap();
+    value = ciborium::de::from_reader(reader)
+        .map_err(|e| return e)
+        .ok()
+        .unwrap();
     if let Some(root) = value.as_map() {
         for (key, val) in root.iter() {
             if key.as_text().unwrap() == "y" {

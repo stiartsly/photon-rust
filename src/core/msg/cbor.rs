@@ -37,12 +37,11 @@ impl<'a> ciborium_io::Read for Reader<'a> {
     type Error = std::io::Error;
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
-        let remaining_len = self.data.len() - self.pos;
-
-        if remaining_len <= 0 {
+        if self.data.len() < self.pos {
             return Err(Self::Error::from(std::io::ErrorKind::UnexpectedEof));
         }
 
+        let remaining_len = self.data.len() - self.pos;
         if remaining_len >= buf.len() {
             // If there is enough data remaining, copy it to buf
             buf.copy_from_slice(&self.data[self.pos..self.pos + buf.len()]);
