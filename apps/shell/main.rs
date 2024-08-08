@@ -3,7 +3,7 @@ use std::fs;
 use std::thread;
 use tokio::time::Duration;
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 
 use boson::{
     default_configuration,
@@ -33,12 +33,15 @@ async fn main() {
     let mut b = default_configuration::Builder::new();
     b.with_listening_port(32222);
     b.with_ipv4("192.168.1.107");
-    // b.with_ipv4("172.20.10.2");
     b.with_storage_path(path.as_str());
 
     let id = Id::try_from_base58("HwrxvgqmY2UCweXH7bV64wNZB8thpgweUTX47N17NJA").unwrap();
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 107)), 39001);
-    // let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 20, 10, 2)), 39001);
+    let addr = "192.168.1.107:39001".parse::<SocketAddr>().ok().unwrap();
+    let node = NodeInfo::new(&id, &addr);
+    b.add_bootstrap(&node);
+
+    let id = Id::try_from_base58("HZXXs9LTfNQjrDKvvexRhuMk8TTJhYCfrHwaj3jUzuhZ").unwrap();
+    let addr = "155.138.245.211:39001".parse::<SocketAddr>().ok().unwrap();
     let node = NodeInfo::new(&id, &addr);
     b.add_bootstrap(&node);
 
