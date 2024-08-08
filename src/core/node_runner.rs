@@ -247,18 +247,28 @@ impl NodeRunner {
     fn announce_peer(&self, _: Arc<Mutex<AnnouncePeerCmd>>) {
         unimplemented!()
     }
+
+    pub(crate) fn encrypt_into(&self, _: &Id, plain: &[u8]) -> Result<Vec<u8>, Error> {
+        Ok(plain.to_vec())
+    }
+
+    pub(crate) fn decrypt_into(&self, _: &Id, cipher: &[u8]) -> Result<Vec<u8>, Error> {
+        Ok(cipher.to_vec())
+    }
 }
 
 pub(crate) fn run_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>) {
     let server = runner.borrow().server.clone();
-    let dht4 = unwrap!(runner.borrow().dht4).clone();
+    let dht4 = runner.borrow().dht4.as_ref().map(|v| v.clone());
+    let dht6 = runner.borrow().dht6.as_ref().map(|v| v.clone());
 
     server.borrow_mut().start();
 
     _ = server::run_loop(
+        runner.clone(),
         server.clone(),
-        Some(dht4.clone()),
-        None,
+        dht4,
+        dht6,
         quit.clone()
     ).map_err(|err| {
         error!("Unexpected error happened in the loop: {}.", err);

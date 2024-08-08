@@ -49,7 +49,10 @@ async fn main() {
     let _ = node.start();
 
     thread::sleep(Duration::from_secs(1));
-    let _ = node.find_node_simple(&id).await;
+    match node.find_node_simple(&id).await {
+        Ok(_) => panic!("Got response!!!!!!!!!!!"),
+        Err(e) => println!("error: {}", e),
+    }
 
     thread::sleep(Duration::from_secs(10));
     node.stop();

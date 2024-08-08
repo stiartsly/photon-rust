@@ -19,6 +19,7 @@ use crate::{
     dht::DHT,
     error::Error,
     rpccall::RpcCall,
+    node_runner::NodeRunner,
     scheduler::{self, Scheduler},
     msg::msg::{self, Msg}
 };
@@ -78,6 +79,10 @@ impl Server {
         self.reachable
     }
 
+    fn recv_msg_num_incr(&mut self) {
+        self.recv_msg_num += 1;
+    }
+
     pub(crate) fn update_reachability(&mut self) {
         // Avoid pinging too frequently if we're not receiving any response
         // (the connection might be dead)
@@ -126,7 +131,9 @@ impl Server {
     }
 }
 
-pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
+pub(crate) fn run_loop(
+    runner: Rc<RefCell<NodeRunner>>,
+    server: Rc<RefCell<Server>>,
     dht4: Option<Rc<RefCell<DHT>>>,
     dht6: Option<Rc<RefCell<DHT>>>,
     quit: Arc<Mutex<bool>>) -> io::Result<()>
@@ -165,8 +172,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
         let mut running = true;
         while running {
             tokio::select! {
-                res = read_socket(sock4.as_ref(), buff4.as_ref(), server.clone(), move |_, encrypted| {
-                    Ok(encrypted.to_vec())
+                res = read_socket(sock4.as_ref(), buff4.as_ref(), server.clone(), |id, encrypted| {
+                    runner.borrow().decrypt_into(id, encrypted)
                 }), if sock4.is_some() => {
                     match res {
                         Ok(data) => {
@@ -179,8 +186,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                     }
                 }
 
-                res = read_socket(sock6.as_ref(), buff6.as_ref(), server.clone(), move |_, encrypted| {
-                    Ok(encrypted.to_vec())
+                res = read_socket(sock6.as_ref(), buff6.as_ref(), server.clone(), |id, encrypted| {
+                    runner.borrow().decrypt_into(id, encrypted)
                 }), if sock6.is_some() => {
                     match res {
                         Ok(data) => {
@@ -193,8 +200,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                     }
                 }
 
-                res = write_socket(sock4.as_ref(), queu4.as_ref(), dht4.as_ref(), move |_, plain| {
-                    Ok(plain.to_vec())
+                res = write_socket(sock4.as_ref(), queu4.as_ref(), dht4.as_ref(), |id, plain| {
+                    runner.borrow().encrypt_into(id, plain)
                 }), if sock4.is_some() => {
                     match res {
                         Ok(_) => {},
@@ -202,8 +209,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
                     }
                 }
 
-                res = write_socket(sock6.as_ref(), queu6.as_ref(), dht4.as_ref(), move |_, plain| {
-                    Ok(plain.to_vec())
+                res = write_socket(sock6.as_ref(), queu6.as_ref(), dht4.as_ref(), |id, plain| {
+                    runner.borrow().encrypt_into(id, plain)
                 }), if sock6.is_some() => {
                     match res {
                         Ok(_) => {},
@@ -229,7 +236,8 @@ pub(crate) fn run_loop(server: Rc<RefCell<Server>>,
     })
 }
 
-async fn read_socket<F>(socket: Option<&UdpSocket>,
+async fn read_socket<F>(
+    socket: Option<&UdpSocket>,
     buffer: Option<&Rc<RefCell<Vec<u8>>>>,
     server: Rc<RefCell<Server>>,
     mut decrypt: F
@@ -266,7 +274,7 @@ where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
         }
     };
 
-    // TODO: update -> recv_msg_num += 1;
+    server.borrow_mut().recv_msg_num_incr();
 
     msg.borrow_mut().set_id(&from_id);
     msg.borrow_mut().set_origin(&from);
@@ -341,7 +349,8 @@ where F: FnMut(&Id, &mut [u8]) -> Result<Vec<u8>, Error>
     Ok(None)
 }
 
-async fn write_socket<F>(socket: Option<&UdpSocket>,
+async fn write_socket<F>(
+    socket: Option<&UdpSocket>,
     queue: Option<&Rc<RefCell<LinkedList<Rc<RefCell<dyn Msg>>>>>>,
     dht: Option<&Rc<RefCell<DHT>>>,
     mut encrypt: F) -> Result<(), io::Error>
