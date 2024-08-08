@@ -62,8 +62,7 @@ impl Node {
         // cfg(DEVELOPMENT)
         info!("DHT node running in development mode!!!");
 
-        // Standardize storage path.
-        let mut path = String::from(cfg.storage_path());
+        let mut path = cfg.storage_path().to_string();
         if path.is_empty() {
             path.push_str(".")
         }
@@ -71,41 +70,16 @@ impl Node {
             path.push_str("/");
         }
 
-        // Loading persistence capability
-        check_persistence(&path).map_err(|err| {
-            error!("Checking persistence error: {}", err);
-            return err;
-        })?;
+        let keypair = get_keypair(&path).map_err(|e| {
+            error!("Acquire keypair from {} for DHT node error: {}", path, e);
+            return e;
+        }).ok().unwrap();
 
-        // Loading key from persistence.
-        let keypath = path.clone() + "key";
-        let keypair;
-
-        match fs::metadata(&keypath) {
-            Ok(metadata) => {
-                if metadata.is_dir() {
-                    error!("Bad file path: {}. DHT node will not be able to persist node key there.", keypath);
-                    return Err(Error::State(format!("Bad file path {} for key storage.", keypath)));
-                };
-                keypair = load_key(&keypath)
-                    .map_err(|err| {
-                        error!("Loading key data error {}", err); err
-                    }).ok().unwrap();
-            },
-            Err(_) => {
-                keypair = KeyPair::random();
-                _ = store_key(&keypair, &keypath).map_err(|err| {
-                    error!("Perisisting key data error {}", err); return err
-                })
-            }
-        };
-
-        // loading node Id from persistence
         let id = Id::from_signature_key(keypair.public_key());
-        let idpath = path.clone() + "id";
-        store_nodeid(&id, &idpath).map_err(|err| {
+        let id_path = path.clone() + "id";
+        store_nodeid(&id_path, &id).map_err(|err| {
             error!("Persisting node Id data error {}", err); err
-        })?;
+        }).ok().unwrap();
 
         info!("Current DHT node Id {}", id);
 
@@ -351,46 +325,87 @@ impl Node {
     }
 }
 
+fn get_keypair(path: &str) -> Result<KeyPair, Error> {
+    check_persistence(path).map_err(|e| {
+        return Error::State(format!("Checking persistence error: {}", e));
+    }).ok().unwrap();
+
+    let keypath = path.to_string() + "key";
+    let keypair;
+
+    match fs::metadata(&keypath) {
+        Ok(metadata) => {
+            // Loading key from persistence.
+            if metadata.is_dir() {
+                return Err(Error::State(format!("Bad file path {} for key storage.", keypath)));
+            };
+            keypair = load_key(&keypath)
+                .map_err(|e| return e)
+                .ok()
+                .unwrap();
+        },
+        Err(_) => {
+            // otherwise, generate a fresh keypair
+            keypair = KeyPair::random();
+            store_key(&keypath, &keypair)
+                .map_err(|e|return e)
+                .ok()
+                .unwrap();
+        }
+    };
+
+    Ok(keypair)
+}
+
 fn load_key(path: &str) -> Result<KeyPair, Error> {
-    let mut fp = File::open(path).map_err(|err|
-        Error::Io(err, format!("Opening key file failed"))
-    )?;
+    let mut fp = match File::open(path) {
+        Ok(v) => v,
+        Err(e) => return Err(Error::Io(
+            e, "Openning key file error".to_string())),
+    };
 
     let mut buf = Vec::new();
-    fp.read_to_end(&mut buf).map_err(|err|
-        Error::Io(err, format!("Reading key failed"))
-    )?;
+    if let Err(e) = fp.read_to_end(&mut buf) {
+        return Err(Error::Io(e, "Reading key error".to_string()));
+    };
 
     if buf.len() != signature::PrivateKey::BYTES {
-        return Err(Error::State(format!("Incorrect key size for key data {}", buf.len())));
+        return Err(Error::State(format!(
+            "Incorrect key size {}", buf.len())));
     }
 
-    Ok(KeyPair::from_private_key_bytes(buf.as_slice()))
+    Ok(KeyPair::from_private_key_bytes(&buf))
 }
 
-fn store_key(keypair: &KeyPair, path: &str) -> Result<(), Error> {
-    let mut file = File::create(path).map_err(|err|
-        Error::Io(err, format!("Creating key file failed"))
-    )?;
+fn store_key(path: &str, keypair: &KeyPair) -> Result<(), Error> {
+    let mut fp = match File::create(path) {
+        Ok(v) => v,
+        Err(e) => return Err(Error::Io(
+            e, format!("Creating key file error"))),
+    };
 
-    file.write_all(keypair.private_key().as_bytes())
-        .map_err(|err| Error::Io(err, format!("Writing key failed.")))?;
+    if let Err(e) = fp.write_all(keypair.private_key().as_bytes()) {
+        return Err(Error::Io(e, format!("Writing key error.")))
+    }
 
     Ok(())
 }
 
-fn store_nodeid(id: &Id, path: &str) -> Result<(), Error> {
-    let mut file = File::create(path).map_err(|err|
-        Error::Io(err, format!("Creating Id file failed"))
-    )?;
+fn store_nodeid(path: &str, id: &Id) -> Result<(), Error> {
+    let mut fp = match File::create(path) {
+        Ok(v) => v,
+        Err(e) => return Err(Error::Io(
+            e, format!("Creating Id file error"))),
+    };
 
-    file.write_all(id.as_bytes())
-        .map_err(|err| Error::Io(err, format!("Writing ID failed")))?;
+    if let Err(e) = fp.write_all(id.as_bytes()) {
+        return Err(Error::Io(e, format!("Writing ID failed")));
+    }
 
     Ok(())
 }
 
-fn check_persistence(_: &str) -> Result<bool, Error> {
+fn check_persistence(_: &str) -> Result<(), Error> {
     // TODO:
-    Ok(false)
+    Ok(())
 }
