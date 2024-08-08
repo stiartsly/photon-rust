@@ -9,6 +9,7 @@ use crate::{
     unwrap,
     constants,
     cryptobox,
+    signature,
     Id,
     NodeInfo,
     Compound,
@@ -37,7 +38,8 @@ pub(crate) struct NodeRunner {
     nodeid: Rc<Id>,
     storage_path: String,
 
-    // encryption_ctx: Option<RefCell<CryptoCache>>,
+    encryption_keypair: cryptobox::KeyPair,
+    encryption_ctx: Rc<RefCell<CryptoCache>>,
 
     command_channel:    Option<Arc<Mutex<LinkedList<Command>>>>,
     bootstrap_channel:  Option<Arc<Mutex<BootstrapChannel>>>,
@@ -54,59 +56,75 @@ pub(crate) struct NodeRunner {
 }
 
 impl NodeRunner {
-    pub(crate) fn new(input_nodeid: Id, input_storage_path: String) -> Self {
-        let id = Rc::new(input_nodeid);
+    pub(crate) fn new(
+            keypair: signature::KeyPair,
+            storage_path: String,
+            config: Arc<Mutex<Box<dyn Config>>>
+        ) -> Self {
+
+        let nodeid = Rc::new(Id::from_signature_key(keypair.public_key()));
+        let keypair = cryptobox::KeyPair::from_signature_keypair(&keypair);
+        let ctx = Rc::new(RefCell::new(CryptoCache::new(&keypair)));
+
+        let cfg = config.lock().unwrap();
+        let mut dht_num = 0;
+        let dht4 = match cfg.addr4() {
+            Some(addr) => {
+                let mut dht = DHT::new(&nodeid, addr);
+                dht.enable_persistence(storage_path.clone() + "/dht4.cache");
+                dht_num += 1;
+                Some(dht)
+            },
+            None => None,
+        };
+
+        let dht6 = match cfg.addr6() {
+            Some(addr) => {
+                let mut dht = DHT::new(&nodeid, addr);
+                dht.enable_persistence(storage_path.clone() + "/dht4.cache");
+                dht_num += 1;
+                Some(dht)
+            },
+            None => None,
+        };
+
+        drop(cfg);
 
         Self {
-            nodeid: id.clone(),
-            storage_path: input_storage_path,
+            nodeid: nodeid.clone(),
+            storage_path: storage_path,
 
-            // encryption_ctx: None,
+            encryption_keypair: keypair,
+            encryption_ctx: ctx,
 
             command_channel: None,
             bootstrap_channel: None,
 
-            dht4: None,
-            dht6: None,
-            dht_num: 0,
+            dht4: dht4.map(|v| Rc::new(RefCell::new(v))),
+            dht6: dht6.map(|v| Rc::new(RefCell::new(v))),
+            dht_num,
 
             storage:    Rc::new(RefCell::new(SqliteStorage::new())),
             tokenman:   Rc::new(RefCell::new(TokenManager::new())),
-            server:     Rc::new(RefCell::new(Server::new(id.clone()))),
+            server:     Rc::new(RefCell::new(Server::new(nodeid))),
             cloned: None,
         }
     }
 
-    pub(crate) fn set_cloned(&mut self, runner: &Rc<RefCell<NodeRunner>>) {
+    pub(crate) fn set_cloned(&mut self, runner: Rc<RefCell<NodeRunner>>) {
         self.cloned = Some(runner.clone());
     }
 
-    pub(crate) fn set_command_channel(&mut self, channel: &Arc<Mutex<LinkedList<Command>>>) {
+    pub(crate) fn set_command_channel(&mut self, channel: Arc<Mutex<LinkedList<Command>>>) {
         self.command_channel = Some(channel.clone());
     }
 
-    pub(crate) fn set_bootstrap_channel(&mut self, channel: &Arc<Mutex<BootstrapChannel>>) {
+    pub(crate) fn set_bootstrap_channel(&mut self, channel: Arc<Mutex<BootstrapChannel>>) {
         self.bootstrap_channel = Some(channel.clone());
     }
 
-    pub(crate) fn start(&mut self,
-        cfg: Arc<Mutex<Box<dyn Config>>>,
-        keypair: cryptobox::KeyPair) -> Result<(), Error>
+    pub(crate) fn start(&mut self) -> Result<(), Error>
     {
-        let cfg = cfg.lock().unwrap();
-        if let Some(addr) = cfg.addr4() {
-            let mut dht = DHT::new(&self.nodeid, addr);
-            dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
-            self.dht4 = Some(Rc::new(RefCell::new(dht)));
-        }
-
-        if let Some(addr) = cfg.addr6() {
-            let mut dht = DHT::new(&self.nodeid, addr);
-            dht.enable_persistence(self.storage_path.clone() + "/dht4.cache");
-            self.dht4 = Some(Rc::new(RefCell::new(dht)));
-        }
-        drop(cfg);
-
         let path = self.storage_path.clone() + "/node.db";
         if let Err(e) = self.storage.borrow_mut().open(path.clone()) {
             return Err(Error::State(format!("Openning data storage {} error: {}", path, e)));
@@ -133,7 +151,7 @@ impl NodeRunner {
         }
 
         let scheduler = self.server.borrow().scheduler();
-        let ctxts = Rc::new(RefCell::new(CryptoCache::new(&keypair)));
+        let ctxts = self.encryption_ctx.clone();
         scheduler.borrow_mut().add(move || {
             ctxts.borrow_mut().handle_expiration();
         }, 2000, constants::EXPIRED_CHECK_INTERVAL);
@@ -253,7 +271,7 @@ impl NodeRunner {
     }
 
     pub(crate) fn encrypt_into(&self, _: &Id, plain: &[u8]) -> Result<Vec<u8>, Error> {
-        /* unwrap!(self.encryption_ctx)
+        /* self.encryption_ctx
             .borrow_mut()
             .get(recipient)
             .encrypt_into(plain) */
@@ -261,7 +279,7 @@ impl NodeRunner {
     }
 
     pub(crate) fn decrypt_into(&self, _: &Id, cipher: &[u8]) -> Result<Vec<u8>, Error> {
-        /* unwrap!(self.encryption_ctx)
+        /* self.encryption_ctx
             .borrow_mut()
             .get(sender)
             .decrypt_into(cipher) */
@@ -274,22 +292,31 @@ pub(crate) fn run_loop(runner: Rc<RefCell<NodeRunner>>,  quit: Arc<Mutex<bool>>)
     let dht4 = runner.borrow().dht4.as_ref().map(|v| v.clone());
     let dht6 = runner.borrow().dht6.as_ref().map(|v| v.clone());
 
+    let mut to_quit = false;
+
     server.borrow_mut().start();
-
-    _ = server::run_loop(
-        runner.clone(),
-        server.clone(),
-        dht4,
-        dht6,
-        quit.clone()
-    ).map_err(|err| {
-        error!("Unexpected error happened in the loop: {}.", err);
+    runner.borrow_mut().start().err().map(|e| {
+        error!("{}", e);
+        to_quit = true;
     });
-    server.borrow_mut().stop();
-    runner.borrow_mut().stop();
 
-    // Need to notify the main thread about any abnormal termination not initiated
-    // by the main thread itself.
+    if !to_quit {
+        _ = server::run_loop(
+            runner.clone(),
+            server.clone(),
+            dht4,
+            dht6,
+            quit.clone()
+        ).map_err(|err| {
+            error!("Internal error: {}.", err);
+        });
+    }
+
+    runner.borrow_mut().stop();
+    server.borrow_mut().stop();
+
+
+    // notify the main thread about any abnormal or normal termination.
     let mut _quit = quit.lock().unwrap();
     if !*_quit {
         *_quit = true;

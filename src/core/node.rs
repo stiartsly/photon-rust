@@ -43,14 +43,13 @@ pub struct Node {
 
     signature_keypair: signature::KeyPair,
     encryption_keypair: cryptobox::KeyPair,
-    // encryption_ctx: RefCell<CryptoCache>,
 
     option: LookupOption,
     status: NodeStatus,
     storage_path: String,
 
-    thread: Option<JoinHandle<()>>, // engine working thread.
-    quit: Arc<Mutex<bool>>, // notification handle
+    thread: Option<JoinHandle<()>>, // working thread.
+    quit: Arc<Mutex<bool>>, // notification handle for quit from working thread.
 }
 
 impl Node {
@@ -82,17 +81,13 @@ impl Node {
 
         info!("Current DHT node Id {}", id);
 
-        let encryption_keypair = cryptobox::KeyPair::from_signature_keypair(&keypair);
-        // let encryption_ctx = CryptoCache::new(&encryption_keypair);
-
         Ok(Node {
             id,
             cfg: Arc::new(Mutex::new(cfg)),
             bootstrap_channel: Arc::new(Mutex::new(BootstrapChannel::new())),
             command_channel: Arc::new(Mutex::new(LinkedList::new())),
             signature_keypair: keypair.clone(),
-            encryption_keypair,
-            //encryption_ctx: RefCell::new(encryption_ctx),
+            encryption_keypair: cryptobox::KeyPair::from_signature_keypair(&keypair),
             status: NodeStatus::Stopped,
             option: LookupOption::Conservative,
             storage_path: path,
@@ -111,8 +106,7 @@ impl Node {
         info!("DHT node <{}> is starting...", self.id);
 
         let path    = self.storage_path.clone();
-        let keypair = self.encryption_keypair.clone();
-        let nodeid  = self.id.clone();
+        let keypair = self.signature_keypair.clone();
         let config  = self.cfg.clone();
         let channel = self.bootstrap_channel.clone();
         let cmds    = self.command_channel.clone();
@@ -120,19 +114,14 @@ impl Node {
 
         self.bootstrap_many(config.lock().unwrap().bootstrap_nodes());
         self.thread = Some(thread::spawn(move || {
-            let runner = Rc::new(RefCell::new(NodeRunner::new(nodeid, path)));
-            runner.borrow_mut().set_cloned(&runner);
-            runner.borrow_mut().set_bootstrap_channel(&channel);
-            runner.borrow_mut().set_command_channel(&cmds);
-            runner.borrow_mut().start(config, keypair).err().map(|e| {
-                error!("{}", e);
-                *quit.lock().unwrap() = true;
-            });
+            let mut node = NodeRunner::new(keypair, path, config);
+            node.set_bootstrap_channel(channel);
+            node.set_command_channel(cmds);
 
-            let quit_flag = *quit.lock().unwrap();
-            if !quit_flag {
-                node_runner::run_loop(runner, quit);
-            }
+            let node = Rc::new(RefCell::new(node));
+            node.borrow_mut().set_cloned(node.clone());
+
+            node_runner::run_loop(node, quit);
         }));
 
         self.status = NodeStatus::Running;
