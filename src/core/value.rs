@@ -243,7 +243,7 @@ impl Value {
         value.data = cryptobox::encrypt_into(
             b.data,
             unwrap!(b.nonce),
-            &b.recipient.to_encryption_key(),
+            &b.recipient.to_encryption_pubkey(),
             &owner_sk.unwrap(),
         ).ok().unwrap();
 
@@ -353,7 +353,7 @@ impl Value {
         signature::verify(
             self.serialize_signature_data().as_slice(),
             unwrap!(self.sig).as_slice(),
-            &unwrap!(self.pk).to_signature_key(),
+            &unwrap!(self.pk).to_signature_pubkey(),
         )
     }
 

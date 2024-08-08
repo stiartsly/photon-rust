@@ -37,6 +37,8 @@ pub(crate) struct NodeRunner {
     nodeid: Rc<Id>,
     storage_path: String,
 
+    // encryption_ctx: Option<RefCell<CryptoCache>>,
+
     command_channel:    Option<Arc<Mutex<LinkedList<Command>>>>,
     bootstrap_channel:  Option<Arc<Mutex<BootstrapChannel>>>,
 
@@ -58,6 +60,8 @@ impl NodeRunner {
         Self {
             nodeid: id.clone(),
             storage_path: input_storage_path,
+
+            // encryption_ctx: None,
 
             command_channel: None,
             bootstrap_channel: None,
@@ -249,10 +253,18 @@ impl NodeRunner {
     }
 
     pub(crate) fn encrypt_into(&self, _: &Id, plain: &[u8]) -> Result<Vec<u8>, Error> {
+        /* unwrap!(self.encryption_ctx)
+            .borrow_mut()
+            .get(recipient)
+            .encrypt_into(plain) */
         Ok(plain.to_vec())
     }
 
     pub(crate) fn decrypt_into(&self, _: &Id, cipher: &[u8]) -> Result<Vec<u8>, Error> {
+        /* unwrap!(self.encryption_ctx)
+            .borrow_mut()
+            .get(sender)
+            .decrypt_into(cipher) */
         Ok(cipher.to_vec())
     }
 }

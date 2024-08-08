@@ -107,12 +107,12 @@ impl Id {
             .into_string()
     }
 
-    pub fn to_signature_key(&self) -> signature::PublicKey {
+    pub fn to_signature_pubkey(&self) -> signature::PublicKey {
         signature::PublicKey::from(self.as_bytes())
     }
 
-    pub fn to_encryption_key(&self) -> cryptobox::PublicKey {
-        cryptobox::PublicKey::from_signature_key(&self.to_signature_key()).unwrap()
+    pub fn to_encryption_pubkey(&self) -> cryptobox::PublicKey {
+        cryptobox::PublicKey::from_signature_key(&self.to_signature_pubkey()).unwrap()
     }
 
     pub fn distance(&self, other: &Id) -> Id {

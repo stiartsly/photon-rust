@@ -39,7 +39,7 @@ impl CryptoCache {
     }
 
     fn load(&self, key: &Id) -> Box<CryptoContext> {
-        Box::new(CryptoContext::new(&key.to_encryption_key(), &self.keypair))
+        Box::new(CryptoContext::new(&key.to_encryption_pubkey(), &self.keypair))
     }
 
     fn on_removal(&self, _: &Box<CryptoContext>) {
@@ -61,12 +61,12 @@ impl Entry {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) struct CryptoContext {
     box_: CryptoBox,
     nonce: Nonce,
 }
 
+#[allow(dead_code)]
 impl CryptoContext {
     fn new(pk: &PublicKey, keypair: &KeyPair) -> CryptoContext {
         let recver = Id::from_bytes(pk.as_bytes());
@@ -78,7 +78,7 @@ impl CryptoContext {
             nonce: Nonce::from(distance.as_bytes()),
         }
     }
-
+/*
     pub(crate) fn encrypt(&self, plain: &[u8], cipher: &mut [u8]) -> Result<(), Error> {
         self.box_.encrypt(plain, cipher, &self.nonce)
     }
@@ -86,7 +86,7 @@ impl CryptoContext {
     pub(crate) fn decrypt(&self, cipher: &[u8], plain: &mut [u8]) -> Result<(), Error> {
         self.box_.decrypt(cipher, plain, &self.nonce)
     }
-
+*/
     pub(crate) fn encrypt_into(&self, plain: &[u8]) -> Result<Vec<u8>, Error> {
         self.box_.encrypt_into(plain, &self.nonce)
     }

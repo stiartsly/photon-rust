@@ -10,7 +10,7 @@ use log::{error, info};
 use crate::{
     logger,
     signature,
-    cryptobox,
+    cryptobox::{self, Nonce},
     Id,
     Config,
     error::Error,
@@ -21,7 +21,6 @@ use crate::{
     KeyPair,
     LookupOption,
     Compound,
-    crypto_cache::CryptoCache,
     bootstrap_channel::BootstrapChannel,
     node_runner::{self, NodeRunner},
     future::{
@@ -44,7 +43,7 @@ pub struct Node {
 
     signature_keypair: signature::KeyPair,
     encryption_keypair: cryptobox::KeyPair,
-    encryption_ctx: RefCell<CryptoCache>,
+    // encryption_ctx: RefCell<CryptoCache>,
 
     option: LookupOption,
     status: NodeStatus,
@@ -84,7 +83,7 @@ impl Node {
         info!("Current DHT node Id {}", id);
 
         let encryption_keypair = cryptobox::KeyPair::from_signature_keypair(&keypair);
-        let encryption_ctx = CryptoCache::new(&encryption_keypair);
+        // let encryption_ctx = CryptoCache::new(&encryption_keypair);
 
         Ok(Node {
             id,
@@ -93,7 +92,7 @@ impl Node {
             command_channel: Arc::new(Mutex::new(LinkedList::new())),
             signature_keypair: keypair.clone(),
             encryption_keypair,
-            encryption_ctx: RefCell::new(encryption_ctx),
+            //encryption_ctx: RefCell::new(encryption_ctx),
             status: NodeStatus::Stopped,
             option: LookupOption::Conservative,
             storage_path: path,
@@ -286,31 +285,57 @@ impl Node {
     }
 
     pub fn encrypt_into(&self, recipient: &Id, plain: &[u8]) -> Result<Vec<u8>, Error> {
-        self.encryption_ctx
-            .borrow_mut()
-            .get(recipient)
-            .encrypt_into(plain)
+        let nonce = Nonce::from(
+            Id::distance(&self.id, &recipient).as_bytes()
+        );
+
+        cryptobox::encrypt_into(
+            plain,
+            &nonce,
+            &recipient.to_encryption_pubkey(),
+            self.encryption_keypair.private_key()
+        )
     }
 
     pub fn decrypt_into(&self, sender: &Id, cipher: &[u8]) -> Result<Vec<u8>, Error> {
-        self.encryption_ctx
-            .borrow_mut()
-            .get(sender)
-            .decrypt_into(cipher)
+        let nonce = Nonce::from(
+            Id::distance(&self.id, &sender).as_bytes()
+        );
+
+        cryptobox::decrypt_into(
+            cipher,
+            &nonce,
+            &sender.to_encryption_pubkey(),
+            self.encryption_keypair.private_key()
+        )
     }
 
     pub fn encrypt(&self, recipient: &Id, plain: &[u8], cipher: &mut [u8]) -> Result<(), Error> {
-        self.encryption_ctx
-            .borrow_mut()
-            .get(recipient)
-            .encrypt(plain, cipher)
+        let nonce = Nonce::from(
+            Id::distance(&self.id, &recipient).as_bytes()
+        );
+
+        cryptobox::encrypt(
+            cipher,
+            plain,
+            &nonce,
+            &recipient.to_encryption_pubkey(),
+            self.encryption_keypair.private_key()
+        )
     }
 
     pub fn decrypt(&self, sender: &Id, cipher: &[u8], plain: &mut [u8]) -> Result<(), Error> {
-        self.encryption_ctx
-            .borrow_mut()
-            .get(sender)
-            .decrypt(cipher, plain)
+        let nonce = Nonce::from(
+            Id::distance(&self.id, &sender).as_bytes()
+        );
+
+        cryptobox::decrypt(
+            plain,
+            cipher,
+            &nonce,
+            &sender.to_encryption_pubkey(),
+            self.encryption_keypair.private_key()
+        )
     }
 
     pub fn sign_into(&self, data: &[u8]) -> Result<Vec<u8>, Error> {

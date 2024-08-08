@@ -207,7 +207,7 @@ impl Peer {
         );
 
         let sigdata = self.serialize_signature_data();
-        let pk = self.pk.to_signature_key();
+        let pk = self.pk.to_signature_pubkey();
         signature::verify(sigdata.as_ref(), self.sig.as_slice(), &pk)
     }
 
