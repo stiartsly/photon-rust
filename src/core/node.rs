@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 use log::{error, info};
 
 use crate::{
-    unwrap,
     logger,
     signature,
     cryptobox,
@@ -45,7 +44,7 @@ pub struct Node {
 
     signature_keypair: signature::KeyPair,
     encryption_keypair: cryptobox::KeyPair,
-    encryption_ctxts: Option<RefCell<CryptoCache>>,
+    encryption_ctx: RefCell<CryptoCache>,
 
     option: LookupOption,
     status: NodeStatus,
@@ -77,11 +76,15 @@ impl Node {
 
         let id = Id::from_signature_key(keypair.public_key());
         let id_path = path.clone() + "id";
-        store_nodeid(&id_path, &id).map_err(|err| {
-            error!("Persisting node Id data error {}", err); err
+        store_nodeid(&id_path, &id).map_err(|e| {
+            error!("Persisting node Id data error {}", e);
+            return e
         }).ok().unwrap();
 
         info!("Current DHT node Id {}", id);
+
+        let encryption_keypair = cryptobox::KeyPair::from_signature_keypair(&keypair);
+        let encryption_ctx = CryptoCache::new(&encryption_keypair);
 
         Ok(Node {
             id,
@@ -89,8 +92,8 @@ impl Node {
             bootstrap_channel: Arc::new(Mutex::new(BootstrapChannel::new())),
             command_channel: Arc::new(Mutex::new(LinkedList::new())),
             signature_keypair: keypair.clone(),
-            encryption_keypair: cryptobox::KeyPair::from_signature_keypair(&keypair),
-            encryption_ctxts: None,
+            encryption_keypair,
+            encryption_ctx: RefCell::new(encryption_ctx),
             status: NodeStatus::Stopped,
             option: LookupOption::Conservative,
             storage_path: path,
@@ -105,7 +108,6 @@ impl Node {
         }
 
         self.status = NodeStatus::Initializing;
-        self.encryption_ctxts = Some(RefCell::new(CryptoCache::new(&self.encryption_keypair)));
 
         info!("DHT node <{}> is starting...", self.id);
 
@@ -284,43 +286,46 @@ impl Node {
     }
 
     pub fn encrypt_into(&self, recipient: &Id, plain: &[u8]) -> Result<Vec<u8>, Error> {
-        Ok(unwrap!(self.encryption_ctxts)
+        self.encryption_ctx
             .borrow_mut()
             .get(recipient)
             .encrypt_into(plain)
-        )
     }
 
     pub fn decrypt_into(&self, sender: &Id, cipher: &[u8]) -> Result<Vec<u8>, Error> {
-        Ok(unwrap!(self.encryption_ctxts)
+        self.encryption_ctx
             .borrow_mut()
             .get(sender)
             .decrypt_into(cipher)
-        )
     }
 
     pub fn encrypt(&self, recipient: &Id, plain: &[u8], cipher: &mut [u8]) -> Result<(), Error> {
-        _ = unwrap!(self.encryption_ctxts)
+        self.encryption_ctx
             .borrow_mut()
             .get(recipient)
-            .encrypt(plain, cipher);
-        Ok(())
+            .encrypt(plain, cipher)
     }
 
     pub fn decrypt(&self, sender: &Id, cipher: &[u8], plain: &mut [u8]) -> Result<(), Error> {
-        _ = unwrap!(self.encryption_ctxts)
+        self.encryption_ctx
             .borrow_mut()
             .get(sender)
-            .decrypt(cipher, plain);
-        Ok(())
+            .decrypt(cipher, plain)
     }
 
     pub fn sign_into(&self, data: &[u8]) -> Result<Vec<u8>, Error> {
-        Ok(self.signature_keypair.private_key().sign_into(data))
+        Ok(
+            self.signature_keypair
+                .private_key()
+                .sign_into(data)
+        )
     }
 
     pub fn verify(&self, data: &[u8], signature: &[u8]) -> Result<(), Error> {
-        self.signature_keypair.public_key().verify(data, signature);
+        self.signature_keypair
+            .public_key()
+            .verify(data, signature);
+
         Ok(())
     }
 }

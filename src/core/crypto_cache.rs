@@ -87,11 +87,11 @@ impl CryptoContext {
         self.box_.decrypt(cipher, plain, &self.nonce)
     }
 
-    pub(crate) fn encrypt_into(&self, plain: &[u8]) -> Vec<u8> {
+    pub(crate) fn encrypt_into(&self, plain: &[u8]) -> Result<Vec<u8>, Error> {
         self.box_.encrypt_into(plain, &self.nonce)
     }
 
-    pub(crate) fn decrypt_into(&self, cipher: &[u8]) -> Vec<u8> {
+    pub(crate) fn decrypt_into(&self, cipher: &[u8]) -> Result<Vec<u8>, Error> {
         self.box_.decrypt_into(cipher, &self.nonce)
     }
 }

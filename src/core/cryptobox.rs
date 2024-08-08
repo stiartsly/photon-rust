@@ -361,10 +361,9 @@ impl CryptoBox {
         Ok(())
     }
 
-    pub fn encrypt_into(&self, plain: &[u8], nonce: &Nonce) -> Vec<u8> {
+    pub fn encrypt_into(&self, plain: &[u8], nonce: &Nonce) -> Result<Vec<u8>, Error> {
         let mut cipher = vec![0u8; plain.len() + Self::MAC_BYTES];
-        self.encrypt(plain, cipher.as_mut_slice(), nonce).unwrap();
-        cipher
+        self.encrypt(plain, cipher.as_mut_slice(), nonce).map(|_| cipher)
     }
 
     pub fn decrypt(&self, cipher: &[u8], plain: &mut [u8], nonce: &Nonce) -> Result<(), Error> {
@@ -387,10 +386,9 @@ impl CryptoBox {
         Ok(())
     }
 
-    pub fn decrypt_into(&self, cipher: &[u8], nonce: &Nonce) -> Vec<u8> {
+    pub fn decrypt_into(&self, cipher: &[u8], nonce: &Nonce) -> Result<Vec<u8>, Error> {
         let mut plain = vec![0u8; cipher.len() - Self::MAC_BYTES];
-        self.decrypt(cipher, plain.as_mut_slice(), nonce).unwrap();
-        plain
+        self.decrypt(cipher, plain.as_mut_slice(), nonce).map(|_| plain)
     }
 }
 
@@ -421,10 +419,9 @@ pub fn encrypt(
     Ok(())
 }
 
-pub fn encrypt_into(plain: &[u8], nonce: &Nonce, pk: &PublicKey, sk: &PrivateKey) -> Vec<u8> {
+pub fn encrypt_into(plain: &[u8], nonce: &Nonce, pk: &PublicKey, sk: &PrivateKey) -> Result<Vec<u8>, Error> {
     let mut cipher = vec![0u8; plain.len() + CryptoBox::MAC_BYTES];
-    encrypt(cipher.as_mut_slice(), plain, nonce, pk, sk).unwrap();
-    cipher
+    encrypt(cipher.as_mut_slice(), plain, nonce, pk, sk).map(|_| cipher)
 }
 
 pub fn decrypt(
@@ -455,8 +452,7 @@ pub fn decrypt(
     Ok(())
 }
 
-pub fn decrypt_into(cipher: &[u8], nonce: &Nonce, pk: &PublicKey, sk: &PrivateKey) -> Vec<u8> {
+pub fn decrypt_into(cipher: &[u8], nonce: &Nonce, pk: &PublicKey, sk: &PrivateKey) -> Result<Vec<u8>, Error> {
     let mut plain = vec![0u8; cipher.len() - CryptoBox::MAC_BYTES];
-    decrypt(plain.as_mut_slice(), cipher, nonce, pk, sk).unwrap();
-    plain
+    decrypt(plain.as_mut_slice(), cipher, nonce, pk, sk).map(|_| plain)
 }

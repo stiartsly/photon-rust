@@ -245,7 +245,7 @@ impl Value {
             unwrap!(b.nonce),
             &b.recipient.to_encryption_key(),
             &owner_sk.unwrap(),
-        );
+        ).ok().unwrap();
 
         let sig = signature::sign(
             value.serialize_signature_data().as_slice(),
