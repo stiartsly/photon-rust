@@ -6,9 +6,9 @@ use std::net::SocketAddr;
 use std::fmt::Display;
 use ciborium;
 use ciborium::Value as CVal;
-use log::{error};
 
 use crate::{
+    unwrap,
     Id,
     error::Error,
     rpccall::RpcCall
@@ -134,14 +134,14 @@ pub(crate) struct Data {
     id: Option<Id>,
     remote_id: Option<Id>,
 
-    origin: Option<SocketAddr>,
-    remote_addr: Option<SocketAddr>,
+    origin : Option<SocketAddr>,
+    remote : Option<SocketAddr>,
 
     associated_call: Option<Rc<RefCell<RpcCall>>>,
 
-    _type: i32,
-    txid: i32,
-    ver: i32,
+    type_   : i32,
+    txid    : i32,
+    ver     : i32,
 }
 
 impl Data {
@@ -150,9 +150,9 @@ impl Data {
             id: None,
             remote_id: None,
             origin: None,
-            remote_addr: None,
+            remote: None,
             associated_call: None,
-            _type: kind as i32 | method as i32,
+            type_: kind as i32 | method as i32,
             txid: txid,
             ver: 0
         }
@@ -164,31 +164,31 @@ pub(crate) trait Msg: Display {
     fn data_mut(&mut self) -> &mut Data;
 
     fn _type(&self) -> i32 {
-        self.data()._type
+        self.data().type_
     }
 
     fn kind(&self) -> Kind {
-        Kind::from(self.data()._type)
+        Kind::from(self.data().type_)
     }
 
     fn method(&self) -> Method {
-        Method::from(self.data()._type)
+        Method::from(self.data().type_)
     }
 
     fn id(&self) -> &Id {
-        self.data().id.as_ref().unwrap()
+        unwrap!(self.data().id)
     }
 
     fn remote_id(&self) -> &Id {
-        self.data().remote_id.as_ref().unwrap()
+        unwrap!(self.data().remote_id)
     }
 
     fn origin(&self) -> &SocketAddr {
-        self.data().origin.as_ref().unwrap()
+        unwrap!(self.data().origin)
     }
 
     fn remote_addr(&self) -> &SocketAddr {
-        self.data().remote_addr.as_ref().unwrap()
+        unwrap!(self.data().remote)
     }
 
     fn txid(&self) -> i32 {
@@ -200,11 +200,11 @@ pub(crate) trait Msg: Display {
     }
 
     fn associated_call(&self) -> Option<Rc<RefCell<RpcCall>>> {
-        self.data().associated_call.as_ref().cloned()
+        self.data().associated_call.as_ref().map(|v|v.clone())
     }
 
     fn set_type(&mut self, kind: Kind, method: Method) {
-        self.data_mut()._type = kind as i32 | method as i32
+        self.data_mut().type_ = kind as i32 | method as i32
     }
 
     fn set_id(&mut self, id: &Id) {
@@ -217,7 +217,7 @@ pub(crate) trait Msg: Display {
 
     fn set_remote(&mut self, id: &Id, addr: &SocketAddr) {
         self.data_mut().remote_id = Some(id.clone());
-        self.data_mut().remote_addr = Some(addr.clone())
+        self.data_mut().remote = Some(addr.clone())
     }
 
     fn set_txid(&mut self, txid: i32) {
@@ -248,10 +248,9 @@ pub(crate) trait Msg: Display {
             )
         ])
     }
+
     fn from_cbor(&mut self, _: &ciborium::value::Value) -> bool;
-
     fn as_any(&self) -> &dyn Any;
-
     fn ser(&self) -> CVal;
 }
 
