@@ -79,8 +79,6 @@ pub(crate) struct DHT {
 #[allow(dead_code)]
 impl DHT {
     pub(crate) fn new(nodeid: &Rc<Id>, binding_addr: &SocketAddr) -> Self {
-        let node_info = NodeInfo::new(nodeid, &binding_addr);
-
         DHT {
             nodeid: nodeid.clone(),
             addr: binding_addr.clone(),
@@ -92,7 +90,7 @@ impl DHT {
             bootstrap_needed: false,
             bootstrap_time: Rc::new(RefCell::new(SystemTime::UNIX_EPOCH)),
 
-            rtable:     Rc::new(RefCell::new(RoutingTable::new(node_info))),
+            rtable:     Rc::new(RefCell::new(RoutingTable::new(nodeid.clone()))),
             taskman:    Rc::new(RefCell::new(TaskManager::new())),
 
             server:     None,

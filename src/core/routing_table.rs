@@ -5,14 +5,15 @@ use std::time::SystemTime;
 use crate::{
     Id,
     Prefix,
-    node_info::{NodeInfo, Reachable},
+    NodeInfo,
+    node_info::Reachable,
     kbucket::KBucket,
     kbucket_entry::KBucketEntry
 };
 
 #[allow(dead_code)]
 pub(crate) struct RoutingTable {
-    ni: Rc<NodeInfo>,
+    nodeid: Rc<Id>,
     buckets: BTreeMap<Id, Box<KBucket>>,
 
     last_of_last_ping_check: SystemTime,
@@ -21,7 +22,7 @@ pub(crate) struct RoutingTable {
 
 #[allow(dead_code)]
 impl RoutingTable {
-    pub(crate) fn new(node: NodeInfo) -> Self {
+    pub(crate) fn new(nodeid: Rc<Id>) -> Self {
         let prefix = Prefix::new();
         let mut buckets = BTreeMap::new();
 
@@ -31,7 +32,7 @@ impl RoutingTable {
         );
 
         Self {
-            ni: Rc::new(node),
+            nodeid,
             buckets,
             last_of_last_ping_check: SystemTime::UNIX_EPOCH,
         }
@@ -90,7 +91,7 @@ impl RoutingTable {
     }
 
     fn is_home_bucket(&self, prefix: &Prefix) -> bool {
-        prefix.is_prefix_of(self.ni.id())
+        prefix.is_prefix_of(self.nodeid.as_ref())
     }
 
     pub(crate) fn put(&mut self, entry: Box<KBucketEntry>) {
@@ -127,7 +128,7 @@ impl RoutingTable {
         let ph = prefix.split_branch(true);
 
         let home_bucket = |prefix: &Prefix| -> bool {
-            prefix.is_prefix_of(self.ni.id())
+            prefix.is_prefix_of(self.nodeid.as_ref())
         };
 
         let mut low  = Box::new(KBucket::new(pl.clone(), home_bucket(&pl)));
