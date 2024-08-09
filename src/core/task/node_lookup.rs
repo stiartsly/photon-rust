@@ -101,14 +101,15 @@ impl Task for NodeLookupTask {
         };
 
         // delay the filling of the todo list until we actually start the task
-        let mut kclosest_nodes = KClosestNodes::with_filter(
+        let mut knodes = KClosestNodes::with_filter(
             target,
-            Task::data(self).rt(),
+            Task::data(self).dht(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |e| e.is_eligible_for_nodes_list()
         );
-        kclosest_nodes.fill(false);
-        let nodes = kclosest_nodes.as_nodes();
+        knodes.fill(false);
+
+        let nodes = knodes.as_nodes();
         self.add_candidates(&nodes);
     }
 

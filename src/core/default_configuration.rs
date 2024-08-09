@@ -27,8 +27,8 @@ pub struct Builder<'a> {
 impl<'a> Builder<'a> {
     pub fn new() -> Builder<'a> {
         let path = match env::var("HOME") {
-            Ok(value) => value,
-            Err(_) => ".".to_string(),
+            Ok(v) => v,
+            _ => ".".to_string(),
         };
 
         Self {
@@ -72,12 +72,12 @@ impl<'a> Builder<'a> {
         &self.storage_path
     }
 
-    pub fn add_bootstrap(&mut self, node: &NodeInfo) -> &mut Self {
+    pub fn add_bootstrap_node(&mut self, node: &NodeInfo) -> &mut Self {
         self.bootstrap_nodes.push(node.clone());
         self
     }
 
-    pub fn add_bootstraps(&mut self, nodes: &[NodeInfo]) -> &mut Self {
+    pub fn add_bootstrap_nodes(&mut self, nodes: &[NodeInfo]) -> &mut Self {
         for item in nodes.iter() {
             self.bootstrap_nodes.push(item.clone())
         }
@@ -94,20 +94,14 @@ impl<'a> Builder<'a> {
         }
 
         if let Some(addr) = self.ipv4.as_ref() {
-            match addr.parse::<Ipv4Addr>() {
-                Err(e) => {
-                    return Err(Error::Argument(format!("error: {}", e)));
-                },
-                Ok(_) => {}
-            };
+            addr.parse::<Ipv4Addr>().map_err(|e| {
+                return Error::Argument(format!("error: {}", e));
+            })?;
         }
         if let Some(addr) = self.ipv6.as_ref() {
-            match addr.parse::<Ipv4Addr>() {
-                Err(e) => {
-                    return Err(Error::Argument(format!("error: {}", e)));
-                }
-                Ok(_) => {}
-            };
+            addr.parse::<Ipv4Addr>().map_err(|e| {
+                return Error::Argument(format!("error: {}", e));
+            })?;
         }
 
         if self.ipv4.is_none() && self.ipv6.is_none() {
@@ -126,14 +120,16 @@ impl<'a> Builder<'a> {
         }
 
         if let Some(addr) = self.ipv4.as_ref() {
-            self.addr4 = Some(SocketAddr::new(IpAddr::V4(
-                addr.parse::<Ipv4Addr>().unwrap()
-            ), self.port));
+            self.addr4 = Some(SocketAddr::new(
+                IpAddr::V4(addr.parse::<Ipv4Addr>().unwrap()),
+                self.port
+            ));
         }
         if let Some(addr) = self.ipv6.as_ref() {
-            self.addr6 = Some(SocketAddr::new(IpAddr::V6(
-                addr.parse::<Ipv6Addr>().unwrap()
-            ), self.port));
+            self.addr6 = Some(SocketAddr::new(
+                IpAddr::V6(addr.parse::<Ipv6Addr>().unwrap()),
+                self.port
+            ));
         }
 
         Ok(Box::new(DefaultConfiguration::new(self)))
@@ -183,11 +179,11 @@ impl Config for DefaultConfiguration {
 
 impl fmt::Display for DefaultConfiguration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(addr) = self.addr4.as_ref() {
-            write!(f, "ipv4:{},", addr)?;
+        if let Some(v) = self.addr4.as_ref() {
+            write!(f, "ipv4:{},", v)?;
         }
-        if let Some(addr) = self.addr6.as_ref() {
-            write!(f, "ipv4:{},", addr)?;
+        if let Some(v) = self.addr6.as_ref() {
+            write!(f, "ipv4:{},", v)?;
         }
 
         write!(f, "storage:{},", &self.storage_path)?;

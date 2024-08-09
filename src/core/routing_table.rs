@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::collections::BTreeMap;
+use std::time::SystemTime;
 
 use crate::{
     Id,
@@ -9,9 +10,13 @@ use crate::{
     kbucket_entry::KBucketEntry
 };
 
+#[allow(dead_code)]
 pub(crate) struct RoutingTable {
     ni: Rc<NodeInfo>,
     buckets: BTreeMap<Id, Box<KBucket>>,
+
+    last_of_last_ping_check: SystemTime,
+
 }
 
 #[allow(dead_code)]
@@ -27,12 +32,9 @@ impl RoutingTable {
 
         Self {
             ni: Rc::new(node),
-            buckets
+            buckets,
+            last_of_last_ping_check: SystemTime::UNIX_EPOCH,
         }
-    }
-
-    pub(crate) fn ni(&self) -> Rc<NodeInfo> {
-        self.ni.clone()
     }
 
     pub(crate) fn buckets(&self) -> &BTreeMap<Id, Box<KBucket>> {
@@ -125,7 +127,7 @@ impl RoutingTable {
         let ph = prefix.split_branch(true);
 
         let home_bucket = |prefix: &Prefix| -> bool {
-            prefix.is_prefix_of(self.ni().id())
+            prefix.is_prefix_of(self.ni.id())
         };
 
         let mut low  = Box::new(KBucket::new(pl.clone(), home_bucket(&pl)));

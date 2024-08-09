@@ -94,10 +94,6 @@ impl TaskData {
         }
     }
 
-    pub(crate) fn rt(&self) -> Rc<RefCell<RoutingTable>> {
-        self.dht.borrow().routing_table()
-    }
-
     pub(crate) fn dht(&self) -> Rc<RefCell<DHT>> {
         self.dht.clone()
     }

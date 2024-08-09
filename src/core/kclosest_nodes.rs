@@ -5,7 +5,8 @@ use std::cmp::Ordering;
 use crate::{
     unwrap,
     id::Id,
-    node_info::NodeInfo,
+    NodeInfo,
+    dht::DHT,
     routing_table::RoutingTable,
     kbucket::KBucket,
     kbucket_entry::KBucketEntry,
@@ -13,7 +14,7 @@ use crate::{
 
 pub(crate) struct KClosestNodes {
     target: Rc<Id>,
-    rt: Rc<RefCell<RoutingTable>>,
+    dht: Rc<RefCell<DHT>>,
 
     entries: Vec<Box<KBucketEntry>>,
     capacity: usize,
@@ -24,25 +25,25 @@ pub(crate) struct KClosestNodes {
 #[allow(dead_code)]
 impl KClosestNodes {
     pub(crate) fn new(target: Rc<Id>,
-        rt: Rc<RefCell<RoutingTable>>,
+        dht: Rc<RefCell<DHT>>,
         max_entries: usize
     ) -> Self {
         Self::with_filter(
             target,
-            rt,
+            dht,
             max_entries,
             Box::new(|e: &Box<KBucketEntry>| e.is_eligible_for_nodes_list())
         )
     }
 
     pub(crate) fn with_filter<F>(target: Rc<Id>,
-        rt: Rc<RefCell<RoutingTable>>,
+        dht: Rc<RefCell<DHT>>,
         max_entries: usize,
         filter: F
     ) -> Self where F: Fn(&Box<KBucketEntry>) -> bool + 'static {
         Self {
             target,
-            rt,
+            dht,
             entries: Vec::new(),
             capacity: max_entries,
             filter: Box::new(filter),
@@ -57,10 +58,14 @@ impl KClosestNodes {
         self.entries.len()
     }
 
+    fn rt(&self) -> Rc<RefCell<RoutingTable>> {
+        self.dht.borrow().rt()
+    }
+
     pub(crate) fn fill(&mut self, include_itself: bool) {
         let mut idx = 0;
         let mut bucket = None;
-        let rt = self.rt.clone();
+        let rt = self.rt();
         let binding_rt = rt.borrow();
 
         for (k,v) in binding_rt.buckets().iter() {
@@ -125,9 +130,8 @@ impl KClosestNodes {
 
         if self.entries.len() < self.capacity && include_itself {
             let bucket_entry = Box::new(KBucketEntry::new(
-                binding_rt.ni().id(),
-                binding_rt.ni().socket_addr(),
-                binding_rt.ni().version(),
+                self.dht.borrow().node_id(),
+                self.dht.borrow().socket_addr()
             ));
             self.entries.push(bucket_entry);
         }

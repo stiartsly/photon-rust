@@ -85,7 +85,7 @@ impl Task for ValueLookupTask {
     fn prepare(&mut self) {
         let mut kclosest_nodes = KClosestNodes::with_filter(
             LookupTask::target(self),
-            Task::data(self).rt(),
+            Task::data(self).dht(),
             constants::MAX_ENTRIES_PER_BUCKET *2,
             move |_| true
         );

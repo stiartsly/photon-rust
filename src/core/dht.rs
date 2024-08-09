@@ -130,7 +130,7 @@ impl DHT {
         &self.nodeid
     }
 
-    pub(crate) fn routing_table(&self) -> Rc<RefCell<RoutingTable>> {
+    pub(crate) fn rt(&self) -> Rc<RefCell<RoutingTable>> {
         self.rtable.clone()
     }
 
@@ -390,7 +390,7 @@ impl DHT {
             entry_found = true;
         }
 
-        let mut new_entry = Box::new(KBucketEntry::new(msg.id(), from_addr, msg.ver()));
+        let mut new_entry = Box::new(KBucketEntry::with_ver(msg.id(), from_addr, msg.ver()));
         if let Some(call) = call {
             new_entry.signal_response();
             new_entry.merge_request_time(call.borrow().sent_time().clone());
@@ -468,7 +468,7 @@ impl DHT {
         if req.want4() {
             let mut knodes = KClosestNodes::new(
                 req.target(),
-                self.routing_table(),
+                self.cloned(),
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
@@ -508,7 +508,7 @@ impl DHT {
         if req.want4() && has_value {
             let mut knodes = KClosestNodes::new(
                 req.target(),
-                self.routing_table(),
+                self.cloned(),
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);
@@ -572,7 +572,7 @@ impl DHT {
         if req.want4() && has_peers {
             let mut knodes = KClosestNodes::new(
                 req.target(),
-                self.routing_table(),
+                self.cloned(),
                 constants::MAX_ENTRIES_PER_BUCKET,
             );
             knodes.fill(true);

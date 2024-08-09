@@ -28,7 +28,11 @@ pub(crate) struct KBucketEntry {
 }
 
 impl KBucketEntry {
-    pub(crate) fn new(id: &Id, addr: &SocketAddr, ver: i32) -> Self {
+    pub(crate) fn new(id: &Id, addr: &SocketAddr) -> Self {
+        Self::from(NodeInfo::new(id, addr))
+    }
+
+    pub(crate) fn with_ver(id: &Id, addr: &SocketAddr, ver: i32) -> Self {
         let mut ni = NodeInfo::new(id, addr);
         ni.set_version(ver);
         Self::from(ni)
@@ -37,7 +41,7 @@ impl KBucketEntry {
     pub(crate) fn from(ni: NodeInfo) -> Self {
         Self {
             ni: Rc::new(ni),
-            created: SystemTime::UNIX_EPOCH,
+            created  : SystemTime::UNIX_EPOCH,
             last_seen: SystemTime::UNIX_EPOCH,
             last_sent: SystemTime::UNIX_EPOCH,
             reachable: false,
