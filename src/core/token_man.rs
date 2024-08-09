@@ -19,9 +19,11 @@ pub(crate) struct TokenManager {
 impl TokenManager {
     pub(crate) fn new() -> Self {
         let mut seed = [0u8; 32];
-        unsafe {
-            // Always success.
-            libsodium_sys::randombytes_buf(seed.as_mut_ptr() as *mut libc::c_void, 32);
+        unsafe {// Always success.
+            libsodium_sys::randombytes_buf(
+                seed.as_mut_ptr() as *mut libc::c_void,
+                32
+            );
         }
         TokenManager {
             session_secret: seed,
@@ -38,7 +40,12 @@ impl TokenManager {
         }
     }
 
-    pub(crate) fn generate_token(&self, nodeid: &Id, addr: &SocketAddr, target: &Id) -> i32 {
+    pub(crate) fn generate_token(
+        &self,
+        nodeid: &Id,
+        addr: &SocketAddr,
+        target: &Id
+    ) -> i32 {
         generate_token(nodeid, addr, target, &self.timestamp, &self.session_secret)
     }
 
@@ -49,23 +56,26 @@ impl TokenManager {
         addr: &SocketAddr,
         target: &Id,
     ) -> bool {
+
         self.update_token_timestamp();
 
-        let current = generate_token(nodeid, addr, target, &self.timestamp, &self.session_secret);
-
-        match token == current {
-            true => return true,
-            false => {}
+        if token == generate_token(
+            nodeid,
+            addr,
+            target,
+            &self.timestamp,
+            &self.session_secret
+        ) {
+            return true
         }
 
-        let prev = generate_token(
+        token == generate_token(
             nodeid,
             addr,
             target,
             &self.previous_timestamp,
             &self.session_secret,
-        );
-        token == prev
+        )
     }
 }
 

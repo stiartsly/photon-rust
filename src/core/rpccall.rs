@@ -64,7 +64,6 @@ impl RpcCall {
         dht: Rc<RefCell<DHT>>,
         msg: Rc<RefCell<dyn Msg>>) -> Self
     {
-
         msg.borrow_mut().set_remote(
             target.id(),
             target.socket_addr()

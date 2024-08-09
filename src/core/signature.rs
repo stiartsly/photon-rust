@@ -70,8 +70,7 @@ impl PrivateKey {
             Signature::BYTES
         );
 
-        unsafe {
-            // Always success
+        unsafe {// Always success
             crypto_sign_detached(
                 as_uchar_ptr_mut!(signature),
                 std::ptr::null_mut(),
@@ -137,17 +136,12 @@ impl PublicKey {
         );
 
         unsafe {
-            let rc = crypto_sign_verify_detached(
+            0 == crypto_sign_verify_detached(
                 as_uchar_ptr!(signature),
                 as_uchar_ptr!(data),
                 data.len() as libc::c_ulonglong,
                 as_uchar_ptr!(self.0),
-            );
-
-            match rc {
-                0 => true,
-                _ => false,
-            }
+            )
         }
     }
 }
@@ -170,9 +164,11 @@ impl KeyPair {
         let mut sk = vec![0u8; PrivateKey::BYTES];
         let mut pk = vec![0u8; PublicKey::BYTES];
 
-        unsafe {
-            // Always success
-            crypto_sign_keypair(as_uchar_ptr_mut!(pk), as_uchar_ptr_mut!(sk));
+        unsafe {// Always success
+            crypto_sign_keypair(
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr_mut!(sk)
+            );
         }
         KeyPair(PrivateKey::from(&sk), PublicKey::from(&pk))
     }
@@ -181,8 +177,7 @@ impl KeyPair {
         let sk = input.clone();
         let mut pk = vec![0u8; PublicKey::BYTES];
 
-        unsafe {
-            // Always success
+        unsafe {// Always success
             crypto_sign_ed25519_sk_to_pk(
                 as_uchar_ptr_mut!(pk),
                 as_uchar_ptr!(input.as_bytes())
@@ -201,11 +196,12 @@ impl KeyPair {
         );
 
         let mut pk = vec![0u8; PublicKey::BYTES];
-        unsafe {
-            // Always success
-            crypto_sign_ed25519_sk_to_pk(as_uchar_ptr_mut!(pk), as_uchar_ptr!(input));
+        unsafe {// Always success
+            crypto_sign_ed25519_sk_to_pk(
+                as_uchar_ptr_mut!(pk),
+                as_uchar_ptr!(input)
+            );
         }
-
         KeyPair(PrivateKey::from(input), PublicKey::from(&pk))
     }
 
@@ -233,16 +229,16 @@ impl KeyPair {
 
     pub fn random() -> Self {
         let mut seed = [0u8; KeyPair::SEED_BYTES];
-        unsafe {
-            // Always success.
-            randombytes_buf(seed.as_mut_ptr() as *mut libc::c_void, KeyPair::SEED_BYTES);
+        unsafe {// Always success.
+            randombytes_buf(
+                seed.as_mut_ptr() as *mut libc::c_void, KeyPair::SEED_BYTES
+            );
         }
 
         let mut sk = vec![0u8; PrivateKey::BYTES];
         let mut pk = vec![0u8; PublicKey::BYTES];
 
-        unsafe {
-            // Always success
+        unsafe {// Always success
             crypto_sign_seed_keypair(
                 as_uchar_ptr_mut!(pk),
                 as_uchar_ptr_mut!(sk),
@@ -293,7 +289,11 @@ impl Signature {
     pub fn update(&mut self, part: &[u8]) {
         let s = &mut self.state.0 as *mut _ as *mut crypto_sign_state;
         unsafe {
-            crypto_sign_update(s, as_uchar_ptr!(part), part.len() as libc::c_ulonglong);
+            crypto_sign_update(
+                s,
+                as_uchar_ptr!(part),
+                part.len() as libc::c_ulonglong
+            );
         }
     }
 
@@ -334,8 +334,11 @@ impl Signature {
 
         let s = &mut self.state.0 as *mut _ as *mut crypto_sign_state;
         unsafe {
-            let rc = crypto_sign_final_verify(s, as_uchar_ptr!(sig), as_uchar_ptr!(pk.as_bytes()));
-            rc == 0
+            0 == crypto_sign_final_verify(
+                s,
+                as_uchar_ptr!(sig),
+                as_uchar_ptr!(pk.as_bytes())
+            )
         }
     }
 }

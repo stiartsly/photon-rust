@@ -13,7 +13,6 @@ use crate::{
     dht::DHT,
     error::Error,
     msg::msg::Msg,
-    routing_table::RoutingTable,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]

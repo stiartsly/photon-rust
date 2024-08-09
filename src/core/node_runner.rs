@@ -35,7 +35,7 @@ use crate::{
 };
 
 pub(crate) struct NodeRunner {
-    node_id: Rc<Id>,
+   // node_id: Rc<Id>,
     storage_path: String,
 
     encryption_ctx: Rc<RefCell<CryptoCache>>,
@@ -90,7 +90,7 @@ impl NodeRunner {
         drop(cfg);
 
         Self {
-            node_id: node_id.clone(),
+            // node_id: node_id.clone(),
             storage_path: storage_path,
             encryption_ctx: ctx,
 

@@ -122,22 +122,16 @@ impl Peer {
             pk: Id::from_signature_pubkey(kp.public_key()),
             sk: Some(kp.private_key().clone()),
             id: b.id.clone(),
-            origin: match b.origin {
-                Some(origin) => Some(origin.clone()),
-                None => None,
-            },
+            origin: b.origin.map(|v|v.clone()),
             port: b.port,
-            url: match b.url {
-                Some(url) => Some(url.nfc().collect::<String>()),
-                None => None,
-            },
+            url: b.url.map(|v| v.nfc().collect::<String>()),
             sig: Vec::new(),
         };
 
-        let sig = signature::sign(
-            peer.serialize_signature_data().as_slice(), unwrap!(peer.sk)
+        peer.sig = signature::sign(
+            peer.serialize_signature_data().as_slice(),
+            unwrap!(peer.sk)
         );
-        peer.sig = sig;
         peer
     }
 
@@ -206,9 +200,11 @@ impl Peer {
             Signature::BYTES
         );
 
-        let sigdata = self.serialize_signature_data();
-        let pk = self.pk.to_signature_pubkey();
-        signature::verify(sigdata.as_ref(), self.sig.as_slice(), &pk)
+        signature::verify(
+            self.serialize_signature_data().as_ref(),
+            self.sig.as_slice(),
+            &self.pk.to_signature_pubkey()
+        )
     }
 
     fn serialize_signature_data(&self) -> Vec<u8> {
@@ -216,21 +212,21 @@ impl Peer {
 
         len += ID_BYTES * 2;
         len += mem::size_of::<u16>(); // padding port
+        len += match self.url.as_ref() {
+            Some(url) => url.len(),
+            None => 0,
+        };
+
+        let mut data = vec![0u8; len];
+
+        data.extend_from_slice(self.id.as_bytes());
+        data.extend_from_slice(self.origin().as_bytes());
+        data.extend_from_slice(self.port.to_le_bytes().as_ref());
 
         if let Some(url) = self.url.as_ref() {
-            len += url.len();
+            data.extend_from_slice(url.as_ref());
         }
-
-        let mut input = Vec::<u8>::with_capacity(len);
-        input.extend_from_slice(self.id.as_bytes());
-
-        input.extend_from_slice(self.origin().as_bytes());
-        input.extend_from_slice(self.port.to_le_bytes().as_ref());
-
-        if let Some(url) = self.url.as_ref() {
-            input.extend_from_slice(url.as_ref());
-        }
-        input
+        data
     }
 }
 
