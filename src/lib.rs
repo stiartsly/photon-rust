@@ -10,6 +10,7 @@ pub use {
     core::node::Node,
     core::error::Error,
     core::error,
+    core::config,
     core::config::Config,
     core::prefix::Prefix,
     core::node_info::NodeInfo,
