@@ -1,36 +1,31 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
-use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
 use std::io::Write;
-use std::ops::Deref;
-use std::net::SocketAddr;
 use std::time::SystemTime;
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::io::AsyncReadExt;
 use tokio::time::Duration;
 use ciborium::value::Value as CVal;
-use log::{info, debug, error};
+use log::{info, debug};
 
 use crate::{
     unwrap,
-    Id,
     Node,
-    PeerInfo,
     PeerBuilder,
-    cryptobox, CryptoBox,
-    signature,
+    cryptobox,
     error::Result,
     core::cbor,
     Error,
 };
 
 use crate::activeproxy::{
-    connection::ProxyConnection
+    connection::ProxyConnection,
+    inners::InnerFields
 };
 
 const IDLE_CHECK_INTERVAL:      u128 = 60 * 1000;           // 60s
@@ -39,40 +34,14 @@ const HEALTH_CHECK_INTERVAL:    u128 = 10 * 1000;           // 10s
 const RE_ANNOUNCE_INTERVAL:     u128 = 60 * 60 * 1000;      // 1hour
 const PERSISTENCE_INTERVAL:     u128 = 60 * 60 * 1000;      // 1hour
 
-pub(crate)
-const MAX_DATA_PACKET_SIZE:     usize = 0x7FFF;
-
-pub struct ProxyWorker {
+pub(crate) struct ProxyWorker {
     node:               Arc<Mutex<Node>>,
     cached_dir:         PathBuf,
 
-    session_keypair:    Option<Rc<cryptobox::KeyPair>>,
-    server_pk:          Option<cryptobox::PublicKey>,
-    crypto_box:         Option<Rc<RefCell<Option<CryptoBox>>>>,
+    inners:             Rc<RefCell<InnerFields>>,
 
-    peer_nodeid:        Option<Rc<Id>>,
-    peer_id:            Option<Id>,
-
-    remote_addr:        Option<Rc<SocketAddr>>,
-    remote_name:        Option<Rc<String>>,
-    remote_peer:        Option<PeerInfo>,       // remote active proxy peer service.
-
-    upstream_addr:      Option<Rc<SocketAddr>>,
-    upstream_name:      Option<Rc<String>>,
-
-    peer_keypair:       Option<signature::KeyPair>,
-    peer_domain:        Option<Rc<String>>,
-    peer:               Option<PeerInfo>,
-    relay_port:         Option<u16>,
-
-   // replaystream_failures: i32,
-   // upstream_failures:  i32,
-
-    rcvbuf:             Option<Rc<RefCell<Box<Vec<u8>>>>>,
-
-    max_connections:    usize,
     inflights:          usize,
-    connections:        HashMap<i32, Rc<RefCell<ProxyConnection>>>,
+    connections:        Rc<RefCell<HashMap<i32, Rc<RefCell<ProxyConnection>>>>>,
 
 
     last_announcepeer_timestamp:    SystemTime,
@@ -89,41 +58,22 @@ pub struct ProxyWorker {
 }
 
 impl ProxyWorker {
-    pub fn new(node: Arc<Mutex<Node>>, cached_dir: PathBuf) -> Self {
+    pub fn new(node: Arc<Mutex<Node>>,
+        inners: Rc<RefCell<InnerFields>>,
+        cached_dir: PathBuf
+    ) -> Self {
         Self {
             node,
             cached_dir,
+            inners,
 
-            session_keypair:    Some(Rc::new(cryptobox::KeyPair::random())),
-            server_pk:          None,
-            crypto_box:         Some(Rc::new(RefCell::new(None))),
-
-            // The server node that provides active proxy service
-            peer_nodeid:        None,
-            peer_id:            None,
-
-            remote_peer:        None,
-            remote_addr:        None,
-            remote_name:        None,
-
-
-            upstream_name:      None,
-            upstream_addr:      None,
-
-            peer_domain:        None,
-            peer_keypair:       None,
-            peer:               None,         // upstream service as a public peer service.
-            relay_port:         None,
             last_announcepeer_timestamp:SystemTime::UNIX_EPOCH,
 
            // replaystream_failures: 0,
            // upstream_failures:  0,
 
-            rcvbuf:             Some(Rc::new(RefCell::new(Box::new(vec![0u8; MAX_DATA_PACKET_SIZE])))),
-
-            max_connections:    16,
             inflights:          0,
-            connections:        HashMap::new(),
+            connections:        Rc::new(RefCell::new(HashMap::new())),
 
             last_idle_check_timestamp:  SystemTime::UNIX_EPOCH,
             last_health_check_timestamp:SystemTime::UNIX_EPOCH,
@@ -137,48 +87,16 @@ impl ProxyWorker {
         }
     }
 
-    pub(crate) fn set_field<T: 'static>(&mut self, field: T, seq: Option<i32>) -> &mut Self {
-        let typid = TypeId::of::<T>();
-        let field = Box::new(field) as Box<dyn Any>;
-
-        if typid == TypeId::of::<SocketAddr>() {
-            let rc = field.downcast::<SocketAddr>().unwrap();
-            match seq {
-                Some(0) => {
-                    self.remote_addr = Some(Rc::new(rc.deref().clone()));
-                    self.remote_name = Some(Rc::new(unwrap!(self.remote_addr).to_string()));
-                },
-                Some(1) => {
-                    self.upstream_addr = Some(Rc::new(rc.deref().clone()));
-                    self.upstream_name = Some(Rc::new(unwrap!(self.upstream_addr).to_string()));
-                },
-                _ => {}
-            }
-        }
-        else if typid == TypeId::of::<Rc<RefCell<ProxyWorker>>>() {
-            let rc = field.downcast::<Rc<RefCell<ProxyWorker>>>().unwrap();
-            self.cloned = Some(rc.deref().clone());
-        } else if typid == TypeId::of::<PeerInfo>() {
-            let rc = field.downcast::<PeerInfo>().unwrap();
-            self.remote_peer = Some(rc.deref().clone());
-            self.peer_nodeid = Some(Rc::new(unwrap!(self.remote_peer).nodeid().clone()));
-            self.peer_id = Some(unwrap!(self.remote_peer).id().clone());
-        } else if typid == TypeId::of::<Option<String>>() {
-            let rc = field.downcast::<Option<String>>().unwrap();
-            self.peer_domain = rc.deref().clone().map(|v| Rc::new(v));
-        } else if typid == TypeId::of::<Option<signature::KeyPair>>() {
-            let rc = field.downcast::<Option<signature::KeyPair>>().unwrap();
-            self.peer_keypair = rc.deref().clone();
-        }
-        self
+    pub(crate) fn set_cloned(&mut self, worker: Rc<RefCell<Self>>) {
+        self.cloned = Some(worker);
     }
 
     fn cloned(&self) -> Rc<RefCell<Self>> {
         unwrap!(self.cloned).clone()
     }
 
-    pub(crate) fn set_max_connections(&mut self, connections: usize) {
-        self.max_connections = connections;
+    fn inners(&self) -> Rc<RefCell<InnerFields>> {
+        self.inners.clone()
     }
 
     fn reset(&self) {
@@ -186,26 +104,27 @@ impl ProxyWorker {
     }
 
     fn persist_peer(&self) {
+        let inners = self.inners.borrow();
         let val = CVal::Map(vec![
             (
                 CVal::Text(String::from("peerId")),
-                CVal::Bytes(unwrap!(self.remote_peer).id().as_bytes().into())
+                CVal::Bytes(inners.remote_peerid().as_bytes().into())
             ),
             (
                 CVal::Text(String::from("serverHost")),
-                CVal::Text(unwrap!(self.remote_addr).ip().to_string())
+                CVal::Text(inners.remote_ip().to_string())
             ),
             (
                 CVal::Text(String::from("serverPort")),
-                CVal::Integer(unwrap!(self.remote_addr).port().into())
+                CVal::Integer(inners.remote_port().into())
             ),
             (
                 CVal::Text(String::from("serverId")),
-                CVal::Bytes(unwrap!(self.remote_peer).nodeid().as_bytes().into())
+                CVal::Bytes(inners.remote_nodeid().as_bytes().into())
             ),
             (
                 CVal::Text(String::from("signature")),
-                CVal::Bytes(unwrap!(self.remote_peer).signature().into())
+                CVal::Bytes(inners.remote_peer().signature().into())
             )
         ]);
 
@@ -224,16 +143,17 @@ impl ProxyWorker {
     }
 
     async fn announce_peer(&self) {
-        let Some(peer) = self.peer.as_ref() else {
+        let inners = self.inners.borrow();
+        let Some(peer) = inners.upstream_peer() else {
             return;
         };
 
         info!("Announce peer {} : {}", peer.id(), peer);
 
         if let Some(url) = peer.alternative_url() {
-            info!("-**- ProxyWorker: peer server: {}:{}, domain: {} -**-", unwrap!(self.remote_addr).ip(), peer.port(), url);
+            info!("-**- ProxyWorker: peer server: {}:{}, domain: {} -**-", inners.remote_ip(), peer.port(), url);
         } else {
-            info!("-**- ProxyWorker: peer server: {}:{} -**-", unwrap!(self.remote_addr).ip(), peer.port());
+            info!("-**- ProxyWorker: peer server: {}:{} -**-", inners.remote_ip(), peer.port());
         }
 
         _ = self.node.lock()
@@ -242,37 +162,141 @@ impl ProxyWorker {
     }
 
     async fn idle_check(&mut self) {
+        let conns = self.connections.clone();
         // Dump the current status: should change the log level to debug later
         debug!("ProxyWorker STATUS dump: Connections = {}, inFlights = {}, idle = {}",
-            self.connections.len(), self.inflights,
+            conns.borrow().len(), self.inflights,
             unwrap!(self.last_idle_check_timestamp.elapsed()).as_secs());
 
-        for (_, item) in self.connections.iter() {
+        for (_, item) in conns.borrow().iter() {
             debug!("ProxyWorker status dump: \n{}", item.borrow());
         }
 
         if unwrap!(self.last_idle_check_timestamp.elapsed()).as_millis() < MAX_IDLE_TIME  ||
-            self.inflights > 0 || self.connections.len() <= 1 {
+            self.inflights > 0 || conns.borrow().len() <= 1 {
             return;
         }
 
         info!("ProxyWorker is recycling redundant connections due to long time idle...");
 
-        let keys: Vec<_> = self.connections.keys().cloned().collect();
+        let keys: Vec<_> = conns.borrow().keys().cloned().collect();
         for key in keys {
-            let item = self.connections.remove(&key).unwrap();
-            item.borrow_mut().on_closed().await;
+            let item = conns.borrow_mut().remove(&key).unwrap();
+            item.borrow_mut().on_closed();
             item.borrow_mut().close().await.ok();
         }
     }
 
     async fn health_check(&mut self) {
-        for (_, item) in self.connections.iter() {
+        let values: Vec<_> = self.connections.borrow().values().cloned().collect();
+        for item in values {
             item.borrow_mut().periodic_check();
         }
     }
 
-    pub(crate) async fn on_iteration(&mut self) {
+    async fn try_connect(&mut self) -> Result<()> {
+        debug!("ProxyWorker started to create a new connectoin ...");
+
+        let mut conn = ProxyConnection::new(
+            self.node.clone(),
+            self.inners.clone()
+        );
+
+        conn.with_on_authorized_cb(Box::new(move |conn: &ProxyConnection, pk: &cryptobox::PublicKey, port: u16, domain_enabled: bool| {
+            let inners = conn.inners();
+            let node   = conn.node();
+
+            let sk = inners.borrow().session_keypair().private_key().clone();
+
+            inners.borrow_mut().set_server_pk(pk.clone());
+            inners.borrow_mut().set_relay_port(port);
+            inners.borrow_mut().set_cryptobox(pk, &sk);
+            inners.borrow_mut().set_domain_enabled(domain_enabled);
+
+            if inners.borrow().peer_keypair().is_none() {
+                return;
+            }
+
+            let peer = PeerBuilder::new(inners.borrow().remote_nodeid())
+                .with_keypair(inners.borrow().peer_keypair())
+                .with_origin(Some(node.lock().unwrap().id()))
+                .with_alternative_url(inners.borrow().upstream_domain())
+                .with_port(port)
+                .build();
+
+            if let Some(url) = peer.alternative_url() {
+                info!("-**- ActiveProxy: peer server: {}:{}, domain: {} -**-", inners.borrow().remote_ip(), peer.port(), url);
+            } else {
+                info!("-**- ActiveProxy: peer server: {}:{} -**-", inners.borrow().remote_ip(), peer.port());
+            }
+
+            inners.borrow_mut().set_upstream_peer(Some(peer));
+            // Will announce this peer in the next iteration if it's effective.
+        }));
+
+        let cloned = self.cloned();
+        conn.with_on_opened_cb(Box::new(move |_: &ProxyConnection| {
+            cloned.borrow_mut().server_failures = 0;
+            cloned.borrow_mut().reconnect_delay = 0;
+        }));
+
+        let cloned = self.cloned();
+        conn.with_on_open_failed_cb(Box::new(move |_: &ProxyConnection| {
+            cloned.borrow_mut().server_failures += 1;
+            if cloned.borrow().reconnect_delay < 64 {
+                cloned.borrow_mut().reconnect_delay = (1 << cloned.borrow_mut().server_failures) * 1000;
+            }
+        }));
+
+        let cloned = self.connections.clone();
+        conn.with_on_closed_cb(Box::new(move |conn: &ProxyConnection| {
+           cloned.borrow_mut().remove(&conn.id());
+        }));
+
+        let cloned = self.cloned();
+        conn.with_on_busy_cb(Box::new(move |_| {
+            cloned.borrow_mut().inflights += 1;
+            cloned.borrow_mut().last_idle_check_timestamp = SystemTime::UNIX_EPOCH;
+        }));
+
+        let cloned = self.cloned();
+        conn.with_on_idle_cb(Box::new(move |_| {
+            cloned.borrow_mut().inflights -= 1;
+            if cloned.borrow().inflights == 0 {
+                cloned.borrow_mut().last_idle_check_timestamp = SystemTime::now();
+            }
+        }));
+
+        let conn = Rc::new(RefCell::new(conn));
+        self.connections.borrow_mut().insert(conn.borrow().id(), conn.clone());
+
+        self.last_reconnect_timestamp = SystemTime::now();
+        conn.clone().borrow_mut()
+            .try_connect_server().await
+    }
+
+    fn needs_new_connection(&self) -> bool {
+        if self.connections.borrow().len() >= self.inners.borrow().max_connections() {
+            return false;
+        }
+        if unwrap!(self.last_reconnect_timestamp.elapsed()).as_millis() < self.reconnect_delay {
+            return false;
+        }
+
+        if self.connections.borrow().is_empty() {
+            if self.inners.borrow().server_pk().is_some() {
+                self.reset()
+            }
+            return true;
+        }
+        if self.inflights == self.connections.borrow().len() {
+            return true;
+        }
+
+        false   // Maybe refine other conditions later.
+    }
+
+    async fn on_iteration(&mut self) {
         if self.needs_new_connection() {
             _ = self.try_connect().await;
         }
@@ -287,7 +311,7 @@ impl ProxyWorker {
             self.health_check().await;
         }
 
-        if self.peer.is_some() &&
+        if self.inners.borrow().upstream_peer().is_some() &&
             unwrap!(self.last_announcepeer_timestamp.elapsed()).as_millis() >= RE_ANNOUNCE_INTERVAL {
             self.last_announcepeer_timestamp = SystemTime::now();
             self.announce_peer().await;
@@ -298,123 +322,6 @@ impl ProxyWorker {
             self.lookup_peer().await;
             self.persist_peer();
         }
-    }
-
-    async fn try_connect(&mut self) -> Result<()> {
-        debug!("ProxyWorker started to create a new connectoin ...");
-
-        let mut connection = ProxyConnection::new(
-            self.cloned.as_ref().unwrap().clone(),
-            self.node.clone()
-        );
-        connection
-            .set_field(self.peer_domain.as_ref().map(|v|v.clone()), None)
-            .set_field(unwrap!(self.remote_addr).clone(), Some(0))
-            .set_field(unwrap!(self.upstream_addr).clone(), Some(1))
-            .set_field(unwrap!(self.remote_name).clone(), Some(0))
-            .set_field(unwrap!(self.upstream_name).clone(), Some(1))
-            .set_field(unwrap!(self.peer_nodeid).clone(), None)
-            .set_field(unwrap!(self.session_keypair).clone(), None)
-            .set_field(unwrap!(self.crypto_box).clone(), None)
-            .set_field(unwrap!(self.rcvbuf).clone(), None);
-
-        let cloned = self.cloned();
-        connection.with_on_authorized_cb(Box::new(move |_: &ProxyConnection, server_pk: &cryptobox::PublicKey, port: u16, domain_enabled: bool| {
-            cloned.borrow_mut().server_pk = Some(server_pk.clone());
-            cloned.borrow_mut().relay_port = Some(port);
-            *unwrap!(cloned.borrow_mut().crypto_box).borrow_mut() = Some(
-                CryptoBox::try_from((server_pk, unwrap!(cloned.borrow().session_keypair).private_key())).unwrap()
-            );
-
-            let borrowed = cloned.borrow();
-            let Some(kp) = borrowed.peer_keypair.as_ref() else {
-                return;
-            };
-
-            let nodeid = borrowed.node.lock().unwrap().id().clone();
-            let mut builder = PeerBuilder::new(&nodeid);
-            let has_domain = borrowed.peer_domain.is_some();
-            if domain_enabled && has_domain {
-                builder.with_alternative_url(borrowed.peer_domain.as_ref().map(|v|v.as_str()));
-            }
-
-            let peer = builder.with_keypair(Some(kp))
-                .with_origin(Some(borrowed.node.lock().unwrap().id()))
-                .with_alternative_url(borrowed.peer_domain.as_ref().map(|v|v.as_str()))
-                .with_port(port)
-                .build();
-
-            if let Some(url) = peer.alternative_url() {
-                info!("-**- ActiveProxy: peer server: {}:{}, domain: {} -**-", unwrap!(borrowed.remote_addr).ip(), peer.port(), url);
-            } else {
-                info!("-**- ActiveProxy: peer server: {}:{} -**-", unwrap!(borrowed.remote_addr).ip(), peer.port());
-            }
-
-            cloned.borrow_mut().peer = Some(peer);
-            // Will announce this peer in the next iteration if it's effective.
-        }));
-
-        let cloned = self.cloned();
-        connection.with_on_opened_cb(Box::new(move |_: &ProxyConnection| {
-            cloned.borrow_mut().server_failures = 0;
-            cloned.borrow_mut().reconnect_delay = 0;
-        }));
-
-        let cloned = self.cloned();
-        connection.with_on_open_failed_cb(Box::new(move |_: &ProxyConnection| {
-            cloned.borrow_mut().server_failures += 1;
-            if cloned.borrow().reconnect_delay < 64 {
-                cloned.borrow_mut().reconnect_delay = (1 << cloned.borrow_mut().server_failures) * 1000;
-            }
-        }));
-
-        let cloned = self.cloned();
-        connection.with_on_closed_cb(Box::new(move |conn: &ProxyConnection| {
-           cloned.borrow_mut().connections.remove(&conn.id());
-        }));
-
-        let cloned = self.cloned();
-        connection.with_on_busy_cb(Box::new(move |_| {
-            cloned.borrow_mut().inflights += 1;
-            cloned.borrow_mut().last_idle_check_timestamp = SystemTime::UNIX_EPOCH;
-        }));
-
-        let cloned = self.cloned();
-        connection.with_on_idle_cb(Box::new(move |_| {
-            cloned.borrow_mut().inflights -= 1;
-            if cloned.borrow().inflights == 0 {
-                cloned.borrow_mut().last_idle_check_timestamp = SystemTime::now();
-            }
-        }));
-
-        let conn_rc = Rc::new(RefCell::new(connection));
-        self.connections.insert(conn_rc.borrow().id(), conn_rc.clone());
-
-        self.last_reconnect_timestamp = SystemTime::now();
-        conn_rc.clone()
-            .borrow_mut()
-            .try_connect_server().await
-    }
-
-    fn needs_new_connection(&self) -> bool {
-        if self.connections.len() >= self.max_connections {
-            return false;
-        }
-        if unwrap!(self.last_reconnect_timestamp.elapsed()).as_millis() < self.reconnect_delay {
-            return false;
-        }
-
-        if self.connections.is_empty() {
-            if self.server_pk.is_some() {
-                self.reset();
-            }
-            return true;
-        }
-        if self.inflights == self.connections.len() {
-            return true;
-        }
-
-        false   // Maybe refine other conditions later.
     }
 }
 
@@ -435,36 +342,43 @@ pub(crate) fn run_loop(
         _ = worker.borrow_mut().on_iteration().await;
 
         loop {
-            let mut read_tasks = FuturesUnordered::new();
-            for (_, item) in worker.borrow().connections.iter() {
+            let mut futures = FuturesUnordered::new();
+            let conns: Vec<_> = worker.borrow().connections.borrow().values().cloned().collect();
+            for item in conns {
                 let item = item.clone();
-                let worker = worker.clone();
-                let rcvbuf = unwrap!(worker.borrow().rcvbuf).clone();
-                read_tasks.push(async move {
+                let inners = worker.borrow().inners();
+                futures.push(async move {
+                    let rcvbuf = inners.borrow().rcvbuf();
+                    let mut borrowed_rcvbuf = rcvbuf.borrow_mut();
+
                     let mut borrowed = item.borrow_mut();
-                    match borrowed.relay_mut().read(&mut rcvbuf.borrow_mut()).await {
+                    let result = match borrowed.relay_mut().read(&mut borrowed_rcvbuf.as_mut()).await {
                         Ok(n) if n == 0 => {
                             info!("Connection {} was closed by the server.", borrowed.id());
-                            Err(Error::State(format!("Connection {} was closed by the server.", borrowed.id())))
+                            Ok(0)
                         },
                         Ok(len) => {
                             println!(">>>> received {} bytes", len);
-                            // borrowed.on_relay_data(&borrowed[..len]).await,
-                            Ok(())
+                            Ok(len)
                         },
                         Err(e) => {
-                            error!("Connection {} failed to read server with error: {}", borrowed.id(), e);
-                            _ = borrowed.close().await;
-                            Err(Error::from(e))
+                            Err(Error::State(format!("Connection {} failed to read server with error: {}", borrowed.id(), e)))
                         }
-                    }.ok();
+                    };
+
+                    let len = result.map_err(|e| {
+                        panic!("{e}");
+                    }).unwrap();
+
+
+                    _ = borrowed.on_relay_data(&borrowed_rcvbuf.as_ref()[..len]).await;
                 });
             }
 
             tokio::select! {
-                result = read_tasks.next() => {
+                result = futures.next() => {
                     match result {
-                        Some(_) => {panic!(">>>>>line:{}", line!())},
+                        Some(_) => {}, //{panic!(">>>>>line:{}", line!())},
                         None => println!("failed"),
                     }
                 },
