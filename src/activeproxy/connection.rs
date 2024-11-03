@@ -4,9 +4,7 @@ use std::fmt;
 use std::str;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::any::{Any, TypeId};
 use std::sync::{Arc, Mutex};
-use std::ops::Deref;
 use std::time::SystemTime;
 use std::net::{
     SocketAddr,
@@ -19,6 +17,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use log::{warn, error,info, debug, trace};
 
 use crate::{
+    srv_endp,
+    ups_endp,
     unwrap,
     random_bytes,
     id, Id,
@@ -30,57 +30,10 @@ use crate::{
 };
 
 use crate::activeproxy::{
-    worker::ProxyWorker,
+    inners::InnerFields,
     packet::{Packet, AttachType, AuthType, ConnType, DisconnType},
+    state::State,
 };
-
-#[allow(dead_code)]
-#[derive(PartialEq, Eq)]
-pub(crate) enum State {
-    Initializing = 0,
-    Authenticating,
-    Attaching,
-    Idling,
-    Relaying,
-    Disconnecting,
-    Closed
-}
-
-impl State {
-    fn accept(&self, pkt: &Packet) -> bool {
-        match self {
-            State::Initializing     => false,
-            State::Authenticating   => matches!(pkt, Packet::AuthAck(_)),
-            State::Attaching        => matches!(pkt, Packet::AttachAck(_)),
-            State::Idling           => matches!(pkt, Packet::PingAck(_)) ||
-                                       matches!(pkt, Packet::Connect(_)),
-            State::Relaying         => matches!(pkt, Packet::PingAck(_)) ||
-                                       matches!(pkt, Packet::Data(_)) ||
-                                       matches!(pkt, Packet::Disconnect(_)),
-            State::Disconnecting    => matches!(pkt, Packet::Disconnect(_)) ||
-                                       matches!(pkt, Packet::Data(_)) ||
-                                       matches!(pkt, Packet::DisconnectAck(_)),
-            State::Closed           => false,
-        }
-    }
-}
-
-impl fmt::Display for State {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let str = match self {
-            State::Initializing     => "Initializing",
-            State::Authenticating   => "Authenticating",
-            State::Attaching        => "Attaching",
-            State::Idling           => "Idling",
-            State::Relaying         => "Relaying",
-            State::Disconnecting    => "Disconnecting",
-            State::Closed           => "Closed",
-        };
-
-        write!(f, "{}", str)?;
-        Ok(())
-    }
-}
 
 // packet size (2bytes) + packet type(1bytes)
 const PACKET_HEADER_BYTES: usize = mem::size_of::<u16>() + mem::size_of::<u8>();
@@ -103,17 +56,7 @@ pub(crate) struct ProxyConnection {
     state:          State,
     keep_alive:     SystemTime,
 
-    session_keypair:Option<Rc<cryptobox::KeyPair>>,
-    crypto_box:     Option<Rc<RefCell<Option<CryptoBox>>>>,
-    rcvbuf:         Option<Rc<RefCell<Box<Vec<u8>>>>>,
-    srv_nodeid:     Option<Rc<Id>>,
-    srv_pk:         Option<Rc<Option<cryptobox::PublicKey>>>,
-
-    srv_addr:       Option<Rc<SocketAddr>>,
-    srv_endp:       Option<Rc<String>>,
-    ups_addr:       Option<Rc<SocketAddr>>,
-    ups_endp:       Option<Rc<String>>,
-    ups_domain:     Option<Rc<String>>,
+    inners:         Rc<RefCell<InnerFields>>,
 
     disconnect_confirms: i32,       // TODO: volatile.
 
@@ -121,7 +64,7 @@ pub(crate) struct ProxyConnection {
     upstream:       Option<TcpStream>,
     stickybuf:      Option<Vec<u8>>,
 
-    proxy:          Rc<RefCell<ProxyWorker>>,
+    //proxy:          Rc<RefCell<ProxyWorker>>,
 
     nonce:          Option<cryptobox::Nonce>,
 
@@ -136,27 +79,14 @@ pub(crate) struct ProxyConnection {
 
 #[allow(dead_code)]
 impl ProxyConnection {
-    pub(crate) fn new(proxy: Rc<RefCell<ProxyWorker>>, node: Arc<Mutex<Node>>) -> Self {
+    pub(crate) fn new(node: Arc<Mutex<Node>>, inners: Rc<RefCell<InnerFields>>) -> Self {
         Self {
             node,
             id:             next_connection_id(),
             state:          State::Initializing,
             keep_alive:     SystemTime::now(),
 
-            session_keypair:None,
-            crypto_box:     None,
-
-
-            rcvbuf:         None,
-            srv_nodeid:     None,
-            srv_pk:         None,
-
-            srv_addr:       None,
-            srv_endp:       None,
-
-            ups_addr:       None,
-            ups_endp:       None,
-            ups_domain:     None,
+            inners,
 
             disconnect_confirms: 0,
 
@@ -164,8 +94,8 @@ impl ProxyConnection {
             upstream:       None,
 
             stickybuf:      Some(Vec::with_capacity(4*1024)),
-            proxy,
-            nonce:          None,
+            //proxy,
+            nonce:          Some(cryptobox::Nonce::random()),
 
             authorized_cb:  Box::new(|_,_,_,_|{}),
             opend_cb:       Box::new(|_|{}),
@@ -176,44 +106,16 @@ impl ProxyConnection {
         }
     }
 
-    pub(crate) fn set_field<T: 'static>(&mut self, field: T, seq: Option<i32>) -> &mut Self {
-        let typid = TypeId::of::<T>();
-        let field = Box::new(field) as Box<dyn Any>;
+    pub(crate) fn inners(&self) -> Rc<RefCell<InnerFields>> {
+        self.inners.clone()
+    }
 
-        if typid == TypeId::of::<Rc<SocketAddr>>() {
-            let rc = field.downcast::<Rc<SocketAddr>>().unwrap();
-            match seq {
-                Some(0) => self.srv_addr = Some(rc.deref().clone()),
-                Some(1) => self.ups_addr = Some(rc.deref().clone()),
-                _ => {}
-            }
-        } else if typid == TypeId::of::<Rc<String>>() {
-            let rc = field.downcast::<Rc<String>>().unwrap();
-            match seq {
-                Some(0) => self.srv_endp = Some(rc.deref().clone()),
-                Some(1) => self.ups_endp = Some(rc.deref().clone()),
-                _ => {}
-            }
-        } else if typid == TypeId::of::<Option<Rc<String>>>() {
-            let rc = field.downcast::<Option<Rc<String>>>().unwrap();
-            self.ups_domain = rc.deref().clone();
-        } else if typid == TypeId::of::<Rc<Id>>() {
-            let rc = field.downcast::<Rc<Id>>().unwrap();
-            self.srv_nodeid = Some(rc.deref().clone());
-        } else if typid == TypeId::of::<Rc<Option<cryptobox::PublicKey>>>() {
-            let rc = field.downcast::<Rc<Option<cryptobox::PublicKey>>>().unwrap();
-            self.srv_pk = Some(rc.deref().clone());
-        } else if typid == TypeId::of::<Rc<cryptobox::KeyPair>>() {
-            let rc = field.downcast::<Rc<cryptobox::KeyPair>>().unwrap();
-            self.session_keypair = Some(rc.deref().clone());
-        } else if typid == TypeId::of::<Rc<RefCell<Box<Vec<u8>>>>>() {
-            let rc = field.downcast::<Rc<RefCell<Box<Vec<u8>>>>>().unwrap();
-            self.rcvbuf = Some(rc.deref().clone());
-        } else if typid == TypeId::of::<Rc<RefCell<Option<cryptobox::CryptoBox>>>>() {
-            let rc = field.downcast::<Rc<RefCell<Option<cryptobox::CryptoBox>>>>().unwrap();
-            self.crypto_box = Some(rc.deref().clone());
-        }
-        self
+    pub(crate) fn node(&self) -> Arc<Mutex<Node>> {
+        self.node.clone()
+    }
+
+    pub(crate) fn nodeid(&self) -> Id {
+        self.node.lock().unwrap().id().clone()
     }
 
     pub(crate) fn id(&self) -> i32 {
@@ -234,10 +136,6 @@ impl ProxyConnection {
 
     fn binding_socket(&self) -> TcpSocket {
         TcpSocket::new_v4().unwrap()
-    }
-
-    fn proxy(&self) -> Rc<RefCell<ProxyWorker>> {
-        self.proxy.clone()
     }
 
     pub(crate) fn with_on_authorized_cb(&mut self, cb: Box<dyn Fn(&ProxyConnection, &cryptobox::PublicKey, u16, bool)>) {
@@ -264,22 +162,6 @@ impl ProxyConnection {
         self.idle_cb = cb;
     }
 
-    fn srv_addr(&self) -> &SocketAddr {
-        unwrap!(self.srv_addr)
-    }
-
-    fn srv_endp(&self) -> &str {
-        unwrap!(self.srv_endp).as_str()
-    }
-
-    fn ups_addr(&self) -> &SocketAddr {
-        unwrap!(self.ups_addr)
-    }
-
-    fn ups_endp(&self) -> &str {
-        unwrap!(self.ups_endp).as_str()
-    }
-
     fn stickybuf_mut(&mut self) -> &mut Vec<u8> {
         self.stickybuf.as_mut().unwrap()
     }
@@ -290,7 +172,7 @@ impl ProxyConnection {
 
     fn encrypt_with_node(&self, plain: &[u8], cipher: &mut [u8]) -> Result<()> {
         self.node.lock().unwrap().encrypt(
-            self.srv_nodeid.as_ref().unwrap(),
+            self.inners.borrow().remote_nodeid(),
             plain,
             cipher
         ).map(|_|())
@@ -298,61 +180,69 @@ impl ProxyConnection {
 
     fn decrypt_with_node(&self, cipher: &[u8], plain: &mut [u8]) -> Result<()> {
         self.node.lock().unwrap().decrypt(
-            self.srv_nodeid.as_ref().unwrap(),
+            self.inners.borrow().remote_nodeid(),
             cipher,
             plain
-        ).map(|_|())
+        ).map_err(|e| {
+            panic!(">>>> {e}");
+        }).map(|_|())
     }
 
     fn sign_into_with_node(&self, data: &[u8]) -> Result<Vec<u8>> {
         self.node.lock().unwrap().sign_into(data)
     }
 
-    // encryption/decryption on session context.
-    fn encrypt(&self, plain: &[u8], cipher: &mut [u8], nonce: &cryptobox::Nonce) -> Result<()> {
-        unwrap!(self.crypto_box).borrow().as_ref().unwrap().encrypt(plain, cipher, nonce).map(|_|())
-    }
-
-    pub(crate) fn decrypt(&self, cipher: &[u8], plain: &mut [u8], nonce: &cryptobox::Nonce) -> Result<()> {
-        unwrap!(self.crypto_box).borrow().as_ref().unwrap().decrypt(cipher, plain, nonce).map(|_|())
-    }
-
-    fn is_authenticated(&self) -> bool {
-       // unwrap!(self.srv_pk).is_some()
-        false
-    }
-
     fn allow(&self, _: &SocketAddr) -> bool {
         true
     }
 
-    async fn on_authorized(&self, pk: &cryptobox::PublicKey, port: u16, domain_enabled: bool) {
+    fn on_authorized(&mut self, pk: &cryptobox::PublicKey, port: u16, domain_enabled: bool) {
         (self.authorized_cb)(self, pk, port, domain_enabled);
     }
 
-    async fn on_opened(&mut self) {
+    fn on_opened(&mut self) {
         (self.opend_cb)(self);
     }
 
-    pub(crate) async fn on_closed(&mut self) {
+    pub(crate) fn on_closed(&mut self) {
         (self.closed_cb)(self);
     }
 
-    async fn on_busy(&mut self) {
+    fn on_busy(&mut self) {
         (self.busy_cb)(self);
     }
 
-    async fn on_idle(&mut self) {
+    fn on_idle(&mut self) {
         (self.idle_cb)(self);
     }
 
     pub(crate) async fn close(&mut self) -> Result<()> {
+        // unimplemented!()
+        Ok(())
+    }
+
+    async fn close_upstream2(&self) -> Result<()> {
         unimplemented!()
     }
 
     async fn open_upstream(&mut self) -> Result<()> {
-        debug!("Connection {} connecting to the upstream {}...", self.id, self.ups_endp());
-        unimplemented!()
+        debug!("Connection {} connecting to the upstream {}...", self.id, ups_endp!(self.inners));
+
+        let ups_addr = self.inners.borrow().upstream_addr().clone();
+        match self.binding_socket().connect(ups_addr).await {
+            Ok(stream) => {
+                info!("Connection {} has connected to server {}", self.id, srv_endp!(self.inners));
+                self.upstream = Some(stream);
+            },
+            Err(e) => {
+                error!("Connection {} connect to upstream {} failed: {}", self.id, ups_endp!(self.inners), e);
+                _ = self.close_upstream2().await;
+                self.state = State::Idling;
+                self.on_idle();
+            }
+        };
+
+        self.send_connect_response(self.upstream.is_some()).await
     }
 
     async fn close_upstream(&mut self) -> Result<()> {
@@ -364,17 +254,17 @@ impl ProxyConnection {
     }
 
     pub(crate) async fn try_connect_server(&mut self) -> Result<()> {
-        info!("Connection {} is connecting to the server {}...", self.id, self.srv_endp());
+        info!("Connection {} is connecting to the server {}...", self.id, srv_endp!(self.inners));
 
-        let srv_addr = self.srv_addr().clone();
+        let srv_addr = self.inners.borrow().remote_addr().clone();
         match self.binding_socket().connect(srv_addr).await {
             Ok(stream) => {
-                info!("Connection {} has connected to server {}", self.id, self.srv_endp());
+                info!("Connection {} has connected to server {}", self.id, srv_endp!(self.inners));
                 self.relay = Some(stream);
                 self.establish().await
             },
             Err(e) => {
-                error!("Connection {} connect to server {} failed: {}", self.id, self.srv_endp(), e);
+                error!("Connection {} connect to server {} failed: {}", self.id, srv_endp!(self.inners), e);
                 _ = self.close().await;
                 Err(Error::from(e))
             }
@@ -384,10 +274,9 @@ impl ProxyConnection {
     async fn establish(&mut self) -> Result<()>  {
         trace!("Connection {} started reading from the server.", self.id);
 
-        let rcvbuf = unwrap!(self.rcvbuf).clone();
+        let rcvbuf = self.inners.borrow().rcvbuf();
         let mut borrowed = rcvbuf.borrow_mut();
-
-        match self.relay_mut().read(&mut borrowed).await {
+        match self.relay_mut().read(&mut borrowed.as_mut()[..]).await {
             Ok(n) if n == 0 => {
                 info!("Connection {} was closed by the server.", self.id);
                 Err(Error::State(format!("Connection {} was closed by the server.", self.id)))
@@ -403,7 +292,7 @@ impl ProxyConnection {
         }
     }
 
-    async fn on_relay_data(&mut self, input: &[u8]) -> Result<()> {
+    pub(crate) async fn on_relay_data(&mut self, input: &[u8]) -> Result<()> {
         self.keep_alive = SystemTime::now();
 
         let mut pos = 0;
@@ -485,13 +374,13 @@ impl ProxyConnection {
         }
 
         let packet = result.unwrap();
-        trace!("Connection {} got packet from server {}: type={}, ack={}, size={}",
-            self.id, self.srv_endp(), packet.type_(), packet.ack(), input.len());
+        debug!("Connection {} got packet from server {}: type={}, ack={}, size={}",
+            self.id, srv_endp!(self.inners), packet, packet.ack(), input.len());
 
         if matches!(packet, Packet::Error(_)) {
             let len = input.len() - PACKET_HEADER_BYTES - CryptoBox::MAC_BYTES;
             let mut plain = vec![0u8; len];
-            _ = self.decrypt(
+            _ = self.inners.borrow().cryptobox().encrypt(
                 &input[PACKET_HEADER_BYTES..],
                 &mut plain[..],
                 self.nonce.as_ref().unwrap()
@@ -506,7 +395,7 @@ impl ProxyConnection {
             let errstr = str::from_utf8(data).unwrap().to_string();
 
             error!("Connection {} got ERR response from the server {}, error:{}:{}",
-                self.id, self.srv_endp(), ecode, errstr);
+                self.id, srv_endp!(self.inners), ecode, errstr);
 
             return Err(Error::Protocol(format!("Packet error")));
         }
@@ -539,12 +428,12 @@ impl ProxyConnection {
     async fn on_challenge(&mut self, input: &[u8]) -> Result<()> {
         if input.len() < 32 || input.len() > 256 {
             error!("Connection {} got challenge from the server {}, size is error!",
-                self.id, self.srv_endp());
+                self.id, srv_endp!(self.inners));
             return Ok(())
         }
         // Sign the challenge, send auth or attach with siguature
         let sig = self.sign_into_with_node(input)?;
-        if self.is_authenticated() {
+        if self.inners.borrow().is_authenticated() {
             self.send_attach_request(&sig).await
         } else {
             self.send_authenticate_request(&sig).await
@@ -567,17 +456,18 @@ impl ProxyConnection {
 
     async fn on_authenticate_response(&mut self, input: &[u8]) -> Result<()> {
         if input.len() < Self::AUTH_ACK_SIZE {
-            error!("Connection {} got an invalid AUTH ACK from server {}", self.id, self.srv_endp());
+            error!("Connection {} got an invalid AUTH ACK from server {}", self.id, srv_endp!(self.inners));
             return self.close().await;
         }
 
-        debug!("Connection {} got AUTH ACK from server {}", self.id, self.srv_endp());
+        debug!("Connection {} got AUTH ACK from server {}", self.id, srv_endp!(self.inners));
+
 
         let plain_len = Self::AUTH_ACK_SIZE - PACKET_HEADER_BYTES - CryptoBox::MAC_BYTES;
         let mut plain = vec![0u8; plain_len];
 
         _ = self.decrypt_with_node(
-            &input[PACKET_HEADER_BYTES..],
+            &input[PACKET_HEADER_BYTES..Self::AUTH_ACK_SIZE],
             &mut plain[..]
         )?;
 
@@ -597,16 +487,17 @@ impl ProxyConnection {
         end += mem::size_of::<u16>();
         let max_connections = u16::from_be_bytes(       // extract max connections allowed
             plain[pos..end].try_into().unwrap()
-        );
-        self.proxy.borrow_mut().set_max_connections(max_connections as usize);
+        ) as usize;
+
+        self.inners.borrow_mut().set_max_connections(max_connections);
 
         pos = end;
         let domain_enabled = input[pos] != 0;           // extract flag whether domain enabled or not.
 
-        self.on_authorized(&server_pk, port, domain_enabled).await;
+        self.on_authorized(&server_pk, port, domain_enabled);
 
         self.state = State::Idling;
-        self.on_opened().await;
+        self.on_opened();
         info!("Connection {} opened.", self.id);
 
         Ok(())
@@ -616,9 +507,9 @@ impl ProxyConnection {
      * No Payload.
      */
     async fn on_attach_reponse(&mut self, _input: &[u8]) -> Result<()> {
-        debug!("Connection {} got ATTACH ACK from server {}", self.id, self.srv_endp());
+        debug!("Connection {} got ATTACH ACK from server {}", self.id, srv_endp!(self.inners));
         self.state = State::Idling;
-        self.on_opened().await;
+        self.on_opened();
         Ok(())
     }
 
@@ -626,7 +517,7 @@ impl ProxyConnection {
      * No Payload.
      */
     async fn on_ping_response(&mut self, _input: &[u8]) -> Result<()> {
-        debug!("Connection {} got PING ACK from server {}", self.id, self.srv_endp());
+        debug!("Connection {} got PING ACK from server {}", self.id, srv_endp!(self.inners));
         unimplemented!()
     }
 
@@ -645,18 +536,18 @@ impl ProxyConnection {
      */
     async fn on_connect_request(&mut self, input: &[u8]) -> Result<()> {
         if input.len() < Self::CONNECT_REQ_SIZE {
-            error!("Connection {} got an invalid CONNECT from server {}.", self.id, self.srv_endp());
+            error!("Connection {} got an invalid CONNECT from server {}.", self.id, srv_endp!(self.inners));
             return Err(Error::Protocol(format!("Invalid CONNECT packet")));
         }
 
-        debug!("Connection {} got CONNECT from server {}", self.id, self.srv_endp());
+        debug!("Connection {} got CONNECT from server {}", self.id, srv_endp!(self.inners));
         self.state = State::Relaying;
-        self.on_busy().await;
+        self.on_busy();
 
-        let plain_len = Self::CONNECT_REQ_SIZE - PACKET_HEADER_BYTES - CryptoBox::MAC_BYTES;
+        let plain_len = Self::CONNECT_REQ_SIZE - PACKET_HEADER_BYTES - CryptoBox::MAC_BYTES;  // TODO:
         let mut plain = vec![0u8; plain_len];
-        _ = self.decrypt(
-            &input[PACKET_HEADER_BYTES..PACKET_HEADER_BYTES + Self::CONNECT_REQ_SIZE],
+        self.inners.borrow().cryptobox().decrypt(
+            &input[PACKET_HEADER_BYTES..Self::CONNECT_REQ_SIZE],
             &mut plain[..],
             self.nonce.as_ref().unwrap()
         )?;
@@ -665,7 +556,7 @@ impl ProxyConnection {
         let addr_len = plain[pos] as usize;
 
         pos += mem::size_of::<u8>();
-        let ip = match addr_len as u32 {
+        let ip = match (addr_len * 8) as u32 {
             Ipv4Addr::BITS => {
                 let bytes = input[pos..pos + addr_len].try_into().unwrap();
                 let bits = u32::from_be_bytes(bytes);
@@ -689,7 +580,7 @@ impl ProxyConnection {
         } else {
             self.send_connect_response(false).await?;
             self.state = State::Idling;
-            self.on_idle().await;
+            self.on_idle();
             Ok(())
         }
     }
@@ -700,21 +591,21 @@ impl ProxyConnection {
      *   - data
      */
     async fn on_data_request(&mut self, input: &[u8]) -> Result<()> {
-        trace!("Connection {} got DATA({}) from server {}", self.id, input.len(), self.srv_endp());
+        trace!("Connection {} got DATA({}) from server {}", self.id, input.len(), srv_endp!(self.inners));
 
         let plain_len = input.len() - PACKET_HEADER_BYTES - CryptoBox::MAC_BYTES;
         let mut data = vec![0u8; plain_len];
-        _ = self.decrypt(
+        _ = self.inners.borrow().cryptobox().decrypt(
             &input[PACKET_HEADER_BYTES..],
             &mut data[..],
             self.nonce.as_ref().unwrap()
         )?;
 
-        trace!("Connection {} sending {} bytes data to upstream {}", self.id, data.len(), self.ups_endp());
+        trace!("Connection {} sending {} bytes data to upstream {}", self.id, data.len(), srv_endp!(self.inners));
 
         if let Err(e) = self.upstream.as_mut().unwrap().write_all(&data).await {
             error!("Connection {} sent to upstream {} failed: {}",
-                self.id, self.ups_endp(), e);
+                self.id, srv_endp!(self.inners), e);
             self.close_upstream().await?;
         }
         Ok(())
@@ -724,7 +615,7 @@ impl ProxyConnection {
      * No payload
      */
     async fn on_disconnect_request(&mut self, _input: &[u8]) -> Result<()> {
-        debug!("Connection {} got DISCONNECT from server {}", self.id, self.srv_endp());
+        debug!("Connection {} got DISCONNECT from server {}", self.id, srv_endp!(self.inners));
 
         self.close_upstream().await?;
         self.send_disconnect_response().await?;
@@ -733,7 +624,7 @@ impl ProxyConnection {
         if self.disconnect_confirms == 2 {
             self.disconnect_confirms = 0;
             self.state = State::Idling;
-            self.on_idle().await;
+            self.on_idle();
         }
         Ok(())
     }
@@ -742,12 +633,12 @@ impl ProxyConnection {
     * No payload
     */
     async fn on_disconnect_response(&mut self, _input: &[u8]) -> Result<()> {
-        debug!("Connection {} got DISCONNECT_ACK from server {}", self.id, self.srv_endp());
+        debug!("Connection {} got DISCONNECT_ACK from server {}", self.id, srv_endp!(self.inners));
 
         if self.disconnect_confirms == 2 {
             self.disconnect_confirms = 0;
             self.state = State::Idling;
-            self.on_idle().await;
+            self.on_idle();
         }
         Ok(())
     }
@@ -770,15 +661,14 @@ impl ProxyConnection {
         }
 
         self.state = State::Attaching;
-        let nonce = cryptobox::Nonce::random();
 
         let len = cryptobox::PublicKey::BYTES       // publickey
             + cryptobox::Nonce::BYTES               // nonce.
             + Signature::BYTES;                     // signature of challenge.
         let mut plain:Vec<u8> = Vec::with_capacity(len);
 
-        plain.extend_from_slice(unwrap!(self.session_keypair).public_key().as_bytes());
-        plain.extend_from_slice(nonce.as_bytes());  // session nonce.
+        plain.extend_from_slice(self.inners.borrow().session_keypair().public_key().as_bytes());
+        plain.extend_from_slice(unwrap!(self.nonce).as_bytes());  // session nonce.
         plain.extend_from_slice(input);             // signature of challenge.
 
         let len = id::ID_BYTES                      // nodeid.
@@ -796,7 +686,7 @@ impl ProxyConnection {
         self.send_relay_packet(
             &Packet::Attach(AttachType),
             Some(&payload),
-            None
+            |_|{}
         ).await
     }
 
@@ -808,8 +698,7 @@ impl ProxyConnection {
 
         self.state = State::Authenticating;
 
-        let nonce = cryptobox::Nonce::random();
-        let domain_len = self.ups_domain.as_ref().map_or(0, |v|v.len());
+        let domain_len = self.inners.borrow().upstream_domain().map_or(0, |v|v.len());
         let padding_sz = (random_padding() % 256) as usize;
 
         let len = cryptobox::PublicKey::BYTES   // session key.
@@ -820,13 +709,13 @@ impl ProxyConnection {
             + padding_sz;
 
         let mut plain = Vec::with_capacity(len);
-        plain.extend_from_slice(unwrap!(self.session_keypair).public_key().as_bytes());
-        plain.extend_from_slice(nonce.as_bytes());
+        plain.extend_from_slice(self.inners.borrow().session_keypair().public_key().as_bytes());
+        plain.extend_from_slice(unwrap!(self.nonce).as_bytes());
         plain.extend_from_slice(input);
         plain.extend_from_slice(&[domain_len as u8]);
         if domain_len > 0 {
             plain.extend_from_slice(
-                self.ups_domain.as_ref().unwrap().as_bytes()
+                unwrap!(self.inners.borrow().upstream_domain()).as_bytes()
             )
         }
         plain.extend_from_slice(&random_bytes(padding_sz));
@@ -842,7 +731,7 @@ impl ProxyConnection {
         self.send_relay_packet(
             &Packet::Auth(AuthType),
             Some(&payload),
-            None
+            |_|{},
         ).await
     }
 
@@ -854,15 +743,14 @@ impl ProxyConnection {
      */
     async fn send_connect_response(&mut self, is_success: bool) -> Result<()> {
         let data = random_boolean(is_success);
-        let cb = |_: &ProxyConnection| {
-            //if is_success && conn.upstream.data {
-            //    conn.start_read_upstream().await
-            //}
-        };
         self.send_relay_packet(
             &Packet::ConnectAck(ConnType),
             Some(&[data]),
-            Some(Box::new(cb))
+            move |conn: &ProxyConnection| {
+                if is_success {
+                    _ = conn.start_read_upstream();
+                }
+            }
         ).await
     }
 
@@ -879,14 +767,15 @@ impl ProxyConnection {
         self.send_relay_packet(
             &Packet::Disconnect(DisconnType),
             None,
-            None
+            |_|{},
         ).await
     }
+
 
     async fn send_relay_packet(&mut self,
         pkt: &Packet,
         input: Option<&[u8]>,
-        cb: Option<Box<dyn FnOnce(&ProxyConnection)>>
+        cb: impl FnOnce(&ProxyConnection),
     ) -> Result<()> {
         if self.state == State::Closed {
             warn!("Connection {} is already closed, but still try to send {} to upstream.", self.id, pkt);
@@ -902,8 +791,7 @@ impl ProxyConnection {
             padding_sz = random_padding() as usize;
             sz += padding_sz as u16
         }
-
-        debug!("Connection {} send {} to server {}.", self.id, pkt, self.srv_endp());
+        debug!("Connection {} send {} to server {}.", self.id, pkt, srv_endp!(self.inners));
 
         let len = PACKET_HEADER_BYTES               // packet header.
              + input.map_or(0, |v|v.len())          // packet payload.
@@ -921,14 +809,38 @@ impl ProxyConnection {
         }
 
         match self.relay_mut().write_all(&mut buf).await {
-            Ok(_) => cb.map(|cb| cb(&self)).map_or((), |v|v),
+            Ok(_) => cb(&self),
             Err(e) => {
-                error!("Connection {} send {} to server {} failed: {}", self.id, pkt, self.srv_endp(), e);
+                error!("Connection {} send {} to server {} failed: {}", self.id, pkt, srv_endp!(self.inners), e);
                 self.close().await?;
             }
         }
         Ok(())
     }
+
+     async fn start_read_upstream(&self) -> Result<()> {
+        trace!("Connection {} start reading from the upstream.", self.id);
+
+        /*
+        let rcvbuf = self.inners.borrow().rcvbuf();
+        let mut borrowed = rcvbuf.borrow_mut();
+        match self.upstream_mut().read(&mut borrowed.as_mut()[..]).await {
+            Ok(n) if n == 0 => {
+                info!("Connection {} read upstream UV_EOF.", self->id);
+                Err(Error::State(format!("Connection {} was closed by the server.", self.id)))
+            },
+            Ok(len) => {
+                self.send_data_request(&borrowed[..len]).await
+            },
+            Err(e) => {
+                error!("Connection {} read upstream error({}): {}.", self->id, e);
+                _ = self.close().await;
+                Err(Error::from(e))
+            }
+        }
+        */
+        unimplemented!()
+     }
 }
 
 impl fmt::Display for ProxyConnection {
@@ -944,6 +856,14 @@ fn random_padding() -> u32 {
     }
 }
 
-fn random_boolean(_: bool) -> u8 {
-    unimplemented!()
+fn random_boolean(input: bool) -> u8 {
+    let val = unsafe {
+        libsodium_sys::randombytes_random()
+    } as u8;
+
+    if input {
+        val | 0x01
+    } else {
+        val & 0xFE
+    }
 }
