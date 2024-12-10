@@ -4,7 +4,7 @@ use super::{
 };
 
 #[allow(dead_code)]
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub(crate) enum State {
     Initializing = 0,
     Authenticating,
